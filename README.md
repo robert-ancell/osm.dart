@@ -67,6 +67,29 @@ their 17,690 nodes out of a 434 MB country extract takes 7.4s.
 Everything read is held in memory, so filter to what is wanted. `elements()`
 is there for reads too big to keep.
 
+## Areas
+
+A closed way, or a relation whose member ways make up rings, covers ground.
+`areaOf` works out which, wound the way GeoJSON and most triangulators want:
+
+```dart
+final area = courses.areaOf(course);
+for (final polygon in area?.polygons ?? const <OsmPolygon>[]) {
+  draw(polygon.outer, holes: polygon.inners);
+}
+```
+
+Rings are worked out from the segments the ways are made of, not by following
+one way at a time, so ways in any order or direction come out right, rings
+sharing an edge merge, and a ring that touches itself is split into the pieces
+it really encloses. Which rings are holes is decided by what they enclose
+rather than by member roles, which real data gets wrong often enough to matter.
+
+Checked against the multipolygon tests from
+[osm-testdata](https://github.com/osmcode/osm-testdata): 78 of the 81 cases
+come out as specified, the three that do not being a shape where two holes
+touch at two points.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed. Files

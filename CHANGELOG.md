@@ -5,3 +5,5 @@
   throw away its results, and decoding blocks across isolates.
 * `OsmPbfFile.subset` for reading matching elements along with the nodes and
   members they refer to, so their geometry can be built.
+* `OsmSubset.areaOf` for assembling the area a closed way or a multipolygon
+  relation covers, as outlines and holes.

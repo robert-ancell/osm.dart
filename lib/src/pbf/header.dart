@@ -38,6 +38,15 @@ class OsmPbfHeader {
     this.replicationBaseUrl,
   });
 
+  /// Whether the file says its elements are in order: every node, then every
+  /// way, then every relation, each by increasing id.
+  ///
+  /// A reader that can count on the order can resolve a way's nodes in the
+  /// same pass that finds them, rather than reading the file again.
+  bool get isSorted =>
+      optionalFeatures.contains('Sort.Type_then_ID') ||
+      requiredFeatures.contains('Sort.Type_then_ID');
+
   /// Whether the file carries the full edit history, and so may contain
   /// elements that have been deleted.
   bool get hasHistory => requiredFeatures.contains('HistoricalInformation');

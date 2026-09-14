@@ -228,9 +228,13 @@ _Needs _needsOfAny(List<OsmFilter> filters) {
     });
   }
 
+  // Where the nodes are is a condition on nodes, so a part that cannot match
+  // a node at all has no say in it. That is what lets "the nodes in these
+  // boxes, and every way, and every relation" still screen its nodes.
   final boxes = <OsmBounds>[];
   var placed = true;
   for (final need in needs) {
+    if (!need.types.contains(OsmElementType.node)) continue;
     final candidate = need.bounds;
     if (candidate == null) {
       placed = false;
@@ -244,6 +248,6 @@ _Needs _needsOfAny(List<OsmFilter> filters) {
     keys: keys,
     tagged: needs.every((need) => need.tagged),
     ids: pinned ? byType : null,
-    bounds: placed ? boxes : null,
+    bounds: placed && boxes.isNotEmpty ? boxes : null,
   );
 }

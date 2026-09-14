@@ -9,3 +9,4 @@
   relation covers, as outlines and holes.
 * `OsmPbfFile.within` for reading everything inside a set of boxes, and
   `OsmFilter.within` for the nodes standing in them.
+* `OsmPbfHeader.isSorted`, which lets a sorted file be read in one pass.

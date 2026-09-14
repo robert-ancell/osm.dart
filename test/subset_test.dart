@@ -89,6 +89,29 @@ void main() {
     );
   });
 
+  test('reads an area of a file that does not say it is sorted', () async {
+    // The grid says it is sorted and is read in one pass; this one does not,
+    // so it is read once per type. Both have to give the same answer.
+    final file = await OsmPbfFile.open(_elementsPath);
+    expect(file.header.isSorted, isFalse);
+
+    final subset = await file.within(const [
+      OsmBounds(
+        minLatitude: 0.5,
+        minLongitude: 0.5,
+        maxLatitude: 0.50025,
+        maxLongitude: 0.50025,
+      ),
+    ]);
+
+    // The building and the path, and the site relation over them.
+    expect(subset.ways.keys.toList()..sort(), [42000801, 42000802]);
+    expect(subset.relations.keys, contains(42000901));
+    // Node 42000005 is outside the box, and the path reaching it keeps it.
+    expect(subset.nodes.keys, contains(42000005));
+    expect(subset.nodesOf(subset.ways[42000802]!), isNotNull);
+  });
+
   test('keeps a way whose far end is outside the box', () async {
     final file = await OsmPbfFile.open(_gridPath);
     // A box cutting through the middle of one of the test cases rather than

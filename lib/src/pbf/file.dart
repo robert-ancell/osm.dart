@@ -161,34 +161,56 @@ class OsmPbfFile {
   /// tagged things in an area would quietly drop the ways holding them up.
   /// Filter [OsmSubset.matches] afterwards instead.
   ///
-  /// Reading by type rather than in one pass costs a read of the file and buys
-  /// not caring whether the file is sorted.
+  /// A file that says it is sorted, which [OsmPbfHeader.isSorted] reports and
+  /// every file written the usual way does, is read in one pass: the nodes of
+  /// a way have all gone by before the way itself. One that does not say is
+  /// read once per type instead, which costs two more reads of it.
   Future<OsmSubset> within(List<OsmBounds> bounds, {int? isolates}) async {
     final nodes = <int, OsmNode>{};
-    await for (final element in elements(
-      filter: OsmFilter.within(bounds),
-      isolates: isolates,
-    )) {
-      nodes[element.id] = element as OsmNode;
-    }
-
     final ways = <int, OsmWay>{};
-    await for (final element in elements(
-      filter: const OsmFilter.type(OsmElementType.way),
-      isolates: isolates,
-    )) {
-      final way = element as OsmWay;
-      if (way.nodeIds.any(nodes.containsKey)) ways[way.id] = way;
-    }
-
-    // Every relation is read and then sifted, rather than kept as it goes by,
+    // Relations are gathered and then sifted, rather than kept as they go by,
     // because a relation can have a relation after it in the file as a member.
     final candidates = <OsmRelation>[];
-    await for (final element in elements(
-      filter: const OsmFilter.type(OsmElementType.relation),
-      isolates: isolates,
-    )) {
-      candidates.add(element as OsmRelation);
+
+    void keep(OsmElement element) {
+      switch (element) {
+        case OsmNode():
+          nodes[element.id] = element;
+        case OsmWay():
+          if (element.nodeIds.any(nodes.containsKey)) {
+            ways[element.id] = element;
+          }
+        case OsmRelation():
+          candidates.add(element);
+      }
+    }
+
+    if (header.isSorted) {
+      // Asking for the nodes here and both other types whole is what keeps
+      // fifty-six million nodes from being decoded only to be thrown away.
+      await for (final element in elements(
+        filter: OsmFilter.any([
+          OsmFilter.within(bounds),
+          const OsmFilter.type(OsmElementType.way),
+          const OsmFilter.type(OsmElementType.relation),
+        ]),
+        isolates: isolates,
+      )) {
+        keep(element);
+      }
+    } else {
+      for (final filter in [
+        OsmFilter.within(bounds),
+        const OsmFilter.type(OsmElementType.way),
+        const OsmFilter.type(OsmElementType.relation),
+      ]) {
+        await for (final element in elements(
+          filter: filter,
+          isolates: isolates,
+        )) {
+          keep(element);
+        }
+      }
     }
 
     final relations = <int, OsmRelation>{};

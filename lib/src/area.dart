@@ -177,26 +177,15 @@ bool _isRing(List<OsmNode> points) =>
       } while (edge != start);
       ring.add(points[start.$1]!);
 
-      // Only the rings wound the one way are ground the area covers. The
-      // others are the outsides of the same rings, walked the long way round.
-      if (_isRing(ring) && _twiceArea(ring) > 0) {
-        for (final simple in _simpleRings(ring)) {
-          rings.add(_wound(simple, true));
-        }
-      }
+      // Both windings are kept. A ring walked counter-clockwise has a face on
+      // the inside of it and may be an outline; one walked clockwise is the
+      // outside of a set of rings joined together, which is the shape of the
+      // hole they make in whatever encloses them.
+      if (_isRing(ring)) rings.addAll(_simpleRings(ring));
     }
   }
 
-  if (rings.isEmpty) return null;
-
-  // A ring that touches itself is walked once as a whole and again as the
-  // piece it encloses, so the same ring can come out twice.
-  final seen = <String>{};
-  final kept = [
-    for (final ring in rings)
-      if (seen.add((ring.map((n) => n.id).toList()..sort()).join(','))) ring,
-  ];
-  return kept.isEmpty ? null : (kept, boundary);
+  return rings.isEmpty ? null : (rings, boundary);
 }
 
 /// Whether the ground inside [ring] belongs to the area.
@@ -298,18 +287,38 @@ List<OsmPolygon> _nest(
   List<List<OsmNode>> rings,
   List<(OsmNode, OsmNode)> boundary,
 ) {
-  // What a ring encloses decides what it is. Depth does not: a pocket between
-  // two holes that touch is inside one ring and is still ground, and an
-  // island in a lake is inside two and is ground as well.
-  final ground = [
-    for (final ring in rings) _enclosesGround(ring, boundary),
+  // Which way a ring is wound says which side of it the face it was walked
+  // from lies on, and what it encloses says whether that side is ground. An
+  // outline is a ring with ground inside it, walked with the ground on the
+  // left. A hole is a ring with no ground inside it, walked the other way:
+  // the shape a set of rings joined together cuts out of what encloses them.
+  //
+  // The outermost ring of all is walked both ways, and the clockwise one is
+  // the outside of the whole area rather than a hole in anything. It has
+  // ground inside it, which is what tells it apart from a real hole, and the
+  // same test throws out the outside of an island in a lake.
+  final counterClockwise = [for (final ring in rings) _twiceArea(ring) > 0];
+  final holdsGround = [
+    for (var i = 0; i < rings.length; i++)
+      _enclosesGround(
+        counterClockwise[i] ? rings[i] : rings[i].reversed.toList(),
+        boundary,
+      ),
+  ];
+  final outline = [
+    for (var i = 0; i < rings.length; i++)
+      counterClockwise[i] && holdsGround[i],
+  ];
+  final hole = [
+    for (var i = 0; i < rings.length; i++)
+      !counterClockwise[i] && !holdsGround[i],
   ];
 
   final parents = List<int?>.filled(rings.length, null);
   for (var i = 0; i < rings.length; i++) {
-    if (ground[i]) continue;
+    if (!hole[i]) continue;
     for (var j = 0; j < rings.length; j++) {
-      if (i == j || !ground[j] || !_ringContains(rings[j], rings[i])) continue;
+      if (i == j || !outline[j] || !_ringContains(rings[j], rings[i])) continue;
       final parent = parents[i];
       if (parent == null || _ringContains(rings[parent], rings[j])) {
         parents[i] = j;
@@ -319,12 +328,10 @@ List<OsmPolygon> _nest(
 
   final polygons = <int, List<List<OsmNode>>>{};
   for (var i = 0; i < rings.length; i++) {
-    if (ground[i]) polygons[i] = [];
+    if (outline[i]) polygons[i] = [];
   }
   for (var i = 0; i < rings.length; i++) {
-    // A ring enclosing no ground and inside nothing is a pocket between rings
-    // that touch, bounded by the area's own edges and no part of it.
-    if (!ground[i]) polygons[parents[i]]?.add(_wound(rings[i], false));
+    if (hole[i]) polygons[parents[i]]?.add(rings[i]);
   }
 
   return [

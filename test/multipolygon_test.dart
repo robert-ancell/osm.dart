@@ -115,19 +115,6 @@ List<(double, double)> _points(String ring) => [
         }(),
     ];
 
-/// The cases that do not come out the way osm-testdata says they should.
-///
-/// All three are the same shape: two outer rings and two inner rings, the
-/// inners touching each other at two nodes. The ground that comes out is
-/// right, but the pocket between the touching inners is reported both as part
-/// of the outline it sits in and as a polygon of its own, where osmium reports
-/// one hole around the pair and the pocket separately. Anything drawing this
-/// paints the pocket twice.
-///
-/// Asserted rather than skipped: a change that fixes one of these, or breaks
-/// one of the other 78, has to be a deliberate edit to this list.
-const _known = {'777', '778', '779'};
-
 void main() {
   late OsmSubset data;
   late List<Map<String, dynamic>> expectations;
@@ -194,11 +181,7 @@ void main() {
     }
 
     expect(checked, greaterThan(40));
-    expect(
-      failures.map((f) => f.substring(0, 3)).toSet(),
-      _known,
-      reason: 'Assembly changed. Failures:\n${failures.join('\n')}',
-    );
+    expect(failures, isEmpty, reason: failures.join('\n'));
   });
 
   test('says nothing rather than throwing on the invalid ones', () {

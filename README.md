@@ -85,10 +85,8 @@ sharing an edge merge, and a ring that touches itself is split into the pieces
 it really encloses. Which rings are holes is decided by what they enclose
 rather than by member roles, which real data gets wrong often enough to matter.
 
-Checked against the multipolygon tests from
-[osm-testdata](https://github.com/osmcode/osm-testdata): 78 of the 81 cases
-come out as specified, the three that do not being a shape where two holes
-touch at two points.
+All 81 of the multipolygon tests from
+[osm-testdata](https://github.com/osmcode/osm-testdata) come out as specified.
 
 ## What is supported
 

@@ -1,0 +1,12 @@
+name: osm
+description: Read and process OpenStreetMap data, including .osm.pbf snapshots.
+version: 0.1.0
+repository: https://github.com/robert-ancell/osm.dart
+issue_tracker: https://github.com/robert-ancell/osm.dart/issues
+
+environment:
+  sdk: ^3.6.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0

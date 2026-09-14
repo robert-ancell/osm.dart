@@ -1,0 +1,50 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  Hand written test data for this package. Not derived from OpenStreetMap:
+  the ids, coordinates and names are made up, and it is covered by the same
+  licence as the rest of the package.
+
+  It covers what the osm-testdata grid does not: metadata that differs from
+  one element to the next, an edit with no user on it, tags that need UTF-8,
+  a relation with a member of every type including another relation, and both
+  named and empty roles.
+
+  Rebuild it by running osmium cat over this file, writing the .osm.pbf
+  next to it.
+-->
+<osm version="0.6" generator="hand written">
+  <node id="42000001" version="3" timestamp="2011-02-03T04:05:06Z" uid="17" user="Mapper" changeset="900001" lon="0.5001" lat="0.5001">
+    <tag k="amenity" v="cafe"/>
+    <tag k="name" v="Caf&#233; &#8594; &#22303;&#25163;"/>
+    <tag k="wheelchair" v="yes"/>
+  </node>
+  <node id="42000002" version="1" timestamp="2012-03-04T05:06:07Z" uid="0" user="" changeset="900002" lon="0.5002" lat="0.5001"/>
+  <node id="42000003" version="11" timestamp="2013-04-05T06:07:08Z" uid="18" user="Another Mapper" changeset="900003" lon="0.5002" lat="0.5002"/>
+  <node id="42000004" version="2" timestamp="2014-05-06T07:08:09Z" uid="17" user="Mapper" changeset="900004" lon="0.5001" lat="0.5002"/>
+  <node id="42000005" version="1" timestamp="2015-06-07T08:09:10Z" uid="19" user="Third Mapper" changeset="900005" lon="0.5003" lat="0.5003"/>
+  <way id="42000801" version="7" timestamp="2016-07-08T09:10:11Z" uid="18" user="Another Mapper" changeset="900006">
+    <nd ref="42000001"/>
+    <nd ref="42000002"/>
+    <nd ref="42000003"/>
+    <nd ref="42000004"/>
+    <nd ref="42000001"/>
+    <tag k="building" v="yes"/>
+    <tag k="name" v="Te Whare"/>
+  </way>
+  <way id="42000802" version="1" timestamp="2017-08-09T10:11:12Z" uid="19" user="Third Mapper" changeset="900007">
+    <nd ref="42000004"/>
+    <nd ref="42000005"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <relation id="42000901" version="1" timestamp="2018-09-10T11:12:13Z" uid="17" user="Mapper" changeset="900008">
+    <member type="way" ref="42000801" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="building" v="yes"/>
+  </relation>
+  <relation id="42000902" version="4" timestamp="2019-10-11T12:13:14Z" uid="18" user="Another Mapper" changeset="900009">
+    <member type="node" ref="42000005" role="stop"/>
+    <member type="way" ref="42000802" role=""/>
+    <member type="relation" ref="42000901" role="site"/>
+    <tag k="type" v="site"/>
+  </relation>
+</osm>

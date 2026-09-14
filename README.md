@@ -41,6 +41,32 @@ against 25s to read the same file end to end. Filters combine with `&`, `|` and
 [OsmFilter.not], and [OsmFilter.where] takes a test written as code for
 anything they cannot say.
 
+## Building geometry
+
+A way names its nodes by id, so matching it is only half of what it takes to
+draw it. `subset` reads the matches and everything they refer to:
+
+```dart
+final courses = await file.subset(
+  const OsmFilter.tag('leisure', 'golf_course'),
+);
+
+for (final course in courses.matches) {
+  if (course is! OsmWay) continue;
+  final outline = courses.nodesOf(course);
+  if (outline == null) continue; // Runs off the edge of the file.
+  print('${course.tags['name']}: ${outline.length} points');
+}
+```
+
+This is what `osmium tags-filter` does when it is not told to leave referenced
+elements out, and it holds the same elements: the nodes of matching ways, the
+members of matching relations, and so on down. Pulling the golf courses and
+their 17,690 nodes out of a 434 MB country extract takes 7.4s.
+
+Everything read is held in memory, so filter to what is wanted. `elements()`
+is there for reads too big to keep.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed. Files

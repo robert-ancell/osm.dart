@@ -3,11 +3,16 @@ import 'dart:io';
 import '../element.dart';
 import '../filter.dart';
 import '../filter_plan.dart';
+import '../subset.dart';
 import 'blob.dart';
 import 'block.dart';
 import 'decode_ahead.dart';
 import 'exception.dart';
 import 'header.dart';
+
+/// Past this many ids, handing a filter's ids to a worker isolate for every
+/// block costs more than decoding the blocks in parallel saves.
+const int _idsWorthSending = 50000;
 
 /// An OpenStreetMap PBF file, opened for reading.
 ///
@@ -73,20 +78,171 @@ class OsmPbfFile {
   /// work rather than to throw away its results.
   ///
   /// A filtered read decodes blocks on [isolates] worker isolates at once, by
-  /// default two per processor. An unfiltered read decodes on the calling
-  /// isolate, because when every element is wanted, handing them all back from
-  /// a worker costs more than decoding them in parallel saves. Pass [isolates]
-  /// to say which to do: 1 decodes here, more decodes there.
+  /// default two per processor. Pass 1 to decode on the calling isolate
+  /// instead, which some reads are better off doing: see [defaultIsolates].
   Stream<OsmElement> elements({OsmFilter? filter, int? isolates}) {
-    final workers =
-        isolates ?? (filter == null ? 1 : Platform.numberOfProcessors * 2);
+    final plan = OsmFilterPlan.of(filter);
+    final workers = isolates ?? defaultIsolates(plan);
     if (workers < 1) {
       throw ArgumentError.value(isolates, 'isolates', 'Must be at least 1');
     }
-    final plan = OsmFilterPlan.of(filter);
     return workers == 1
         ? _readHere(plan)
         : decodeAhead(_blobs(), plan, workers);
+  }
+
+  /// How many isolates to decode a read on when the caller does not say.
+  ///
+  /// Everything crossing an isolate boundary has to be handed over, and two
+  /// reads pay enough for that to be better off decoding where they are:
+  ///
+  /// * A read with no filter, because every element of the file crosses.
+  ///   Reading the New Zealand extract end to end takes 25s here against 31s
+  ///   on 32 isolates.
+  /// * A read that names more than [_idsWorthSending] ids, because the ids go
+  ///   the other way, once per block. Twenty thousand ids are worth sending,
+  ///   at 4.1s against 6.9s, and two million are not, at 99s against 10s.
+  static int defaultIsolates(OsmFilterPlan plan) {
+    if (plan.filter == null) return 1;
+    final ids = plan.ids;
+    if (ids != null) {
+      var named = 0;
+      for (final set in ids.values) {
+        named += set.length;
+      }
+      if (named > _idsWorthSending) return 1;
+    }
+    return Platform.numberOfProcessors * 2;
+  }
+
+  /// The elements matching [filter], and everything they refer to.
+  ///
+  /// A way names its nodes by id, so matching it is only half of what it takes
+  /// to build its geometry. This reads the file again for the nodes of the
+  /// ways that matched, the members of the relations that matched, and so on
+  /// down: a relation that is a member of a matching relation is read, and so
+  /// are its own members. What comes back is what `osmium tags-filter` gives
+  /// when it is not told to leave referenced elements out.
+  ///
+  /// A relation that is a member of itself, however far around, is read once
+  /// and not chased again.
+  ///
+  /// Everything read is held in memory, so filter to what is actually wanted:
+  /// this is for pulling a few courses out of a country, not for loading one.
+  ///
+  /// Each read is decoded on [isolates] worker isolates, by default as many as
+  /// [defaultIsolates] says, which for the reads by id depends on how many ids
+  /// there are to hand to the workers.
+  Future<OsmSubset> subset(OsmFilter filter, {int? isolates}) async {
+    final nodes = <int, OsmNode>{};
+    final ways = <int, OsmWay>{};
+    final relations = <int, OsmRelation>{};
+    final matches = <OsmElement>[];
+
+    void hold(OsmElement element) {
+      switch (element) {
+        case OsmNode():
+          nodes[element.id] = element;
+        case OsmWay():
+          ways[element.id] = element;
+        case OsmRelation():
+          relations[element.id] = element;
+      }
+    }
+
+    await for (final element in elements(filter: filter, isolates: isolates)) {
+      matches.add(element);
+      hold(element);
+    }
+
+    // Relations first, and to the bottom: a relation pulls in the relations
+    // below it, which pull in theirs. Holding a relation before looking at it
+    // is what stops a loop of them going round for ever.
+    var toChase = relations.values.toList(growable: false);
+    while (toChase.isNotEmpty) {
+      final wanted = <int>{};
+      for (final relation in toChase) {
+        for (final member in relation.members) {
+          if (member.type == OsmElementType.relation &&
+              !relations.containsKey(member.ref)) {
+            wanted.add(member.ref);
+          }
+        }
+      }
+      if (wanted.isEmpty) break;
+
+      final found = <OsmRelation>[];
+      await for (final element in _byId({
+        OsmElementType.relation: wanted,
+      }, isolates)) {
+        hold(element);
+        if (element is OsmRelation) found.add(element);
+      }
+      // Ids that are not in the file are dropped here rather than asked for
+      // again, which is the other way a loop could go round for ever.
+      if (found.isEmpty) break;
+      toChase = found;
+    }
+
+    // Then the ways every relation held refers to.
+    final wantedWays = <int>{};
+    for (final relation in relations.values) {
+      for (final member in relation.members) {
+        if (member.type == OsmElementType.way &&
+            !ways.containsKey(member.ref)) {
+          wantedWays.add(member.ref);
+        }
+      }
+    }
+    await for (final element in _byId({
+      OsmElementType.way: wantedWays,
+    }, isolates)) {
+      hold(element);
+    }
+
+    // And last the nodes, which nothing else refers back to.
+    final wantedNodes = <int>{};
+    for (final way in ways.values) {
+      for (final id in way.nodeIds) {
+        if (!nodes.containsKey(id)) wantedNodes.add(id);
+      }
+    }
+    for (final relation in relations.values) {
+      for (final member in relation.members) {
+        if (member.type == OsmElementType.node &&
+            !nodes.containsKey(member.ref)) {
+          wantedNodes.add(member.ref);
+        }
+      }
+    }
+    await for (final element in _byId({
+      OsmElementType.node: wantedNodes,
+    }, isolates)) {
+      hold(element);
+    }
+
+    return OsmSubset(
+      matches: matches,
+      nodes: nodes,
+      ways: ways,
+      relations: relations,
+    );
+  }
+
+  /// Reads the elements with the given ids, or nothing if none are wanted.
+  Stream<OsmElement> _byId(
+    Map<OsmElementType, Set<int>> wanted,
+    int? isolates,
+  ) {
+    final parts = [
+      for (final entry in wanted.entries)
+        if (entry.value.isNotEmpty) OsmFilter.ids(entry.key, entry.value),
+    ];
+    if (parts.isEmpty) return const Stream.empty();
+    return elements(
+      filter: parts.length == 1 ? parts.single : OsmFilter.any(parts),
+      isolates: isolates,
+    );
   }
 
   /// The data blobs of the file, read in order.

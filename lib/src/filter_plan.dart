@@ -24,6 +24,12 @@ class OsmFilterPlan {
   /// Whether a matching element must carry at least one tag.
   final bool tagged;
 
+  /// The ids a matching element must have, by type, or null if the filter
+  /// does not pin elements down to particular ids.
+  ///
+  /// When it is not null, a type missing from the map cannot match at all.
+  final Map<OsmElementType, Set<int>>? ids;
+
   /// [keys] as UTF-8, so a block's string table can be searched without
   /// decoding any of it.
   final List<Uint8List>? encodedKeys;
@@ -33,6 +39,7 @@ class OsmFilterPlan {
     required this.types,
     required this.keys,
     required this.tagged,
+    required this.ids,
   }) : encodedKeys = keys?.map(utf8.encode).toList(growable: false);
 
   /// Works out what [filter] needs. A null filter takes every element.
@@ -43,6 +50,7 @@ class OsmFilterPlan {
         types: _allTypes,
         keys: null,
         tagged: false,
+        ids: null,
       );
     }
     final need = _needsOf(filter);
@@ -51,6 +59,7 @@ class OsmFilterPlan {
       types: need.types,
       keys: need.keys,
       tagged: need.tagged,
+      ids: need.ids,
     );
   }
 
@@ -65,6 +74,7 @@ class OsmFilterPlan {
         types: types,
         keys: keys,
         tagged: tagged,
+        ids: ids,
       );
 
   /// Whether elements of [type] are worth decoding.
@@ -85,8 +95,14 @@ class _Needs {
   final Set<OsmElementType> types;
   final Set<String>? keys;
   final bool tagged;
+  final Map<OsmElementType, Set<int>>? ids;
 
-  const _Needs({required this.types, this.keys, this.tagged = false});
+  const _Needs({
+    required this.types,
+    this.keys,
+    this.tagged = false,
+    this.ids,
+  });
 
   static const _Needs unknown = _Needs(types: _allTypes);
 }
@@ -95,6 +111,8 @@ _Needs _needsOf(OsmFilter filter) {
   switch (filter) {
     case OsmTypeFilter(:final type):
       return _Needs(types: {type});
+    case OsmIdFilter(:final type, :final ids):
+      return _Needs(types: {type}, ids: {type: ids});
     case OsmTagFilter(:final key):
       return _Needs(types: _allTypes, keys: {key}, tagged: true);
     case OsmTagInFilter(:final key):
@@ -133,10 +151,20 @@ _Needs _needsOfAll(List<OsmFilter> filters) {
     }
   }
 
+  // The same goes for ids: one part's demand is the whole filter's demand.
+  Map<OsmElementType, Set<int>>? ids;
+  for (final need in needs) {
+    if (need.ids != null) {
+      ids = need.ids;
+      break;
+    }
+  }
+
   return _Needs(
     types: types,
     keys: keys,
     tagged: needs.any((need) => need.tagged),
+    ids: ids,
   );
 }
 
@@ -163,9 +191,25 @@ _Needs _needsOfAny(List<OsmFilter> filters) {
   }
   final keys = screenable ? union : null;
 
+  // Any part may be the one that matches, so ids only screen if every part
+  // says which ids it wants.
+  final byType = <OsmElementType, Set<int>>{};
+  var pinned = true;
+  for (final need in needs) {
+    final candidate = need.ids;
+    if (candidate == null) {
+      pinned = false;
+      break;
+    }
+    candidate.forEach((type, wanted) {
+      (byType[type] ??= <int>{}).addAll(wanted);
+    });
+  }
+
   return _Needs(
     types: types,
     keys: keys,
     tagged: needs.every((need) => need.tagged),
+    ids: pinned ? byType : null,
   );
 }

@@ -267,6 +267,14 @@ class _BlockContext {
     return false;
   }
 
+  /// Whether an element of [type] with this [id] could match the filter.
+  bool couldMatchId(OsmElementType type, int id) {
+    final wanted = plan.ids;
+    if (wanted == null) return true;
+    final forType = wanted[type];
+    return forType != null && forType.contains(id);
+  }
+
   /// Whether a dense node whose tags run from [start] to [end] in the shared
   /// key and value list could match the filter.
   bool couldMatchDenseKeys(List<int> keysValues, int start, int end) {
@@ -378,7 +386,10 @@ OsmNode? _decodeNode(ProtobufReader reader, _BlockContext context) {
     }
   }
 
-  if (!context.couldMatchKeys(keys)) return null;
+  if (!context.couldMatchId(OsmElementType.node, id) ||
+      !context.couldMatchKeys(keys)) {
+    return null;
+  }
 
   final node = OsmNode(
     id: id,
@@ -488,7 +499,10 @@ void _decodeDenseNodes(
     }
     final end = index == start ? start : index - 1;
 
-    if (!context.couldMatchDenseKeys(keysValues, start, end)) continue;
+    if (!context.couldMatchId(OsmElementType.node, ids[i]) ||
+        !context.couldMatchDenseKeys(keysValues, start, end)) {
+      continue;
+    }
 
     var tags = const <String, String>{};
     if (start < end) {
@@ -610,7 +624,10 @@ OsmWay? _decodeWay(ProtobufReader reader, _BlockContext context) {
     }
   }
 
-  if (!context.couldMatchKeys(keys)) return null;
+  if (!context.couldMatchId(OsmElementType.way, id) ||
+      !context.couldMatchKeys(keys)) {
+    return null;
+  }
 
   final way = OsmWay(
     id: id,
@@ -652,7 +669,10 @@ OsmRelation? _decodeRelation(ProtobufReader reader, _BlockContext context) {
     }
   }
 
-  if (!context.couldMatchKeys(keys)) return null;
+  if (!context.couldMatchId(OsmElementType.relation, id) ||
+      !context.couldMatchKeys(keys)) {
+    return null;
+  }
 
   if (roles.length != refs.length || types.length != refs.length) {
     throw OsmPbfException(

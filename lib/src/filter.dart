@@ -29,6 +29,9 @@ sealed class OsmFilter {
   /// Matches elements carrying at least one tag.
   const factory OsmFilter.tagged() = OsmTaggedFilter;
 
+  /// Matches the elements of [type] with one of [ids].
+  const factory OsmFilter.ids(OsmElementType type, Set<int> ids) = OsmIdFilter;
+
   /// Matches elements matching every one of [filters].
   const factory OsmFilter.all(List<OsmFilter> filters) = OsmAllFilter;
 
@@ -66,6 +69,22 @@ class OsmTypeFilter extends OsmFilter {
 
   @override
   bool matches(OsmElement element) => element.type == type;
+}
+
+/// Matches elements by id. See [OsmFilter.ids].
+class OsmIdFilter extends OsmFilter {
+  /// The type to match.
+  final OsmElementType type;
+
+  /// The ids to match.
+  final Set<int> ids;
+
+  /// Creates a filter matching the elements of [type] with one of [ids].
+  const OsmIdFilter(this.type, this.ids);
+
+  @override
+  bool matches(OsmElement element) =>
+      element.type == type && ids.contains(element.id);
 }
 
 /// Matches elements by tag. See [OsmFilter.tag].

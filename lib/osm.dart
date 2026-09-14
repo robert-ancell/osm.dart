@@ -7,3 +7,4 @@ export 'src/filter.dart';
 export 'src/pbf/exception.dart';
 export 'src/pbf/file.dart';
 export 'src/pbf/header.dart';
+export 'src/subset.dart';

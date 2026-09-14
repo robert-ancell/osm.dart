@@ -1,0 +1,63 @@
+import 'element.dart';
+
+/// The elements taken out of a file, and everything they refer to.
+///
+/// A way names its nodes by id and a relation names its members by id, so a
+/// matching element on its own is not enough to build geometry from. A subset
+/// carries the elements the matches point at as well, indexed by id, so
+/// [nodesOf] and [memberOf] can resolve them.
+class OsmSubset {
+  /// The elements that matched the filter, in the order they were stored.
+  final List<OsmElement> matches;
+
+  /// Every node held, by id, whether it matched or was referred to.
+  final Map<int, OsmNode> nodes;
+
+  /// Every way held, by id, whether it matched or was referred to.
+  final Map<int, OsmWay> ways;
+
+  /// Every relation held, by id, whether it matched or was referred to.
+  final Map<int, OsmRelation> relations;
+
+  /// Creates a subset. Normally made by reading a file.
+  const OsmSubset({
+    required this.matches,
+    required this.nodes,
+    required this.ways,
+    required this.relations,
+  });
+
+  /// The number of elements held.
+  int get length => nodes.length + ways.length + relations.length;
+
+  /// The element of [type] with [id], or null if the subset does not hold it.
+  OsmElement? element(OsmElementType type, int id) => switch (type) {
+        OsmElementType.node => nodes[id],
+        OsmElementType.way => ways[id],
+        OsmElementType.relation => relations[id],
+      };
+
+  /// The element a relation member refers to, or null if it is not held.
+  OsmElement? memberOf(OsmMember member) => element(member.type, member.ref);
+
+  /// The nodes of [way], in order, or null if any of them is missing.
+  ///
+  /// Missing nodes mean the way runs off the edge of the file, which happens
+  /// to any way crossing the boundary of an extract. Returning null rather
+  /// than a short list keeps torn geometry from being drawn as if it were
+  /// whole.
+  List<OsmNode>? nodesOf(OsmWay way) {
+    final located = <OsmNode>[];
+    for (final id in way.nodeIds) {
+      final node = nodes[id];
+      if (node == null) return null;
+      located.add(node);
+    }
+    return located;
+  }
+
+  @override
+  String toString() =>
+      'OsmSubset(${matches.length} matched, ${nodes.length} nodes, '
+      '${ways.length} ways, ${relations.length} relations)';
+}

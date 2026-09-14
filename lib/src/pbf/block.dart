@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../bounds.dart';
 import '../element.dart';
+import '../filter_plan.dart';
 import 'exception.dart';
 import 'header.dart';
 import 'protobuf.dart';
@@ -112,11 +113,13 @@ void decodePrimitiveBlock(
   Uint8List block,
   void Function(OsmElement element) emit, {
   int offset = 0,
+  OsmFilterPlan? plan,
 }) {
+  plan ??= OsmFilterPlan.of(null);
   final reader = ProtobufReader(block);
   // The groups reference the string table, which the format does not
   // guarantee comes first, so the groups are decoded in a second pass.
-  var strings = const <String>[];
+  var strings = _StringTable.empty;
   final groups = <ProtobufReader>[];
   var granularity = 100;
   var dateGranularity = 1000;
@@ -143,6 +146,11 @@ void decodePrimitiveBlock(
     }
   }
 
+  // If the filter needs a tag key that this block's string table does not
+  // hold, nothing in the block can match and none of it is worth decoding.
+  final keyIndexes = strings.indexesOf(plan.encodedKeys);
+  if (keyIndexes != null && keyIndexes.isEmpty) return;
+
   final context = _BlockContext(
     strings: strings,
     granularity: granularity,
@@ -150,33 +158,88 @@ void decodePrimitiveBlock(
     latitudeOffset: latitudeOffset,
     longitudeOffset: longitudeOffset,
     offset: offset,
+    plan: plan,
+    keyIndexes: keyIndexes,
   );
   for (final group in groups) {
     _decodeGroup(group, context, emit);
   }
 }
 
-List<String> _decodeStringTable(ProtobufReader reader) {
-  final strings = <String>[];
+/// The strings a block's elements are built from.
+///
+/// Held as the raw UTF-8 of the block and decoded one entry at a time, the
+/// first time something asks for it. A block that the filter drops is never
+/// decoded at all, and a block it keeps only pays for the strings the matching
+/// elements actually use.
+class _StringTable {
+  final List<Uint8List> _bytes;
+  final List<String?> _decoded;
+
+  _StringTable(this._bytes)
+      : _decoded = List<String?>.filled(_bytes.length, null);
+
+  static final _StringTable empty = _StringTable(const []);
+
+  int get length => _bytes.length;
+
+  String operator [](int index) =>
+      _decoded[index] ??= utf8.decode(_bytes[index]);
+
+  /// The indexes of the entries equal to one of [wanted], or null if there is
+  /// nothing to look for.
+  ///
+  /// Compares bytes, so looking for a key costs no decoding.
+  Set<int>? indexesOf(List<Uint8List>? wanted) {
+    if (wanted == null) return null;
+    final indexes = <int>{};
+    for (var i = 0; i < _bytes.length; i++) {
+      final entry = _bytes[i];
+      for (final key in wanted) {
+        if (_sameBytes(entry, key)) {
+          indexes.add(i);
+          break;
+        }
+      }
+    }
+    return indexes;
+  }
+
+  static bool _sameBytes(Uint8List a, Uint8List b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
+_StringTable _decodeStringTable(ProtobufReader reader) {
+  final strings = <Uint8List>[];
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     if (ProtobufReader.fieldOf(tag) == 1) {
-      strings.add(utf8.decode(reader.readBytes()));
+      strings.add(reader.readBytes());
     } else {
       reader.skipField(tag);
     }
   }
-  return strings;
+  return _StringTable(strings);
 }
 
 /// The parts of a primitive block its groups are decoded against.
 class _BlockContext {
-  final List<String> strings;
+  final _StringTable strings;
   final int granularity;
   final int dateGranularity;
   final int latitudeOffset;
   final int longitudeOffset;
   final int offset;
+  final OsmFilterPlan plan;
+
+  /// The string table indexes of the keys [plan] needs, or null if it needs
+  /// no particular key.
+  final Set<int>? keyIndexes;
 
   const _BlockContext({
     required this.strings,
@@ -185,7 +248,39 @@ class _BlockContext {
     required this.latitudeOffset,
     required this.longitudeOffset,
     required this.offset,
+    required this.plan,
+    required this.keyIndexes,
   });
+
+  /// Whether an element with these tag key indexes could match the filter.
+  ///
+  /// Cheap, and wrong only in the safe direction: it lets through elements
+  /// the filter then turns away, and never holds one back that would have
+  /// matched.
+  bool couldMatchKeys(List<int> keys) {
+    if (keys.isEmpty) return plan.wantsUntagged;
+    final wanted = keyIndexes;
+    if (wanted == null) return true;
+    for (final key in keys) {
+      if (wanted.contains(key)) return true;
+    }
+    return false;
+  }
+
+  /// Whether a dense node whose tags run from [start] to [end] in the shared
+  /// key and value list could match the filter.
+  bool couldMatchDenseKeys(List<int> keysValues, int start, int end) {
+    if (start >= end) return plan.wantsUntagged;
+    final wanted = keyIndexes;
+    if (wanted == null) return true;
+    for (var i = start; i < end; i += 2) {
+      if (wanted.contains(keysValues[i])) return true;
+    }
+    return false;
+  }
+
+  /// Whether [element] is wanted, once it is built.
+  bool wants(OsmElement element) => plan.filter?.matches(element) ?? true;
 
   double latitude(int value) =>
       _nanoDegrees * (latitudeOffset + granularity * value);
@@ -217,16 +312,20 @@ void _decodeGroup(
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
-        emit(_decodeNode(reader.readMessage(), context));
-      case 2:
+      case 1 when context.plan.wantsType(OsmElementType.node):
+        final node = _decodeNode(reader.readMessage(), context);
+        if (node != null) emit(node);
+      case 2 when context.plan.wantsType(OsmElementType.node):
         _decodeDenseNodes(reader.readMessage(), context, emit);
-      case 3:
-        emit(_decodeWay(reader.readMessage(), context));
-      case 4:
-        emit(_decodeRelation(reader.readMessage(), context));
+      case 3 when context.plan.wantsType(OsmElementType.way):
+        final way = _decodeWay(reader.readMessage(), context);
+        if (way != null) emit(way);
+      case 4 when context.plan.wantsType(OsmElementType.relation):
+        final relation = _decodeRelation(reader.readMessage(), context);
+        if (relation != null) emit(relation);
       default:
-        // Field 5 holds changesets, which no file in the wild carries.
+        // Either an element type the filter has ruled out, or field 5, which
+        // holds changesets that no file in the wild carries.
         reader.skipField(tag);
     }
   }
@@ -251,7 +350,7 @@ Map<String, String> _tags(
   return tags;
 }
 
-OsmNode _decodeNode(ProtobufReader reader, _BlockContext context) {
+OsmNode? _decodeNode(ProtobufReader reader, _BlockContext context) {
   var id = 0;
   var latitude = 0;
   var longitude = 0;
@@ -279,13 +378,16 @@ OsmNode _decodeNode(ProtobufReader reader, _BlockContext context) {
     }
   }
 
-  return OsmNode(
+  if (!context.couldMatchKeys(keys)) return null;
+
+  final node = OsmNode(
     id: id,
     latitude: context.latitude(latitude),
     longitude: context.longitude(longitude),
     tags: _tags(keys, values, context),
     info: info,
   );
+  return context.wants(node) ? node : null;
 }
 
 OsmInfo _decodeInfo(ProtobufReader reader, _BlockContext context) {
@@ -366,37 +468,47 @@ void _decodeDenseNodes(
     );
   }
 
-  var keysValuesIndex = 0;
+  var index = 0;
   for (var i = 0; i < ids.length; i++) {
     // Each node takes key and value pairs from the shared list until a zero
-    // ends its run.
-    var tags = const <String, String>{};
-    if (keysValuesIndex < keysValues.length) {
-      if (keysValues[keysValuesIndex] != 0) tags = <String, String>{};
-      while (keysValues[keysValuesIndex] != 0) {
-        if (keysValuesIndex + 2 >= keysValues.length) {
+    // ends its run. Walking the run is a handful of integer comparisons, so
+    // it happens for every node, before anything is allocated for one.
+    final start = index;
+    if (index < keysValues.length) {
+      while (keysValues[index] != 0) {
+        if (index + 2 >= keysValues.length) {
           throw OsmPbfException(
             'Dense node tags end in the middle of a key and value pair',
             offset: context.offset,
           );
         }
-        tags[context.string(keysValues[keysValuesIndex])] = context.string(
-          keysValues[keysValuesIndex + 1],
-        );
-        keysValuesIndex += 2;
+        index += 2;
       }
-      keysValuesIndex++;
+      index++;
+    }
+    final end = index == start ? start : index - 1;
+
+    if (!context.couldMatchDenseKeys(keysValues, start, end)) continue;
+
+    var tags = const <String, String>{};
+    if (start < end) {
+      final decoded = <String, String>{};
+      for (var pair = start; pair < end; pair += 2) {
+        decoded[context.string(keysValues[pair])] = context.string(
+          keysValues[pair + 1],
+        );
+      }
+      tags = decoded;
     }
 
-    emit(
-      OsmNode(
-        id: ids[i],
-        latitude: context.latitude(latitudes[i]),
-        longitude: context.longitude(longitudes[i]),
-        tags: tags,
-        info: denseInfo?.at(i, context),
-      ),
+    final node = OsmNode(
+      id: ids[i],
+      latitude: context.latitude(latitudes[i]),
+      longitude: context.longitude(longitudes[i]),
+      tags: tags,
+      info: denseInfo?.at(i, context),
     );
+    if (context.wants(node)) emit(node);
   }
 }
 
@@ -473,7 +585,7 @@ _DenseInfo _decodeDenseInfo(ProtobufReader reader) {
   );
 }
 
-OsmWay _decodeWay(ProtobufReader reader, _BlockContext context) {
+OsmWay? _decodeWay(ProtobufReader reader, _BlockContext context) {
   var id = 0;
   final keys = <int>[];
   final values = <int>[];
@@ -498,15 +610,18 @@ OsmWay _decodeWay(ProtobufReader reader, _BlockContext context) {
     }
   }
 
-  return OsmWay(
+  if (!context.couldMatchKeys(keys)) return null;
+
+  final way = OsmWay(
     id: id,
     nodeIds: nodeIds,
     tags: _tags(keys, values, context),
     info: info,
   );
+  return context.wants(way) ? way : null;
 }
 
-OsmRelation _decodeRelation(ProtobufReader reader, _BlockContext context) {
+OsmRelation? _decodeRelation(ProtobufReader reader, _BlockContext context) {
   var id = 0;
   final keys = <int>[];
   final values = <int>[];
@@ -537,6 +652,8 @@ OsmRelation _decodeRelation(ProtobufReader reader, _BlockContext context) {
     }
   }
 
+  if (!context.couldMatchKeys(keys)) return null;
+
   if (roles.length != refs.length || types.length != refs.length) {
     throw OsmPbfException(
       'Relation $id has ${refs.length} members but ${roles.length} roles and '
@@ -562,10 +679,11 @@ OsmRelation _decodeRelation(ProtobufReader reader, _BlockContext context) {
     );
   }
 
-  return OsmRelation(
+  final relation = OsmRelation(
     id: id,
     members: members,
     tags: _tags(keys, values, context),
     info: info,
   );
+  return context.wants(relation) ? relation : null;
 }

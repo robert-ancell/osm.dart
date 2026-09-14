@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../bounds.dart';
 import '../element.dart';
 import '../filter.dart';
 import '../filter_plan.dart';
@@ -133,11 +134,115 @@ class OsmPbfFile {
   /// Each read is decoded on [isolates] worker isolates, by default as many as
   /// [defaultIsolates] says, which for the reads by id depends on how many ids
   /// there are to hand to the workers.
-  Future<OsmSubset> subset(OsmFilter filter, {int? isolates}) async {
+  Future<OsmSubset> subset(OsmFilter filter, {int? isolates}) async =>
+      _complete(
+        await elements(filter: filter, isolates: isolates).toList(),
+        isolates,
+      );
+
+  /// Everything standing inside [bounds], with the ways kept whole.
+  ///
+  /// The equivalent of `osmium extract --strategy complete_ways`: the nodes
+  /// inside the boxes, the ways using any of those nodes along with the rest
+  /// of their nodes wherever those are, and the relations with any of those as
+  /// a member. A way crossing the edge of a box keeps the nodes that fall
+  /// outside it and can still be drawn.
+  ///
+  /// What a kept relation refers to is not read. A relation is kept because it
+  /// has something here, not because it belongs here, and reading the rest of
+  /// a bus route or a coastline that happens to pass by would pull in the
+  /// country around it: on New Zealand that is the difference between five and
+  /// a half million nodes and thirteen million. Pass the relations to [subset]
+  /// if their whole geometry is wanted.
+  ///
+  /// Everything inside is taken. There is no filter here on purpose: what is
+  /// inside a box is decided by the nodes standing in it, so a filter narrowing
+  /// those would decide which ways are inside as well, and asking for the
+  /// tagged things in an area would quietly drop the ways holding them up.
+  /// Filter [OsmSubset.matches] afterwards instead.
+  ///
+  /// Reading by type rather than in one pass costs a read of the file and buys
+  /// not caring whether the file is sorted.
+  Future<OsmSubset> within(List<OsmBounds> bounds, {int? isolates}) async {
+    final nodes = <int, OsmNode>{};
+    await for (final element in elements(
+      filter: OsmFilter.within(bounds),
+      isolates: isolates,
+    )) {
+      nodes[element.id] = element as OsmNode;
+    }
+
+    final ways = <int, OsmWay>{};
+    await for (final element in elements(
+      filter: const OsmFilter.type(OsmElementType.way),
+      isolates: isolates,
+    )) {
+      final way = element as OsmWay;
+      if (way.nodeIds.any(nodes.containsKey)) ways[way.id] = way;
+    }
+
+    // Every relation is read and then sifted, rather than kept as it goes by,
+    // because a relation can have a relation after it in the file as a member.
+    final candidates = <OsmRelation>[];
+    await for (final element in elements(
+      filter: const OsmFilter.type(OsmElementType.relation),
+      isolates: isolates,
+    )) {
+      candidates.add(element as OsmRelation);
+    }
+
+    final relations = <int, OsmRelation>{};
+    for (var grew = true; grew;) {
+      grew = false;
+      for (final relation in candidates) {
+        if (relations.containsKey(relation.id)) continue;
+        final touches = relation.members.any(
+          (member) => switch (member.type) {
+            OsmElementType.node => nodes.containsKey(member.ref),
+            OsmElementType.way => ways.containsKey(member.ref),
+            OsmElementType.relation => relations.containsKey(member.ref),
+          },
+        );
+        if (touches) {
+          relations[relation.id] = relation;
+          grew = true;
+        }
+      }
+    }
+
+    final matches = <OsmElement>[
+      ...nodes.values,
+      ...ways.values,
+      ...relations.values,
+    ];
+
+    // The only thing read that was not found here: the nodes of a way that
+    // reach past the edge of a box.
+    final wanted = <int>{};
+    for (final way in ways.values) {
+      for (final id in way.nodeIds) {
+        if (!nodes.containsKey(id)) wanted.add(id);
+      }
+    }
+    await for (final element in _byId({
+      OsmElementType.node: wanted,
+    }, isolates)) {
+      nodes[element.id] = element as OsmNode;
+    }
+
+    return OsmSubset(
+      matches: matches,
+      nodes: nodes,
+      ways: ways,
+      relations: relations,
+    );
+  }
+
+  /// Reads whatever [matches] refer to and holds the lot.
+  Future<OsmSubset> _complete(List<OsmElement> matches, int? isolates) async {
     final nodes = <int, OsmNode>{};
     final ways = <int, OsmWay>{};
     final relations = <int, OsmRelation>{};
-    final matches = <OsmElement>[];
 
     void hold(OsmElement element) {
       switch (element) {
@@ -150,8 +255,7 @@ class OsmPbfFile {
       }
     }
 
-    await for (final element in elements(filter: filter, isolates: isolates)) {
-      matches.add(element);
+    for (final element in matches) {
       hold(element);
     }
 

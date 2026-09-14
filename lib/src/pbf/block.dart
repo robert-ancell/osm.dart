@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../bounds.dart';
+import '../box_index.dart';
 import '../element.dart';
 import '../filter_plan.dart';
 import 'exception.dart';
@@ -151,6 +152,10 @@ void decodePrimitiveBlock(
   final keyIndexes = strings.indexesOf(plan.encodedKeys);
   if (keyIndexes != null && keyIndexes.isEmpty) return;
 
+  // Indexing the boxes once per block, rather than once per plan, keeps them
+  // out of what has to be handed to a worker isolate for every block.
+  final boxes = plan.bounds == null ? null : BoxIndex(plan.bounds!);
+
   final context = _BlockContext(
     strings: strings,
     granularity: granularity,
@@ -160,6 +165,7 @@ void decodePrimitiveBlock(
     offset: offset,
     plan: plan,
     keyIndexes: keyIndexes,
+    boxes: boxes,
   );
   for (final group in groups) {
     _decodeGroup(group, context, emit);
@@ -241,6 +247,9 @@ class _BlockContext {
   /// no particular key.
   final Set<int>? keyIndexes;
 
+  /// Where [plan] will have its nodes, or null if it does not say.
+  final BoxIndex? boxes;
+
   const _BlockContext({
     required this.strings,
     required this.granularity,
@@ -250,6 +259,7 @@ class _BlockContext {
     required this.offset,
     required this.plan,
     required this.keyIndexes,
+    required this.boxes,
   });
 
   /// Whether an element with these tag key indexes could match the filter.
@@ -266,6 +276,11 @@ class _BlockContext {
     }
     return false;
   }
+
+  /// Whether a node standing here could match the filter.
+  bool couldMatchLocation(int latitude, int longitude) =>
+      boxes == null ||
+      boxes!.contains(this.latitude(latitude), this.longitude(longitude));
 
   /// Whether an element of [type] with this [id] could match the filter.
   bool couldMatchId(OsmElementType type, int id) {
@@ -387,6 +402,7 @@ OsmNode? _decodeNode(ProtobufReader reader, _BlockContext context) {
   }
 
   if (!context.couldMatchId(OsmElementType.node, id) ||
+      !context.couldMatchLocation(latitude, longitude) ||
       !context.couldMatchKeys(keys)) {
     return null;
   }
@@ -500,6 +516,7 @@ void _decodeDenseNodes(
     final end = index == start ? start : index - 1;
 
     if (!context.couldMatchId(OsmElementType.node, ids[i]) ||
+        !context.couldMatchLocation(latitudes[i], longitudes[i]) ||
         !context.couldMatchDenseKeys(keysValues, start, end)) {
       continue;
     }

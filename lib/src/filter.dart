@@ -1,3 +1,5 @@
+import 'bounds.dart';
+import 'box_index.dart';
 import 'element.dart';
 
 /// Chooses which elements of a file are wanted.
@@ -31,6 +33,13 @@ sealed class OsmFilter {
 
   /// Matches the elements of [type] with one of [ids].
   const factory OsmFilter.ids(OsmElementType type, Set<int> ids) = OsmIdFilter;
+
+  /// Matches nodes standing inside any of [bounds].
+  ///
+  /// Nodes only. A way or a relation is somewhere because of the nodes it is
+  /// made of, which a filter looking at one element at a time cannot see; see
+  /// [OsmPbfFile.within] for reading an area of a file.
+  factory OsmFilter.within(List<OsmBounds> bounds) = OsmWithinFilter;
 
   /// Matches elements matching every one of [filters].
   const factory OsmFilter.all(List<OsmFilter> filters) = OsmAllFilter;
@@ -85,6 +94,22 @@ class OsmIdFilter extends OsmFilter {
   @override
   bool matches(OsmElement element) =>
       element.type == type && ids.contains(element.id);
+}
+
+/// Matches nodes by where they stand. See [OsmFilter.within].
+class OsmWithinFilter extends OsmFilter {
+  /// The boxes a matching node stands in one of.
+  final List<OsmBounds> bounds;
+
+  final BoxIndex _index;
+
+  /// Creates a filter matching nodes inside any of [bounds].
+  OsmWithinFilter(this.bounds) : _index = BoxIndex(bounds);
+
+  @override
+  bool matches(OsmElement element) =>
+      element is OsmNode &&
+      _index.contains(element.latitude, element.longitude);
 }
 
 /// Matches elements by tag. See [OsmFilter.tag].

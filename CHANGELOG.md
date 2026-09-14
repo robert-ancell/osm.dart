@@ -7,3 +7,5 @@
   members they refer to, so their geometry can be built.
 * `OsmSubset.areaOf` for assembling the area a closed way or a multipolygon
   relation covers, as outlines and holes.
+* `OsmPbfFile.within` for reading everything inside a set of boxes, and
+  `OsmFilter.within` for the nodes standing in them.

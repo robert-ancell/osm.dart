@@ -88,6 +88,29 @@ rather than by member roles, which real data gets wrong often enough to matter.
 All 81 of the multipolygon tests from
 [osm-testdata](https://github.com/osmcode/osm-testdata) come out as specified.
 
+## Reading an area
+
+```dart
+final inside = await file.within([
+  const OsmBounds(
+    minLatitude: -41.33,
+    minLongitude: 174.76,
+    maxLatitude: -41.31,
+    maxLongitude: 174.79,
+  ),
+]);
+```
+
+The nodes standing in the boxes, the ways using any of them along with the
+rest of their nodes wherever those are, and the relations with any of those as
+a member. What a kept relation refers to is not read: a relation is kept
+because it has something here, not because it belongs here, and reading the
+rest of a bus route that happens to pass by would pull in the country around
+it.
+
+That is what `osmium extract --strategy complete_ways` gives, element for
+element.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed. Files

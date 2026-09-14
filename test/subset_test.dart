@@ -7,6 +7,18 @@ import 'package:test/test.dart';
 const _gridPath = 'test/data/grid.osm.pbf';
 const _gridBuildingsPath = 'test/data/grid-buildings.osm.pbf';
 
+/// The grid through `osmium extract -b 7.0,1.0,7.5,1.5`, which all three of
+/// its strategies agree on, to check reading an area against it.
+const _gridBoxPath = 'test/data/grid-box.osm.pbf';
+
+/// The box that extract was taken with.
+const _box = OsmBounds(
+  minLatitude: 1.0,
+  minLongitude: 7.0,
+  maxLatitude: 1.5,
+  maxLongitude: 7.5,
+);
+
 /// Data written for this package, and the same file through
 /// `osmium tags-filter type=site`. The site relation has a relation of its
 /// own in it, so completing it means following one relation into another.
@@ -56,6 +68,63 @@ void main() {
       const OsmFilter.tag('type', 'site'),
       _elementsSitesPath,
     );
+  });
+
+  test('reads an area the way osmium extract does', () async {
+    final file = await OsmPbfFile.open(_gridPath);
+    final subset = await file.within(const [_box]);
+    final expected = await _idsOf(_gridBoxPath);
+
+    expect(
+      subset.nodes.keys.toList()..sort(),
+      expected[OsmElementType.node]!..sort(),
+    );
+    expect(
+      subset.ways.keys.toList()..sort(),
+      expected[OsmElementType.way]!..sort(),
+    );
+    expect(
+      subset.relations.keys.toList()..sort(),
+      expected[OsmElementType.relation]!..sort(),
+    );
+  });
+
+  test('keeps a way whose far end is outside the box', () async {
+    final file = await OsmPbfFile.open(_gridPath);
+    // A box cutting through the middle of one of the test cases rather than
+    // falling between them, so that ways cross its edge.
+    final subset = await file.within(const [
+      OsmBounds(
+        minLatitude: 1.0,
+        minLongitude: 7.0,
+        maxLatitude: 1.02,
+        maxLongitude: 7.12,
+      ),
+    ]);
+
+    var crossing = 0;
+    for (final way in subset.ways.values) {
+      final nodes = subset.nodesOf(way);
+      expect(nodes, isNotNull, reason: 'way ${way.id} is missing nodes');
+      if (nodes!.any((n) => n.longitude > 7.12 || n.latitude > 1.02)) {
+        crossing++;
+      }
+    }
+    expect(crossing, greaterThan(0), reason: 'the box should cut some way');
+  });
+
+  test('takes nothing from a box with nothing in it', () async {
+    final file = await OsmPbfFile.open(_gridPath);
+    final subset = await file.within(const [
+      OsmBounds(
+        minLatitude: 40,
+        minLongitude: 40,
+        maxLatitude: 41,
+        maxLongitude: 41,
+      ),
+    ]);
+    expect(subset.matches, isEmpty);
+    expect(subset.length, 0);
   });
 
   test('keeps the matches apart from what they refer to', () async {

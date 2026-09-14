@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'bounds.dart';
 import 'element.dart';
 import 'filter.dart';
 
@@ -30,6 +31,10 @@ class OsmFilterPlan {
   /// When it is not null, a type missing from the map cannot match at all.
   final Map<OsmElementType, Set<int>>? ids;
 
+  /// The boxes a matching node must stand in one of, or null if the filter
+  /// does not say where its nodes are.
+  final List<OsmBounds>? bounds;
+
   /// [keys] as UTF-8, so a block's string table can be searched without
   /// decoding any of it.
   final List<Uint8List>? encodedKeys;
@@ -40,6 +45,7 @@ class OsmFilterPlan {
     required this.keys,
     required this.tagged,
     required this.ids,
+    required this.bounds,
   }) : encodedKeys = keys?.map(utf8.encode).toList(growable: false);
 
   /// Works out what [filter] needs. A null filter takes every element.
@@ -51,6 +57,7 @@ class OsmFilterPlan {
         keys: null,
         tagged: false,
         ids: null,
+        bounds: null,
       );
     }
     final need = _needsOf(filter);
@@ -60,6 +67,7 @@ class OsmFilterPlan {
       keys: need.keys,
       tagged: need.tagged,
       ids: need.ids,
+      bounds: need.bounds,
     );
   }
 
@@ -75,6 +83,7 @@ class OsmFilterPlan {
         keys: keys,
         tagged: tagged,
         ids: ids,
+        bounds: bounds,
       );
 
   /// Whether elements of [type] are worth decoding.
@@ -96,12 +105,14 @@ class _Needs {
   final Set<String>? keys;
   final bool tagged;
   final Map<OsmElementType, Set<int>>? ids;
+  final List<OsmBounds>? bounds;
 
   const _Needs({
     required this.types,
     this.keys,
     this.tagged = false,
     this.ids,
+    this.bounds,
   });
 
   static const _Needs unknown = _Needs(types: _allTypes);
@@ -113,6 +124,8 @@ _Needs _needsOf(OsmFilter filter) {
       return _Needs(types: {type});
     case OsmIdFilter(:final type, :final ids):
       return _Needs(types: {type}, ids: {type: ids});
+    case OsmWithinFilter(:final bounds):
+      return _Needs(types: const {OsmElementType.node}, bounds: bounds);
     case OsmTagFilter(:final key):
       return _Needs(types: _allTypes, keys: {key}, tagged: true);
     case OsmTagInFilter(:final key):
@@ -160,11 +173,20 @@ _Needs _needsOfAll(List<OsmFilter> filters) {
     }
   }
 
+  List<OsmBounds>? bounds;
+  for (final need in needs) {
+    if (need.bounds != null) {
+      bounds = need.bounds;
+      break;
+    }
+  }
+
   return _Needs(
     types: types,
     keys: keys,
     tagged: needs.any((need) => need.tagged),
     ids: ids,
+    bounds: bounds,
   );
 }
 
@@ -206,10 +228,22 @@ _Needs _needsOfAny(List<OsmFilter> filters) {
     });
   }
 
+  final boxes = <OsmBounds>[];
+  var placed = true;
+  for (final need in needs) {
+    final candidate = need.bounds;
+    if (candidate == null) {
+      placed = false;
+      break;
+    }
+    boxes.addAll(candidate);
+  }
+
   return _Needs(
     types: types,
     keys: keys,
     tagged: needs.every((need) => need.tagged),
     ids: pinned ? byType : null,
+    bounds: placed ? boxes : null,
   );
 }

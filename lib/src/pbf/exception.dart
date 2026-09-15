@@ -1,7 +1,10 @@
+import '../exception.dart';
+
 /// Thrown when a file is not a valid OSM PBF file, or uses a feature this
 /// package cannot decode.
-class OsmPbfException implements Exception {
+class OsmPbfException implements OsmException {
   /// A description of what could not be decoded.
+  @override
   final String message;
 
   /// The byte offset in the file the failure was detected at, if known.

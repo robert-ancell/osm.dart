@@ -13,4 +13,5 @@
 * `OsmChangeFile` for reading OsmChange `.osc` replication diffs, gzipped or
   not.
 * `OsmPbfWriter` for writing `.osm.pbf` files, and `applyOsmChanges` for
-  rolling replication diffs into one.
+  rolling replication diffs into one. A file written says `osm/<version>`
+  wrote it, unless the header says otherwise.

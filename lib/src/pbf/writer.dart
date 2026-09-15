@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../element.dart';
 import 'exception.dart';
+import '../version.dart';
 import 'header.dart';
 import 'protobuf_writer.dart';
 
@@ -157,7 +158,10 @@ Uint8List _headerBlock(OsmPbfHeader header) {
     block.writeString(5, feature);
   }
 
-  block.writeString(16, header.writingProgram ?? 'osm.dart');
+  // What wrote the file, in the shape everything else states it: osmium
+  // writes `osmium/1.19.0`, and a file should say which version of what made
+  // it rather than only what kind of thing did.
+  block.writeString(16, header.writingProgram ?? 'osm/$packageVersion');
   final source = header.source;
   if (source != null) block.writeString(17, source);
 

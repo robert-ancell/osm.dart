@@ -1,6 +1,9 @@
+import '../exception.dart';
+
 /// Thrown when a file is not the XML this package can read.
-class OsmXmlException implements Exception {
+class OsmXmlException implements OsmException {
   /// A description of what could not be read.
+  @override
   final String message;
 
   /// The character offset the trouble was found at, if known.

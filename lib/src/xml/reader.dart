@@ -1,5 +1,8 @@
 import 'exception.dart';
 
+/// The largest character Unicode defines.
+const int _maxCodePoint = 0x10ffff;
+
 /// Reads the tags of an XML document, in the order they appear.
 ///
 /// Only as much XML as OpenStreetMap's own files use: elements, attributes,
@@ -105,16 +108,38 @@ void readXml(
   }
 }
 
-bool _isSpace(int c) => c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d;
+/// The characters this has to know apart, by the code unit each one is.
+abstract final class _Char {
+  static const int tab = 0x09;
+  static const int newline = 0x0a;
+  static const int carriageReturn = 0x0d;
+  static const int space = 0x20;
+  static const int hyphen = 0x2d;
+  static const int fullStop = 0x2e;
+  static const int zero = 0x30;
+  static const int nine = 0x39;
+  static const int colon = 0x3a;
+  static const int upperA = 0x41;
+  static const int upperZ = 0x5a;
+  static const int underscore = 0x5f;
+  static const int lowerA = 0x61;
+  static const int lowerZ = 0x7a;
+}
+
+bool _isSpace(int c) =>
+    c == _Char.space ||
+    c == _Char.tab ||
+    c == _Char.newline ||
+    c == _Char.carriageReturn;
 
 bool _isNameChar(int c) =>
-    (c >= 0x61 && c <= 0x7a) || // a-z
-    (c >= 0x41 && c <= 0x5a) || // A-Z
-    (c >= 0x30 && c <= 0x39) || // 0-9
-    c == 0x5f || // _
-    c == 0x3a || // :
-    c == 0x2d || // -
-    c == 0x2e; // .
+    (c >= _Char.lowerA && c <= _Char.lowerZ) ||
+    (c >= _Char.upperA && c <= _Char.upperZ) ||
+    (c >= _Char.zero && c <= _Char.nine) ||
+    c == _Char.underscore ||
+    c == _Char.colon ||
+    c == _Char.hyphen ||
+    c == _Char.fullStop;
 
 /// Puts back the five entities XML defines and any character written by
 /// number.
@@ -156,7 +181,7 @@ String _unescape(String value, int offset) {
             : entity.startsWith('#')
                 ? int.tryParse(entity.substring(1))
                 : null;
-        if (code == null || code < 0 || code > 0x10ffff) {
+        if (code == null || code < 0 || code > _maxCodePoint) {
           throw OsmXmlException(
             'Unknown entity &$entity;',
             offset: offset + amp,

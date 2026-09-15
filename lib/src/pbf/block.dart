@@ -6,6 +6,7 @@ import '../box_index.dart';
 import '../element.dart';
 import '../filter_plan.dart';
 import 'exception.dart';
+import 'fields.dart';
 import 'header.dart';
 import 'protobuf.dart';
 
@@ -34,21 +35,21 @@ OsmPbfHeader decodeHeaderBlock(Uint8List block, {int offset = 0}) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case HeaderBlockField.bbox:
         bounds = _decodeBoundingBox(reader.readMessage());
-      case 4:
+      case HeaderBlockField.requiredFeatures:
         required.add(reader.readString());
-      case 5:
+      case HeaderBlockField.optionalFeatures:
         optional.add(reader.readString());
-      case 16:
+      case HeaderBlockField.writingProgram:
         writingProgram = reader.readString();
-      case 17:
+      case HeaderBlockField.source:
         source = reader.readString();
-      case 32:
+      case HeaderBlockField.replicationTimestamp:
         replicationTimestamp = reader.readVarint();
-      case 33:
+      case HeaderBlockField.replicationSequenceNumber:
         replicationSequenceNumber = reader.readVarint();
-      case 34:
+      case HeaderBlockField.replicationBaseUrl:
         replicationBaseUrl = reader.readString();
       default:
         reader.skipField(tag);
@@ -86,13 +87,13 @@ OsmBounds _decodeBoundingBox(ProtobufReader reader) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case HeaderBBoxField.left:
         left = reader.readSignedVarint();
-      case 2:
+      case HeaderBBoxField.right:
         right = reader.readSignedVarint();
-      case 3:
+      case HeaderBBoxField.top:
         top = reader.readSignedVarint();
-      case 4:
+      case HeaderBBoxField.bottom:
         bottom = reader.readSignedVarint();
       default:
         reader.skipField(tag);
@@ -130,17 +131,17 @@ void decodePrimitiveBlock(
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case PrimitiveBlockField.stringTable:
         strings = _decodeStringTable(reader.readMessage());
-      case 2:
+      case PrimitiveBlockField.primitiveGroup:
         groups.add(reader.readMessage());
-      case 17:
+      case PrimitiveBlockField.granularity:
         granularity = reader.readVarint();
-      case 18:
+      case PrimitiveBlockField.dateGranularity:
         dateGranularity = reader.readVarint();
-      case 19:
+      case PrimitiveBlockField.latitudeOffset:
         latitudeOffset = reader.readVarint();
-      case 20:
+      case PrimitiveBlockField.longitudeOffset:
         longitudeOffset = reader.readVarint();
       default:
         reader.skipField(tag);
@@ -224,7 +225,7 @@ _StringTable _decodeStringTable(ProtobufReader reader) {
   final strings = <Uint8List>[];
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
-    if (ProtobufReader.fieldOf(tag) == 1) {
+    if (ProtobufReader.fieldOf(tag) == StringTableField.strings) {
       strings.add(reader.readBytes());
     } else {
       reader.skipField(tag);
@@ -335,20 +336,24 @@ void _decodeGroup(
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1 when context.plan.wantsType(OsmElementType.node):
+      case PrimitiveGroupField.nodes
+          when context.plan.wantsType(OsmElementType.node):
         final node = _decodeNode(reader.readMessage(), context);
         if (node != null) emit(node);
-      case 2 when context.plan.wantsType(OsmElementType.node):
+      case PrimitiveGroupField.dense
+          when context.plan.wantsType(OsmElementType.node):
         _decodeDenseNodes(reader.readMessage(), context, emit);
-      case 3 when context.plan.wantsType(OsmElementType.way):
+      case PrimitiveGroupField.ways
+          when context.plan.wantsType(OsmElementType.way):
         final way = _decodeWay(reader.readMessage(), context);
         if (way != null) emit(way);
-      case 4 when context.plan.wantsType(OsmElementType.relation):
+      case PrimitiveGroupField.relations
+          when context.plan.wantsType(OsmElementType.relation):
         final relation = _decodeRelation(reader.readMessage(), context);
         if (relation != null) emit(relation);
       default:
-        // Either an element type the filter has ruled out, or field 5, which
-        // holds changesets that no file in the wild carries.
+        // Either an element type the filter has ruled out, or
+        // PrimitiveGroupField.changeSets, which no file in the wild carries.
         reader.skipField(tag);
     }
   }
@@ -384,17 +389,17 @@ OsmNode? _decodeNode(ProtobufReader reader, _BlockContext context) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case NodeField.id:
         id = reader.readSignedVarint();
-      case 2:
+      case NodeField.keys:
         reader.readPackedVarints(keys);
-      case 3:
+      case NodeField.values:
         reader.readPackedVarints(values);
-      case 4:
+      case NodeField.info:
         info = _decodeInfo(reader.readMessage(), context);
-      case 8:
+      case NodeField.latitude:
         latitude = reader.readSignedVarint();
-      case 9:
+      case NodeField.longitude:
         longitude = reader.readSignedVarint();
       default:
         reader.skipField(tag);
@@ -428,17 +433,17 @@ OsmInfo _decodeInfo(ProtobufReader reader, _BlockContext context) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case InfoField.version:
         version = reader.readVarint();
-      case 2:
+      case InfoField.timestamp:
         timestamp = reader.readVarint();
-      case 3:
+      case InfoField.changeset:
         changeset = reader.readVarint();
-      case 4:
+      case InfoField.uid:
         uid = reader.readVarint();
-      case 5:
+      case InfoField.userStringId:
         userIndex = reader.readVarint();
-      case 6:
+      case InfoField.visible:
         visible = reader.readVarint() != 0;
       default:
         reader.skipField(tag);
@@ -472,15 +477,15 @@ void _decodeDenseNodes(
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case DenseNodesField.ids:
         reader.readPackedDeltas(ids);
-      case 5:
+      case DenseNodesField.denseInfo:
         denseInfo = _decodeDenseInfo(reader.readMessage());
-      case 8:
+      case DenseNodesField.latitudes:
         reader.readPackedDeltas(latitudes);
-      case 9:
+      case DenseNodesField.longitudes:
         reader.readPackedDeltas(longitudes);
-      case 10:
+      case DenseNodesField.keysValues:
         reader.readPackedVarints(keysValues);
       default:
         reader.skipField(tag);
@@ -587,17 +592,17 @@ _DenseInfo _decodeDenseInfo(ProtobufReader reader) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case InfoField.version:
         reader.readPackedVarints(versions);
-      case 2:
+      case InfoField.timestamp:
         reader.readPackedDeltas(timestamps);
-      case 3:
+      case InfoField.changeset:
         reader.readPackedDeltas(changesets);
-      case 4:
+      case InfoField.uid:
         reader.readPackedDeltas(uids);
-      case 5:
+      case InfoField.userStringId:
         reader.readPackedDeltas(userIndexes);
-      case 6:
+      case InfoField.visible:
         final flags = <int>[];
         reader.readPackedVarints(flags);
         visibles.addAll(flags.map((f) => f != 0));
@@ -626,15 +631,15 @@ OsmWay? _decodeWay(ProtobufReader reader, _BlockContext context) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case WayField.id:
         id = reader.readVarint();
-      case 2:
+      case WayField.keys:
         reader.readPackedVarints(keys);
-      case 3:
+      case WayField.values:
         reader.readPackedVarints(values);
-      case 4:
+      case WayField.info:
         info = _decodeInfo(reader.readMessage(), context);
-      case 8:
+      case WayField.refs:
         reader.readPackedDeltas(nodeIds);
       default:
         reader.skipField(tag);
@@ -667,19 +672,19 @@ OsmRelation? _decodeRelation(ProtobufReader reader, _BlockContext context) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case RelationField.id:
         id = reader.readVarint();
-      case 2:
+      case RelationField.keys:
         reader.readPackedVarints(keys);
-      case 3:
+      case RelationField.values:
         reader.readPackedVarints(values);
-      case 4:
+      case RelationField.info:
         info = _decodeInfo(reader.readMessage(), context);
-      case 8:
+      case RelationField.roleStringIds:
         reader.readPackedVarints(roles);
-      case 9:
+      case RelationField.memberIds:
         reader.readPackedDeltas(refs);
-      case 10:
+      case RelationField.types:
         reader.readPackedVarints(types);
       default:
         reader.skipField(tag);

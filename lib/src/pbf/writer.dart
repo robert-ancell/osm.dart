@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../element.dart';
 import 'exception.dart';
+import 'fields.dart';
 import '../version.g.dart';
 import 'header.dart';
 import 'protobuf_writer.dart';
@@ -127,9 +128,10 @@ class _StringTable {
         return _strings.length - 1;
       });
 
-  void writeTo(ProtobufWriter block) => block.writeMessage(1, (table) {
+  void writeTo(ProtobufWriter block) =>
+      block.writeMessage(PrimitiveBlockField.stringTable, (table) {
         for (final string in _strings) {
-          table.writeString(1, string);
+          table.writeString(StringTableField.strings, string);
         }
       });
 }
@@ -139,12 +141,12 @@ Uint8List _headerBlock(OsmPbfHeader header) {
 
   final bounds = header.bounds;
   if (bounds != null) {
-    block.writeMessage(1, (box) {
+    block.writeMessage(HeaderBlockField.bbox, (box) {
       box
-        ..writeSigned(1, _nanodegrees(bounds.minLongitude))
-        ..writeSigned(2, _nanodegrees(bounds.maxLongitude))
-        ..writeSigned(3, _nanodegrees(bounds.maxLatitude))
-        ..writeSigned(4, _nanodegrees(bounds.minLatitude));
+        ..writeSigned(HeaderBBoxField.left, _nanodegrees(bounds.minLongitude))
+        ..writeSigned(HeaderBBoxField.right, _nanodegrees(bounds.maxLongitude))
+        ..writeSigned(HeaderBBoxField.top, _nanodegrees(bounds.maxLatitude))
+        ..writeSigned(HeaderBBoxField.bottom, _nanodegrees(bounds.minLatitude));
     });
   }
 
@@ -152,27 +154,33 @@ Uint8List _headerBlock(OsmPbfHeader header) {
   // the header it was handed said.
   final required = {'OsmSchema-V0.6', 'DenseNodes', ...header.requiredFeatures};
   for (final feature in required) {
-    block.writeString(4, feature);
+    block.writeString(HeaderBlockField.requiredFeatures, feature);
   }
   for (final feature in header.optionalFeatures) {
-    block.writeString(5, feature);
+    block.writeString(HeaderBlockField.optionalFeatures, feature);
   }
 
   // What wrote the file, in the shape everything else states it: osmium
   // writes `osmium/1.19.0`, and a file should say which version of what made
   // it rather than only what kind of thing did.
-  block.writeString(16, header.writingProgram ?? 'osm/$packageVersion');
+  block.writeString(HeaderBlockField.writingProgram,
+      header.writingProgram ?? 'osm/$packageVersion');
   final source = header.source;
-  if (source != null) block.writeString(17, source);
+  if (source != null) block.writeString(HeaderBlockField.source, source);
 
   final timestamp = header.replicationTimestamp;
   if (timestamp != null) {
-    block.writeUint(32, timestamp.millisecondsSinceEpoch ~/ 1000);
+    block.writeUint(HeaderBlockField.replicationTimestamp,
+        timestamp.millisecondsSinceEpoch ~/ Duration.millisecondsPerSecond);
   }
   final sequence = header.replicationSequenceNumber;
-  if (sequence != null) block.writeUint(33, sequence);
+  if (sequence != null) {
+    block.writeUint(HeaderBlockField.replicationSequenceNumber, sequence);
+  }
   final baseUrl = header.replicationBaseUrl;
-  if (baseUrl != null) block.writeString(34, baseUrl);
+  if (baseUrl != null) {
+    block.writeString(HeaderBlockField.replicationBaseUrl, baseUrl);
+  }
 
   return block.takeBytes();
 }
@@ -190,21 +198,22 @@ Uint8List _primitiveBlock(List<OsmElement> elements) {
       _writeDenseNodes(group, elements.cast<OsmNode>(), strings);
     case OsmWay():
       for (final way in elements.cast<OsmWay>()) {
-        group.writeMessage(3, (into) => _writeWay(into, way, strings));
+        group.writeMessage(
+            PrimitiveGroupField.ways, (into) => _writeWay(into, way, strings));
       }
     case OsmRelation():
       for (final relation in elements.cast<OsmRelation>()) {
-        group.writeMessage(
-            4, (into) => _writeRelation(into, relation, strings));
+        group.writeMessage(PrimitiveGroupField.relations,
+            (into) => _writeRelation(into, relation, strings));
       }
   }
 
   final block = ProtobufWriter();
   strings.writeTo(block);
-  block.writeBytes(2, group.takeBytes());
+  block.writeBytes(PrimitiveBlockField.primitiveGroup, group.takeBytes());
   block
-    ..writeUint(17, _granularity)
-    ..writeUint(18, _dateGranularity);
+    ..writeUint(PrimitiveBlockField.granularity, _granularity)
+    ..writeUint(PrimitiveBlockField.dateGranularity, _dateGranularity);
   return block.takeBytes();
 }
 
@@ -236,27 +245,30 @@ void _writeDenseNodes(
   // writing a zero for every one of them.
   final withInfo = nodes.where((n) => n.info != null).isNotEmpty;
 
-  group.writeMessage(2, (dense) {
+  group.writeMessage(PrimitiveGroupField.dense, (dense) {
     dense
-      ..writePackedDeltas(1, ids)
-      ..writePackedDeltas(8, latitudes)
-      ..writePackedDeltas(9, longitudes);
-    if (tagged) dense.writePackedVarints(10, keysValues);
+      ..writePackedDeltas(DenseNodesField.ids, ids)
+      ..writePackedDeltas(DenseNodesField.latitudes, latitudes)
+      ..writePackedDeltas(DenseNodesField.longitudes, longitudes);
+    if (tagged) {
+      dense.writePackedVarints(DenseNodesField.keysValues, keysValues);
+    }
     if (withInfo) {
-      dense.writeMessage(5, (info) {
+      dense.writeMessage(DenseNodesField.denseInfo, (info) {
         info
-          ..writePackedVarints(1, [
+          ..writePackedVarints(InfoField.version, [
             for (final node in nodes) node.info?.version ?? 0,
           ])
-          ..writePackedDeltas(2, [
+          ..writePackedDeltas(InfoField.timestamp, [
             for (final node in nodes) _seconds(node.info?.timestamp),
           ])
-          ..writePackedDeltas(3, [
+          ..writePackedDeltas(InfoField.changeset, [
             for (final node in nodes) node.info?.changeset ?? 0,
           ])
-          ..writePackedDeltas(
-              4, [for (final node in nodes) node.info?.uid ?? 0])
-          ..writePackedDeltas(5, [
+          ..writePackedDeltas(InfoField.uid, [
+            for (final node in nodes) node.info?.uid ?? 0,
+          ])
+          ..writePackedDeltas(InfoField.userStringId, [
             for (final node in nodes) strings.indexOf(node.info?.user ?? ''),
           ]);
       });
@@ -265,10 +277,10 @@ void _writeDenseNodes(
 }
 
 void _writeWay(ProtobufWriter into, OsmWay way, _StringTable strings) {
-  into.writeUint(1, way.id);
-  _writeTags(into, way.tags, strings);
-  _writeInfo(into, way.info, strings);
-  into.writePackedDeltas(8, way.nodeIds);
+  into.writeUint(WayField.id, way.id);
+  _writeTags(into, way.tags, strings, WayField.keys, WayField.values);
+  _writeInfo(into, way.info, strings, WayField.info);
+  into.writePackedDeltas(WayField.refs, way.nodeIds);
 }
 
 void _writeRelation(
@@ -276,17 +288,20 @@ void _writeRelation(
   OsmRelation relation,
   _StringTable strings,
 ) {
-  into.writeUint(1, relation.id);
-  _writeTags(into, relation.tags, strings);
-  _writeInfo(into, relation.info, strings);
+  into.writeUint(RelationField.id, relation.id);
+  _writeTags(
+      into, relation.tags, strings, RelationField.keys, RelationField.values);
+  _writeInfo(into, relation.info, strings, RelationField.info);
   into
-    ..writePackedVarints(8, [
+    ..writePackedVarints(RelationField.roleStringIds, [
       for (final member in relation.members) strings.indexOf(member.role),
     ])
-    ..writePackedDeltas(9, [
+    ..writePackedDeltas(RelationField.memberIds, [
       for (final member in relation.members) member.ref,
     ])
-    ..writePackedVarints(10, [
+    // MemberType in the .proto is NODE, WAY then RELATION, which is the
+    // order OsmElementType declares them in.
+    ..writePackedVarints(RelationField.types, [
       for (final member in relation.members) member.type.index,
     ]);
 }
@@ -295,28 +310,37 @@ void _writeTags(
   ProtobufWriter into,
   Map<String, String> tags,
   _StringTable strings,
+  int keysField,
+  int valuesField,
 ) {
   if (tags.isEmpty) return;
   into
-    ..writePackedVarints(2, [
+    ..writePackedVarints(keysField, [
       for (final key in tags.keys) strings.indexOf(key),
     ])
-    ..writePackedVarints(3, [
+    ..writePackedVarints(valuesField, [
       for (final value in tags.values) strings.indexOf(value),
     ]);
 }
 
-void _writeInfo(ProtobufWriter into, OsmInfo? info, _StringTable strings) {
+void _writeInfo(
+    ProtobufWriter into, OsmInfo? info, _StringTable strings, int field) {
   if (info == null) return;
-  into.writeMessage(4, (message) {
-    if (info.version != null) message.writeUint(1, info.version!);
-    if (info.timestamp != null) {
-      message.writeUint(2, _seconds(info.timestamp));
+  into.writeMessage(field, (message) {
+    if (info.version != null) {
+      message.writeUint(InfoField.version, info.version!);
     }
-    if (info.changeset != null) message.writeUint(3, info.changeset!);
-    if (info.uid != null) message.writeUint(4, info.uid!);
-    if (info.user != null) message.writeUint(5, strings.indexOf(info.user!));
-    if (!info.visible) message.writeBool(6, value: false);
+    if (info.timestamp != null) {
+      message.writeUint(InfoField.timestamp, _seconds(info.timestamp));
+    }
+    if (info.changeset != null) {
+      message.writeUint(InfoField.changeset, info.changeset!);
+    }
+    if (info.uid != null) message.writeUint(InfoField.uid, info.uid!);
+    if (info.user != null) {
+      message.writeUint(InfoField.userStringId, strings.indexOf(info.user!));
+    }
+    if (!info.visible) message.writeBool(InfoField.visible, value: false);
   });
 }
 
@@ -330,23 +354,20 @@ Uint8List _blob(String type, Uint8List block) {
   final compressed = Uint8List.fromList(zlib.encode(block));
 
   final blob = ProtobufWriter()
-    ..writeUint(2, block.length)
-    ..writeBytes(3, compressed);
+    ..writeUint(BlobField.rawSize, block.length)
+    ..writeBytes(BlobField.zlibData, compressed);
   final body = blob.takeBytes();
 
   final header = ProtobufWriter()
-    ..writeString(1, type)
-    ..writeUint(3, body.length);
+    ..writeString(BlobHeaderField.type, type)
+    ..writeUint(BlobHeaderField.dataSize, body.length);
   final headerBytes = header.takeBytes();
 
+  // The length in front of every blob: four bytes, most significant first.
+  final length = ByteData(4)..setUint32(0, headerBytes.length);
+
   final out = BytesBuilder(copy: false)
-    ..add(
-      Uint8List(4)
-        ..[0] = headerBytes.length >> 24 & 0xff
-        ..[1] = headerBytes.length >> 16 & 0xff
-        ..[2] = headerBytes.length >> 8 & 0xff
-        ..[3] = headerBytes.length & 0xff,
-    )
+    ..add(length.buffer.asUint8List())
     ..add(headerBytes)
     ..add(body);
   return out.takeBytes();

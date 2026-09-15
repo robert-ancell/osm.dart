@@ -28,7 +28,7 @@ void main() {
     // Field 3, wire type 2.
     final tag = _reader([0x1a]).readTag();
     expect(ProtobufReader.fieldOf(tag), 3);
-    expect(ProtobufReader.wireTypeOf(tag), 2);
+    expect(ProtobufReader.wireTypeOf(tag), ProtobufWireType.lengthDelimited);
   });
 
   test('reads a length delimited string', () {
@@ -42,6 +42,13 @@ void main() {
     reader.readPackedDeltas(values);
     expect(values, [1, 2, 1]);
     expect(reader.isAtEnd, isTrue);
+  });
+
+  test('gives no wire type for one the format does not define', () {
+    expect(ProtobufWireType.of(6), isNull);
+    expect(ProtobufWireType.of(7), isNull);
+    expect(ProtobufWireType.of(0), ProtobufWireType.varint);
+    expect(ProtobufWireType.of(5), ProtobufWireType.fixed32);
   });
 
   test('skips fields it does not know', () {

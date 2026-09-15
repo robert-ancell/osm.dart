@@ -1,13 +1,35 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Protobuf wire types.
-const int _wireVarint = 0;
-const int _wireFixed64 = 1;
-const int _wireLengthDelimited = 2;
-const int _wireStartGroup = 3;
-const int _wireEndGroup = 4;
-const int _wireFixed32 = 5;
+/// How a field's value is laid out, which is the low three bits of its tag.
+///
+/// Declared in the order the format numbers them, so the index of each is the
+/// number the wire uses for it.
+enum ProtobufWireType {
+  /// A base 128 variable width integer.
+  varint,
+
+  /// Eight bytes.
+  fixed64,
+
+  /// A length and then that many bytes.
+  lengthDelimited,
+
+  /// The start of a group, which nothing has used since protobuf 2.
+  startGroup,
+
+  /// The end of one.
+  endGroup,
+
+  /// Four bytes.
+  fixed32;
+
+  /// The wire type [tag] carries, or null if it carries none of them.
+  static ProtobufWireType? of(int tag) {
+    final value = tag & 7;
+    return value < values.length ? values[value] : null;
+  }
+}
 
 /// Thrown when a buffer does not contain well formed protobuf data.
 class ProtobufFormatException extends FormatException {
@@ -40,7 +62,7 @@ class ProtobufReader {
   /// Use [fieldOf] and [wireTypeOf] to take the tag apart.
   int readTag() {
     final tag = readVarint();
-    if (tag == 0 || wireTypeOf(tag) == _wireEndGroup) {
+    if (tag == 0 || wireTypeOf(tag) == ProtobufWireType.endGroup) {
       throw ProtobufFormatException('Invalid field tag $tag', _bytes, _offset);
     }
     return tag;
@@ -49,8 +71,8 @@ class ProtobufReader {
   /// The field number encoded in [tag].
   static int fieldOf(int tag) => tag >> 3;
 
-  /// The wire type encoded in [tag].
-  static int wireTypeOf(int tag) => tag & 7;
+  /// The wire type encoded in [tag], or null if it is not one of them.
+  static ProtobufWireType? wireTypeOf(int tag) => ProtobufWireType.of(tag);
 
   /// Reads a base 128 variable width integer.
   int readVarint() {
@@ -142,17 +164,17 @@ class ProtobufReader {
   /// Skips the value of a field with the given [tag].
   void skipField(int tag) {
     switch (wireTypeOf(tag)) {
-      case _wireVarint:
+      case ProtobufWireType.varint:
         readVarint();
-      case _wireFixed64:
+      case ProtobufWireType.fixed64:
         _checkedAdvance(8);
-      case _wireLengthDelimited:
+      case ProtobufWireType.lengthDelimited:
         _checkedAdvance(readVarint());
-      case _wireFixed32:
+      case ProtobufWireType.fixed32:
         _checkedAdvance(4);
-      case _wireStartGroup:
+      case ProtobufWireType.startGroup:
         _skipGroup(fieldOf(tag));
-      default:
+      case ProtobufWireType.endGroup || null:
         throw ProtobufFormatException(
           'Unsupported wire type in tag $tag',
           _bytes,
@@ -167,7 +189,7 @@ class ProtobufReader {
         throw ProtobufFormatException('Unterminated group', _bytes, _offset);
       }
       final tag = readVarint();
-      if (wireTypeOf(tag) == _wireEndGroup) {
+      if (wireTypeOf(tag) == ProtobufWireType.endGroup) {
         if (fieldOf(tag) != field) {
           throw ProtobufFormatException(
               'Mismatched group end', _bytes, _offset);

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'exception.dart';
+import 'fields.dart';
 import 'protobuf.dart';
 
 /// The largest header and blob sizes the format allows, used to reject
@@ -76,9 +77,9 @@ class BlobReader {
     while (!reader.isAtEnd) {
       final tag = reader.readTag();
       switch (ProtobufReader.fieldOf(tag)) {
-        case 1:
+        case BlobHeaderField.type:
           type = reader.readString();
-        case 3:
+        case BlobHeaderField.dataSize:
           bodySize = reader.readVarint();
         default:
           reader.skipField(tag);
@@ -123,19 +124,19 @@ Uint8List decodeBlob(Uint8List body, {int offset = 0}) {
   while (!reader.isAtEnd) {
     final tag = reader.readTag();
     switch (ProtobufReader.fieldOf(tag)) {
-      case 1:
+      case BlobField.raw:
         raw = reader.readBytes();
-      case 2:
+      case BlobField.rawSize:
         rawSize = reader.readVarint();
-      case 3:
+      case BlobField.zlibData:
         zlibData = reader.readBytes();
-      case 4:
+      case BlobField.lzmaData:
         unsupported = 'lzma';
         reader.skipField(tag);
-      case 6:
+      case BlobField.lz4Data:
         unsupported = 'lz4';
         reader.skipField(tag);
-      case 7:
+      case BlobField.zstdData:
         unsupported = 'zstd';
         reader.skipField(tag);
       default:

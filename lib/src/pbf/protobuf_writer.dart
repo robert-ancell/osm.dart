@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'protobuf.dart';
+
 /// Writes the protobuf binary wire format.
 ///
 /// The mirror of [ProtobufReader], and written the same way: straight from
@@ -38,17 +40,18 @@ class ProtobufWriter {
   }
 
   /// Writes the tag introducing a field.
-  void writeTag(int field, int wireType) => writeVarint(field << 3 | wireType);
+  void writeTag(int field, ProtobufWireType wireType) =>
+      writeVarint(field << 3 | wireType.index);
 
   /// Writes an unsigned or non-negative field.
   void writeUint(int field, int value) {
-    writeTag(field, 0);
+    writeTag(field, ProtobufWireType.varint);
     writeVarint(value);
   }
 
   /// Writes a zigzag encoded signed field.
   void writeSigned(int field, int value) {
-    writeTag(field, 0);
+    writeTag(field, ProtobufWireType.varint);
     writeVarint(_zigzag(value));
   }
 
@@ -62,7 +65,7 @@ class ProtobufWriter {
 
   /// Writes a length delimited field holding bytes.
   void writeBytes(int field, Uint8List value) {
-    writeTag(field, 2);
+    writeTag(field, ProtobufWireType.lengthDelimited);
     writeVarint(value.length);
     _bytes.add(value);
   }

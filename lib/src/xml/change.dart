@@ -5,6 +5,9 @@ import '../element.dart';
 import 'exception.dart';
 import 'reader.dart';
 
+/// The two bytes every gzip stream starts with.
+const List<int> _gzipMagic = [0x1f, 0x8b];
+
 /// What a change does to an element.
 enum OsmChangeAction {
   /// The element is new.
@@ -70,8 +73,11 @@ abstract final class OsmChangeFile {
   /// Reads the changes in the file at [path], gzipped or not.
   static Future<List<OsmChange>> read(String path) async {
     final bytes = await File(path).readAsBytes();
-    // Replication diffs are served gzipped and usually kept that way.
-    final decoded = bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b
+    // Replication diffs are served gzipped and usually kept that way, so
+    // which it is comes from the bytes rather than from the name.
+    final decoded = bytes.length >= 2 &&
+            bytes[0] == _gzipMagic[0] &&
+            bytes[1] == _gzipMagic[1]
         ? gzip.decode(bytes)
         : bytes;
     return parse(utf8.decode(decoded));

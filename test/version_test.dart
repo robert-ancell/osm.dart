@@ -3,20 +3,29 @@ import 'dart:io';
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
-void main() {
-  test('the version the package states is the one its pubspec gives', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
-    final version = RegExp(
-      r'^version:\s*(\S+)\s*$',
-      multiLine: true,
-    ).firstMatch(pubspec);
+import '../tool/update_version.dart';
 
+void main() {
+  test('the generated version is the one the pubspec gives', () {
+    final version = readVersion(File('pubspec.yaml').readAsStringSync());
     expect(version, isNotNull, reason: 'pubspec.yaml has no version');
     expect(
-      version!.group(1),
-      packageVersion,
-      reason: 'lib/src/version.dart has to be bumped with the pubspec',
+      File('lib/src/version.dart').readAsStringSync(),
+      source(version!),
+      reason: 'Run: dart run tool/update_version.dart',
     );
+    expect(packageVersion, version);
+  });
+
+  test('reads the version however the pubspec writes it', () {
+    expect(readVersion('name: osm\nversion: 1.2.3\n'), '1.2.3');
+    expect(readVersion("version: '1.2.3'\n"), '1.2.3');
+    expect(readVersion('version: "1.2.3"\n'), '1.2.3');
+    expect(readVersion('version: 1.2.3-dev.4+5\n'), '1.2.3-dev.4+5');
+    expect(readVersion('version: 1.2.3  # the one\n'), '1.2.3');
+    // Not a version at the top level of the document.
+    expect(readVersion('dependencies:\n  foo:\n    version: 1.2.3\n'), isNull);
+    expect(readVersion('name: osm\n'), isNull);
   });
 
   test('a file written says which version of what wrote it', () async {

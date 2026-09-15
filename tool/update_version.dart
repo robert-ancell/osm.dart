@@ -1,6 +1,6 @@
 import 'dart:io';
 
-/// Writes `lib/src/version.dart` from the version in `pubspec.yaml`.
+/// Writes `lib/src/version.g.dart` from the version in `pubspec.yaml`.
 ///
 /// The version has to exist as a constant, because `pubspec.yaml` is not
 /// around at run time: a published package is source on disk, or compiled
@@ -12,7 +12,8 @@ import 'dart:io';
 /// ```
 ///
 /// `test/version_test.dart` fails while they disagree, so a version bumped
-/// without running this does not get past the tests.
+/// without running this does not get past the tests. The `.g.dart` says what
+/// it is: generated, and not to be edited.
 ///
 /// Written here rather than taken from a builder package because it is this
 /// much code, and build_runner would be the only thing standing behind a
@@ -32,15 +33,15 @@ void main() {
     return;
   }
 
-  final out = File('lib/src/version.dart');
+  final out = File('lib/src/version.g.dart');
   final was = out.existsSync() ? out.readAsStringSync() : '';
   final now = source(version);
   if (was == now) {
-    stdout.writeln('lib/src/version.dart is already $version.');
+    stdout.writeln('lib/src/version.g.dart is already $version.');
     return;
   }
   out.writeAsStringSync(now);
-  stdout.writeln('Wrote lib/src/version.dart at $version.');
+  stdout.writeln('Wrote lib/src/version.g.dart at $version.');
 }
 
 /// The `version:` a pubspec gives, or null if it gives none.

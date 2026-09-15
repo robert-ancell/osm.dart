@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import '../element.dart';
 import 'exception.dart';
-import '../version.dart';
+import '../version.g.dart';
 import 'header.dart';
 import 'protobuf_writer.dart';
 

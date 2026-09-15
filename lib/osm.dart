@@ -14,4 +14,4 @@ export 'src/pbf/writer.dart';
 export 'src/xml/change.dart';
 export 'src/xml/exception.dart';
 export 'src/subset.dart';
-export 'src/version.dart';
+export 'src/version.g.dart';

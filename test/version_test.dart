@@ -10,7 +10,7 @@ void main() {
     final version = readVersion(File('pubspec.yaml').readAsStringSync());
     expect(version, isNotNull, reason: 'pubspec.yaml has no version');
     expect(
-      File('lib/src/version.dart').readAsStringSync(),
+      File('lib/src/version.g.dart').readAsStringSync(),
       source(version!),
       reason: 'Run: dart run tool/update_version.dart',
     );

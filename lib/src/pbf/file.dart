@@ -95,12 +95,12 @@ class OsmPbfFile {
   /// file. Reading the New Zealand extract end to end takes 25s here against
   /// 31s on 32 isolates.
   ///
-  /// Everything else goes to the workers, the reads naming ids included.
-  /// Those used to come back here too, because the ids go the other way and
-  /// the whole set crossed once per blob: 864,414 node ids over New Zealand
-  /// took 10.9s here and 64s on sixteen workers. A worker takes a run of
-  /// blobs now, so the set crosses a hundred-odd times rather than seven
-  /// thousand, and the same read is 3.4s on sixteen.
+  /// Everything else goes to the workers, including the reads that name ids.
+  /// Those used to come back here too, because the ids go the other way and a
+  /// filter naming hundreds of thousands of them was handed over once per
+  /// blob: 864,414 node ids over New Zealand took 10.9s on the calling
+  /// isolate and 64s on sixteen workers. They are handed over once per batch
+  /// of blobs now — see `_blobsPerJob` — which is 3.4s on sixteen.
   static int defaultIsolates(OsmFilterPlan plan) =>
       plan.filter == null ? 1 : Platform.numberOfProcessors * 2;
 
@@ -165,8 +165,14 @@ class OsmPbfFile {
         case OsmNode():
           nodes[element.id] = element;
         case OsmWay():
-          if (element.nodeIds.any(nodes.containsKey)) {
-            ways[element.id] = element;
+          // Indexed rather than `any`, which allocates an iterator and calls
+          // a closure for each of those forty million.
+          final ids = element.nodeIds;
+          for (var i = 0; i < ids.length; i++) {
+            if (nodes.containsKey(ids[i])) {
+              ways[element.id] = element;
+              break;
+            }
           }
         case OsmRelation():
           candidates.add(element);

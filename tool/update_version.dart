@@ -6,18 +6,22 @@ import 'dart:io';
 /// around at run time: a published package is source on disk, or compiled
 /// into something with no files next to it at all.
 ///
-/// `hook/build.dart` calls this on every `dart run` and `dart test` of this
-/// package, so nothing has to be remembered. Not on `dart compile`, which
-/// runs no hooks, so run it by hand before compiling against a version just
-/// bumped:
+/// Run after bumping the version:
 ///
 /// ```
 /// dart run tool/update_version.dart
 /// ```
 ///
-/// `test/version_test.dart` fails while the two disagree, which is the
-/// backstop if the hook ever does not fire. The `.g.dart` says what the file
-/// is: generated, and not to be edited.
+/// `test/version_test.dart` fails while the two disagree and says to run
+/// this, so a bump cannot get past the tests without it. The `.g.dart` says
+/// what the file is: generated, and not to be edited.
+///
+/// A `hook/build.dart` was tried, to have `dart run` and `dart test` do it
+/// unasked. It worked, and it is not what build hooks are: they are for
+/// native assets, they run in a semi-hermetic environment where writing into
+/// the package directory is not sanctioned, and the documented way to write
+/// one is `package:hooks`, which needs a newer SDK than this package asks for
+/// and brings six packages of its own. See NOTES.md.
 ///
 /// Written here rather than taken from a builder package because it is this
 /// much code, and build_runner would be the only thing standing behind a

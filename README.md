@@ -111,11 +111,31 @@ it.
 That is what `osmium extract --strategy complete_ways` gives, element for
 element.
 
+## Reading a change file
+
+```dart
+for (final change in await OsmChangeFile.read('523.osc.gz')) {
+  switch (change.action) {
+    case OsmChangeAction.create || OsmChangeAction.modify:
+      put(change.element!);
+    case OsmChangeAction.delete:
+      forget(change.type, change.id);
+  }
+}
+```
+
+OsmChange (`.osc`) files are what OpenStreetMap publishes its edits as, gzipped
+or not. A deletion names the element without always describing it, so `element`
+is null where the file gave too little to build one and the type, id and
+version are there either way.
+
 ## What is supported
 
-Reading `.osm.pbf` files, either zlib compressed or uncompressed. Files
-compressed with lzma, lz4 or zstd are rejected with an error telling you how to
-convert them.
+Reading `.osm.pbf` files, either zlib compressed or uncompressed, and
+OsmChange `.osc` files, gzipped or not. PBF files compressed with lzma, lz4 or
+zstd are rejected with an error telling you how to convert them.
+
+Nothing is written yet, and plain `.osm` XML is not read.
 
 [OsmNode]: https://pub.dev/documentation/osm/latest/osm/OsmNode-class.html
 [OsmWay]: https://pub.dev/documentation/osm/latest/osm/OsmWay-class.html

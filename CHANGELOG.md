@@ -10,3 +10,5 @@
 * `OsmPbfFile.within` for reading everything inside a set of boxes, and
   `OsmFilter.within` for the nodes standing in them.
 * `OsmPbfHeader.isSorted`, which lets a sorted file be read in one pass.
+* `OsmChangeFile` for reading OsmChange `.osc` replication diffs, gzipped or
+  not.

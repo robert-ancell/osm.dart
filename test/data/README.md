@@ -13,4 +13,7 @@ public domain or written for this package.
 | `elements.osm.pbf` | `elements.osm` through `osmium cat`, which does not write the sort header, so it covers reading a file that does not declare one. |
 | `elements-sites.osm.pbf` | `elements.osm.pbf` through `osmium tags-filter type=site`, which follows a relation into a relation. |
 
+| `changes.osc` | Written for this package: an OsmChange file altering the elements of `elements.osm`, covering all three actions, entity escaped tag values, and a deletion given without a location. |
+| `changes-gzipped.osc.gz` | `changes.osc` through `gzip`, the way replication serves them. |
+
 Rebuilding any of them needs osmium-tool, which the tests themselves do not.

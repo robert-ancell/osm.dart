@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  Hand written test data for this package. Not derived from OpenStreetMap:
+  the ids, coordinates and names are made up. It changes the elements of
+  elements.osm, so the two can be read together.
+-->
+<osmChange version="0.6" generator="hand written">
+  <create>
+    <node id="42000006" version="1" timestamp="2020-11-12T13:14:15Z" uid="20" user="Fourth Mapper" changeset="900010" lon="0.5004" lat="0.5004">
+      <tag k="amenity" v="bench"/>
+      <tag k="name" v="Bench &amp; Table &#8212; &#x571f;"/>
+    </node>
+    <way id="42000803" version="1" timestamp="2020-11-12T13:14:16Z" uid="20" user="Fourth Mapper" changeset="900010">
+      <nd ref="42000005"/>
+      <nd ref="42000006"/>
+      <tag k="highway" v="path"/>
+    </way>
+  </create>
+  <modify>
+    <node id="42000001" version="4" timestamp="2021-01-02T03:04:05Z" uid="17" user="Mapper" changeset="900011" lon="0.50011" lat="0.50011">
+      <tag k="amenity" v="cafe"/>
+      <tag k="name" v="Caf&#233; Two"/>
+    </node>
+    <relation id="42000902" version="5" timestamp="2021-01-02T03:04:06Z" uid="17" user="Mapper" changeset="900011">
+      <member type="node" ref="42000006" role="stop"/>
+      <member type="way" ref="42000803" role=""/>
+      <tag k="type" v="site"/>
+    </relation>
+  </modify>
+  <delete>
+    <node id="42000003" version="12" timestamp="2021-02-03T04:05:06Z" uid="18" user="Another Mapper" changeset="900012" lon="0.5002" lat="0.5002"/>
+    <way id="42000802" version="2" timestamp="2021-02-03T04:05:07Z" uid="18" user="Another Mapper" changeset="900012"/>
+  </delete>
+</osmChange>

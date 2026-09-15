@@ -6,9 +6,10 @@ import 'dart:io';
 /// around at run time: a published package is source on disk, or compiled
 /// into something with no files next to it at all.
 ///
-/// `hook/build.dart` calls this on every `dart run`, `dart test` and
-/// `dart compile` of this package, so nothing has to be remembered. Run it by
-/// hand if you want to see it happen:
+/// `hook/build.dart` calls this on every `dart run` and `dart test` of this
+/// package, so nothing has to be remembered. Not on `dart compile`, which
+/// runs no hooks, so run it by hand before compiling against a version just
+/// bumped:
 ///
 /// ```
 /// dart run tool/update_version.dart

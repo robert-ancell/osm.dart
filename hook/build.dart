@@ -4,7 +4,13 @@ import 'dart:io';
 import '../tool/update_version.dart';
 
 /// Keeps `lib/src/version.g.dart` in step with the pubspec, on every
-/// `dart run`, `dart test` and `dart compile` of this package.
+/// `dart run` and `dart test` of this package.
+///
+/// Not on `dart compile`, which does not run hooks at all: it compiles
+/// whatever the file says at the time, and refuses outright in some layouts,
+/// telling you to use `dart build`. Only `build.dart` here is run; another
+/// file in this directory is something for it to import, not another hook.
+/// `link.dart` is the one other name the runner knows, for builds that link.
 ///
 /// The build hook protocol is a file in and a file out: the path of each
 /// arrives in `--config=`. Nothing is built here, so the output says it

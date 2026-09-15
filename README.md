@@ -145,13 +145,30 @@ above all, which an extract that loses can never be brought up to date again.
 A header declaring `Sort.Type_then_ID` is taken as a promise and checked, so a
 file cannot quietly come out claiming an order its elements do not have.
 
+## Applying changes
+
+```dart
+final counts = await applyOsmChanges(
+  input: 'new-zealand.osm.pbf',
+  changes: [for (final path in diffs) ...await OsmChangeFile.read(path)],
+  output: 'updated.osm.pbf',
+  header: file.header.copyWith(replicationSequenceNumber: 4906),
+);
+```
+
+The equivalent of `osmium apply-changes`. Changes are taken in the order given,
+so hand the diffs over in the order OpenStreetMap published them. Move the
+replication state on in the header, because a file that loses it can never be
+brought up to date again.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed, and
 OsmChange `.osc` files, gzipped or not. PBF files compressed with lzma, lz4 or
 zstd are rejected with an error telling you how to convert them.
 
-Writing `.osm.pbf`. Plain `.osm` XML is neither read nor written.
+Writing `.osm.pbf`, and applying changes to one. Plain `.osm` XML is neither
+read nor written.
 
 [OsmNode]: https://pub.dev/documentation/osm/latest/osm/OsmNode-class.html
 [OsmWay]: https://pub.dev/documentation/osm/latest/osm/OsmWay-class.html

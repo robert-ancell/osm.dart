@@ -38,6 +38,32 @@ class OsmPbfHeader {
     this.replicationBaseUrl,
   });
 
+  /// This header with the given parts changed.
+  ///
+  /// What an update is made of: read a file's header, move the replication
+  /// state on, and hand it to the writer so the new file is still updatable.
+  OsmPbfHeader copyWith({
+    OsmBounds? bounds,
+    List<String>? requiredFeatures,
+    List<String>? optionalFeatures,
+    String? writingProgram,
+    String? source,
+    DateTime? replicationTimestamp,
+    int? replicationSequenceNumber,
+    String? replicationBaseUrl,
+  }) =>
+      OsmPbfHeader(
+        bounds: bounds ?? this.bounds,
+        requiredFeatures: requiredFeatures ?? this.requiredFeatures,
+        optionalFeatures: optionalFeatures ?? this.optionalFeatures,
+        writingProgram: writingProgram ?? this.writingProgram,
+        source: source ?? this.source,
+        replicationTimestamp: replicationTimestamp ?? this.replicationTimestamp,
+        replicationSequenceNumber:
+            replicationSequenceNumber ?? this.replicationSequenceNumber,
+        replicationBaseUrl: replicationBaseUrl ?? this.replicationBaseUrl,
+      );
+
   /// Whether the file says its elements are in order: every node, then every
   /// way, then every relation, each by increasing id.
   ///

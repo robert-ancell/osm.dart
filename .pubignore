@@ -1,0 +1,5 @@
+# Development only: it regenerates lib/src/version.g.dart on every dart run
+# and dart test of this package. The generated file is committed, a package
+# in the pub cache cannot be written to, and a build hook shipped downstream
+# is a build step imposed on everyone for a string fixed at publish time.
+hook/

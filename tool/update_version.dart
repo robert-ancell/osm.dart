@@ -4,16 +4,19 @@ import 'dart:io';
 ///
 /// The version has to exist as a constant, because `pubspec.yaml` is not
 /// around at run time: a published package is source on disk, or compiled
-/// into something with no files next to it at all. Rather than keep the two
-/// in step by hand, this writes one from the other:
+/// into something with no files next to it at all.
+///
+/// `hook/build.dart` calls this on every `dart run`, `dart test` and
+/// `dart compile` of this package, so nothing has to be remembered. Run it by
+/// hand if you want to see it happen:
 ///
 /// ```
 /// dart run tool/update_version.dart
 /// ```
 ///
-/// `test/version_test.dart` fails while they disagree, so a version bumped
-/// without running this does not get past the tests. The `.g.dart` says what
-/// it is: generated, and not to be edited.
+/// `test/version_test.dart` fails while the two disagree, which is the
+/// backstop if the hook ever does not fire. The `.g.dart` says what the file
+/// is: generated, and not to be edited.
 ///
 /// Written here rather than taken from a builder package because it is this
 /// much code, and build_runner would be the only thing standing behind a

@@ -12,7 +12,8 @@ void main() {
     expect(
       File('lib/src/version.g.dart').readAsStringSync(),
       source(version!),
-      reason: 'Run: dart run tool/update_version.dart',
+      reason: 'The build hook should have written this. To do it by hand: '
+          'dart run tool/update_version.dart',
     );
     expect(packageVersion, version);
   });

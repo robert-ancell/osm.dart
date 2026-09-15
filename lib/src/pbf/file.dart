@@ -11,10 +11,6 @@ import 'decode_ahead.dart';
 import 'exception.dart';
 import 'header.dart';
 
-/// Past this many ids, handing a filter's ids to a worker isolate for every
-/// block costs more than decoding the blocks in parallel saves.
-const int _idsWorthSending = 50000;
-
 /// An OpenStreetMap PBF file, opened for reading.
 ///
 /// ```dart
@@ -94,27 +90,19 @@ class OsmPbfFile {
 
   /// How many isolates to decode a read on when the caller does not say.
   ///
-  /// Everything crossing an isolate boundary has to be handed over, and two
-  /// reads pay enough for that to be better off decoding where they are:
+  /// One for a read with no filter: everything crossing an isolate boundary
+  /// has to be handed over, and with no filter that is every element of the
+  /// file. Reading the New Zealand extract end to end takes 25s here against
+  /// 31s on 32 isolates.
   ///
-  /// * A read with no filter, because every element of the file crosses.
-  ///   Reading the New Zealand extract end to end takes 25s here against 31s
-  ///   on 32 isolates.
-  /// * A read that names more than [_idsWorthSending] ids, because the ids go
-  ///   the other way, once per block. Twenty thousand ids are worth sending,
-  ///   at 4.1s against 6.9s, and two million are not, at 99s against 10s.
-  static int defaultIsolates(OsmFilterPlan plan) {
-    if (plan.filter == null) return 1;
-    final ids = plan.ids;
-    if (ids != null) {
-      var named = 0;
-      for (final set in ids.values) {
-        named += set.length;
-      }
-      if (named > _idsWorthSending) return 1;
-    }
-    return Platform.numberOfProcessors * 2;
-  }
+  /// Everything else goes to the workers, the reads naming ids included.
+  /// Those used to come back here too, because the ids go the other way and
+  /// the whole set crossed once per blob: 864,414 node ids over New Zealand
+  /// took 10.9s here and 64s on sixteen workers. A worker takes a run of
+  /// blobs now, so the set crosses a hundred-odd times rather than seven
+  /// thousand, and the same read is 3.4s on sixteen.
+  static int defaultIsolates(OsmFilterPlan plan) =>
+      plan.filter == null ? 1 : Platform.numberOfProcessors * 2;
 
   /// The elements matching [filter], and everything they refer to.
   ///

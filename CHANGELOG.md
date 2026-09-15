@@ -12,3 +12,4 @@
 * `OsmPbfHeader.isSorted`, which lets a sorted file be read in one pass.
 * `OsmChangeFile` for reading OsmChange `.osc` replication diffs, gzipped or
   not.
+* `OsmPbfWriter` for writing `.osm.pbf` files.

@@ -129,13 +129,29 @@ or not. A deletion names the element without always describing it, so `element`
 is null where the file gave too little to build one and the type, id and
 version are there either way.
 
+## Writing a file
+
+```dart
+final writer = await OsmPbfWriter.create('out.osm.pbf', header: file.header);
+await writer.addAll(file.elements().where(wanted));
+await writer.close();
+```
+
+Elements are gathered into blocks and written as they fill, so a file larger
+than memory can be written by streaming through it. Hand the header of what
+you read back to keep what the file says about itself — the replication state
+above all, which an extract that loses can never be brought up to date again.
+
+A header declaring `Sort.Type_then_ID` is taken as a promise and checked, so a
+file cannot quietly come out claiming an order its elements do not have.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed, and
 OsmChange `.osc` files, gzipped or not. PBF files compressed with lzma, lz4 or
 zstd are rejected with an error telling you how to convert them.
 
-Nothing is written yet, and plain `.osm` XML is not read.
+Writing `.osm.pbf`. Plain `.osm` XML is neither read nor written.
 
 [OsmNode]: https://pub.dev/documentation/osm/latest/osm/OsmNode-class.html
 [OsmWay]: https://pub.dev/documentation/osm/latest/osm/OsmWay-class.html

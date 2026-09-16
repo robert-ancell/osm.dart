@@ -16,94 +16,165 @@ void readXml(
   String source, {
   required void Function(String name, Map<String, String> attributes) onOpen,
   required void Function(String name) onClose,
-}) {
-  var at = 0;
+}) =>
+    XmlTagReader(onOpen: onOpen, onClose: onClose)
+      ..add(source)
+      ..close();
 
-  Never fail(String message) => throw OsmXmlException(message, offset: at);
+/// Reads the tags of an XML document handed over a piece at a time.
+///
+/// A tag cut in two by where one piece ends is held until the next piece
+/// finishes it, so a file can be read as it is decompressed without ever
+/// being whole in memory.
+class XmlTagReader {
+  /// Called for each tag that opens, including an empty one.
+  final void Function(String name, Map<String, String> attributes) onOpen;
 
-  void skipSpace() {
-    while (at < source.length && _isSpace(source.codeUnitAt(at))) {
-      at++;
-    }
+  /// Called for each tag that closes, including an empty one.
+  final void Function(String name) onClose;
+
+  /// What has been handed over and not yet read: at most the start of one
+  /// tag, once [add] returns.
+  String _pending = '';
+
+  /// Where [_pending] starts in the whole document, for saying where a
+  /// failure is.
+  int _consumed = 0;
+
+  /// Creates a reader calling [onOpen] and [onClose] as tags go by.
+  XmlTagReader({required this.onOpen, required this.onClose});
+
+  /// Reads the next piece of the document.
+  void add(String piece) {
+    final source = _pending.isEmpty ? piece : '$_pending$piece';
+    final read = _read(source);
+    _pending = source.substring(read);
+    _consumed += read;
   }
 
-  String readName() {
-    final start = at;
-    while (at < source.length && _isNameChar(source.codeUnitAt(at))) {
-      at++;
+  /// Says the document is done. Throws if it ended inside a tag.
+  void close() {
+    final open = _pending.indexOf('<');
+    if (open >= 0) {
+      throw OsmXmlException(
+        'Document ends in a tag',
+        offset: _consumed + open,
+      );
     }
-    if (at == start) fail('Expected a name');
-    return source.substring(start, at);
+    _pending = '';
   }
 
-  void skipTo(String end) {
-    final found = source.indexOf(end, at);
-    if (found < 0) fail('Unterminated ${end == '>' ? 'tag' : end}');
-    at = found + end.length;
-  }
+  /// Reads the whole tags at the start of [source], and gives back how much
+  /// of it they took.
+  int _read(String source) {
+    var at = 0;
 
-  while (true) {
-    final open = source.indexOf('<', at);
-    if (open < 0) return;
-    at = open + 1;
-    if (at >= source.length) fail('Document ends in a tag');
+    Never fail(String message) =>
+        throw OsmXmlException(message, offset: _consumed + at);
 
-    // The declaration, comments and a document type say nothing worth
-    // hearing here.
-    if (source.startsWith('?', at)) {
-      skipTo('?>');
-      continue;
-    }
-    if (source.startsWith('!--', at)) {
-      skipTo('-->');
-      continue;
-    }
-    if (source.startsWith('!', at)) {
-      skipTo('>');
-      continue;
-    }
-
-    if (source.startsWith('/', at)) {
-      at++;
-      final name = readName();
-      skipSpace();
-      if (at >= source.length || source[at] != '>') fail('Expected >');
-      at++;
-      onClose(name);
-      continue;
-    }
-
-    final name = readName();
-    final attributes = <String, String>{};
-    while (true) {
-      skipSpace();
-      if (at >= source.length) fail('Unterminated tag');
-
-      if (source.startsWith('/>', at)) {
-        at += 2;
-        onOpen(name, attributes);
-        onClose(name);
-        break;
-      }
-      if (source[at] == '>') {
+    void skipSpace() {
+      while (at < source.length && _isSpace(source.codeUnitAt(at))) {
         at++;
-        onOpen(name, attributes);
-        break;
+      }
+    }
+
+    String? readName() {
+      final start = at;
+      while (at < source.length && _isNameChar(source.codeUnitAt(at))) {
+        at++;
+      }
+      if (at == source.length) return null;
+      if (at == start) fail('Expected a name');
+      return source.substring(start, at);
+    }
+
+    while (true) {
+      final open = source.indexOf('<', at);
+      if (open < 0) return source.length;
+      at = open + 1;
+
+      // From here to the end of the tag, running out means the tag goes on
+      // in the next piece, and all of it waits for that.
+      if (at >= source.length) return open;
+      // `<!` could yet be the start of a comment.
+      if (source.startsWith('!', at) && at + 3 > source.length) return open;
+
+      // The declaration, comments and a document type say nothing worth
+      // hearing here.
+      final String? end;
+      if (source.startsWith('?', at)) {
+        end = '?>';
+      } else if (source.startsWith('!--', at)) {
+        end = '-->';
+      } else if (source.startsWith('!', at)) {
+        end = '>';
+      } else {
+        end = null;
+      }
+      if (end != null) {
+        final found = source.indexOf(end, at);
+        if (found < 0) return open;
+        at = found + end.length;
+        continue;
       }
 
-      final attribute = readName();
-      skipSpace();
-      if (at >= source.length || source[at] != '=') fail('Expected =');
-      at++;
-      skipSpace();
-      if (at >= source.length) fail('Expected a value');
-      final quote = source[at];
-      if (quote != '"' && quote != "'") fail('Expected a quoted value');
-      at++;
-      final end = source.indexOf(quote, at);
-      if (end < 0) fail('Unterminated value');
-      attributes[attribute] = _unescape(source.substring(at, end), at);
-      at = end + 1;
+      if (source.startsWith('/', at)) {
+        at++;
+        final name = readName();
+        if (name == null) return open;
+        skipSpace();
+        if (at >= source.length) return open;
+        if (source[at] != '>') fail('Expected >');
+        at++;
+        onClose(name);
+        continue;
+      }
+
+      final name = readName();
+      if (name == null) return open;
+      final attributes = <String, String>{};
+      var whole = false;
+      while (true) {
+        skipSpace();
+        if (at >= source.length) break;
+
+        if (source.startsWith('/>', at)) {
+          at += 2;
+          whole = true;
+          onOpen(name, attributes);
+          onClose(name);
+          break;
+        }
+        if (source[at] == '/') {
+          if (at + 1 >= source.length) break;
+          fail('Expected />');
+        }
+        if (source[at] == '>') {
+          at++;
+          whole = true;
+          onOpen(name, attributes);
+          break;
+        }
+
+        final attribute = readName();
+        if (attribute == null) break;
+        skipSpace();
+        if (at >= source.length) break;
+        if (source[at] != '=') fail('Expected =');
+        at++;
+        skipSpace();
+        if (at >= source.length) break;
+        final quote = source[at];
+        if (quote != '"' && quote != "'") fail('Expected a quoted value');
+        final valueEnd = source.indexOf(quote, at + 1);
+        if (valueEnd < 0) break;
+        attributes[attribute] = _unescape(
+          source.substring(at + 1, valueEnd),
+          _consumed + at + 1,
+        );
+        at = valueEnd + 1;
+      }
+      if (!whole) return open;
     }
   }
 }

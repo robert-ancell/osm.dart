@@ -108,7 +108,7 @@ Future<OsmUpdateResult> updateOsmSnapshot({
         '$first to ${newest.sequence}...');
     for (var sequence = first; sequence <= newest.sequence; sequence++) {
       final diff = await replication.download(period, sequence, cache);
-      filter.addAll(await OsmChangeFile.read(diff.path));
+      await _decide(filter, diff.path);
       diffs.add((period, sequence));
     }
     from = newest.timestamp;
@@ -167,6 +167,51 @@ Future<OsmUpdateResult> updateOsmSnapshot({
     lookedUp: api != null,
     state: reached,
   );
+}
+
+/// Decides the changes of the diff at [path] without holding it.
+///
+/// A diff's nodes have to be decided before its ways, which can use nodes the
+/// same diff makes, and its ways before its relations. The planet's diffs are
+/// written in that order — every one of sixty checked lists all its nodes,
+/// then all its ways, then all its relations, whatever the create, modify and
+/// delete around them — so the file is read once and decided as it goes.
+///
+/// If a type does come back after a later one, what this file did to the
+/// filter is undone and it is read again twice over: once for the nodes, then
+/// for the rest, holding only the relations until the ways are all decided.
+/// Always reading twice costs a quarter again on a country's update; holding
+/// an hour of the planet whole costs close to a gigabyte.
+Future<void> _decide(OsmChangeFilter filter, String path) async {
+  final mark = filter.mark();
+  var last = 0;
+  var ordered = true;
+  await for (final change in OsmChangeFile.stream(path)) {
+    if (change.type.index < last) {
+      ordered = false;
+      break;
+    }
+    last = change.type.index;
+    filter.add(change);
+  }
+  if (ordered) return;
+
+  filter.restore(mark);
+  await for (final change in OsmChangeFile.stream(path)) {
+    if (change.type == OsmElementType.node) filter.add(change);
+  }
+  final relations = <OsmChange>[];
+  await for (final change in OsmChangeFile.stream(path)) {
+    switch (change.type) {
+      case OsmElementType.node:
+        break;
+      case OsmElementType.way:
+        filter.add(change);
+      case OsmElementType.relation:
+        relations.add(change);
+    }
+  }
+  relations.forEach(filter.add);
 }
 
 OsmChange _create(OsmElement element) => OsmChange(

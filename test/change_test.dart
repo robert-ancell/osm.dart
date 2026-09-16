@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
@@ -5,6 +7,25 @@ import 'package:test/test.dart';
 /// serves them. See test/data/README.md.
 const _path = 'test/data/changes.osc';
 const _gzippedPath = 'test/data/changes-gzipped.osc.gz';
+
+/// What a change says, for comparing two readings of the same file.
+String _describe(OsmChange change) {
+  final element = change.element;
+  final tags = element == null
+      ? ''
+      : (element.tags.keys.toList()..sort())
+          .map((key) => '$key=${element.tags[key]}')
+          .join(',');
+  final extra = switch (element) {
+    OsmNode(:final latitude, :final longitude) => '$latitude,$longitude',
+    OsmWay(:final nodeIds) => nodeIds.join('+'),
+    OsmRelation(:final members) =>
+      members.map((m) => '${m.type.name}${m.ref}${m.role}').join('+'),
+    null => '',
+  };
+  return '${change.action.name} ${change.type.name}/${change.id} '
+      'v${change.version} $tags $extra';
+}
 
 void main() {
   test('reads every change, in the order the file gives them', () async {
@@ -88,6 +109,44 @@ void main() {
     expect(changes.single.type, OsmElementType.node);
     expect(changes.single.id, 7);
     expect(changes.single.version, 3);
+  });
+
+  test('reads the same whichever way the file is cut into pieces', () async {
+    final xml = File(_path).readAsStringSync();
+    final whole = OsmChangeFile.parse(xml).map(_describe).toList();
+
+    // Every place one cut could go, which puts a cut inside every tag,
+    // attribute, entity and comment in the file.
+    for (var cut = 0; cut <= xml.length; cut++) {
+      final pieces = [xml.substring(0, cut), xml.substring(cut)];
+      final read = await OsmChangeFile.parseStream(
+        Stream.fromIterable(pieces),
+      ).map(_describe).toList();
+      expect(read, whole, reason: 'cut at $cut');
+    }
+
+    // And a character at a time.
+    final read = await OsmChangeFile.parseStream(
+      Stream.fromIterable(xml.split('')),
+    ).map(_describe).toList();
+    expect(read, whole);
+  });
+
+  test('streams a gzipped file the same as it reads it', () async {
+    final whole = (await OsmChangeFile.read(_path)).map(_describe).toList();
+    final streamed = await OsmChangeFile.stream(
+      _gzippedPath,
+    ).map(_describe).toList();
+    expect(streamed, whole);
+  });
+
+  test('reads a document whose last tag is short', () {
+    expect(
+      OsmChangeFile.parse(
+        '<osmChange><delete><node id="1" version="2"/></delete><a>',
+      ),
+      hasLength(1),
+    );
   });
 
   test('reads a file with no changes in it', () {

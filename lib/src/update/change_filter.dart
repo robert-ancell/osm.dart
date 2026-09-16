@@ -136,11 +136,19 @@ class OsmChangeFilter {
       byType[change.type]!.add(change);
     }
     for (final type in OsmElementType.values) {
-      for (final change in byType[type]!) {
-        seen++;
-        if (_keep(change)) kept.add(change);
-      }
+      byType[type]!.forEach(add);
     }
+  }
+
+  /// Decides one change.
+  ///
+  /// Changes to one diff's nodes have to be added before its ways, and its
+  /// ways before its relations, which [addAll] sees to for a diff held
+  /// whole. A caller streaming a diff sees to it by reading it more than
+  /// once.
+  void add(OsmChange change) {
+    seen++;
+    if (_keep(change)) kept.add(change);
   }
 
   bool _keep(OsmChange change) {
@@ -195,6 +203,46 @@ class OsmChangeFilter {
     }
   }
 
+  /// Where the filter has got to, to come back to with [restore].
+  OsmChangeFilterMark mark() => OsmChangeFilterMark._(
+        seen,
+        kept.length,
+        {..._addedNodes},
+        {..._removedNodes},
+        {..._addedWays},
+        {..._removedWays},
+        {..._addedRelations},
+        {..._removedRelations},
+        {..._newestWays},
+        {..._moves.movedInNodes},
+        {..._moves.movedInWays},
+        {..._moves.movedOutNodes},
+        {..._moves.movedOutWays},
+      );
+
+  /// Undoes every change added since [mark] was taken.
+  void restore(OsmChangeFilterMark mark) {
+    seen = mark._seen;
+    kept.length = mark._kept;
+    _replace(_addedNodes, mark._addedNodes);
+    _replace(_removedNodes, mark._removedNodes);
+    _replace(_addedWays, mark._addedWays);
+    _replace(_removedWays, mark._removedWays);
+    _replace(_addedRelations, mark._addedRelations);
+    _replace(_removedRelations, mark._removedRelations);
+    _newestWays
+      ..clear()
+      ..addAll(mark._newestWays);
+    _replace(_moves.movedInNodes, mark._movedInNodes);
+    _replace(_moves.movedInWays, mark._movedInWays);
+    _replace(_moves.movedOutNodes, mark._movedOutNodes);
+    _replace(_moves.movedOutWays, mark._movedOutWays);
+  }
+
+  static void _replace(Set<int> into, Set<int> from) => into
+    ..clear()
+    ..addAll(from);
+
   void _noteWay(OsmChange change) {
     final held = _newestWays[change.id];
     final version = change.version, heldVersion = held?.version;
@@ -220,4 +268,32 @@ class OsmChangeFilter {
         _addedRelations.remove(id);
     }
   }
+}
+
+/// A point an [OsmChangeFilter] can be put back to.
+///
+/// What a filter holds grows with what it has kept, which for a country is
+/// tens of thousands of ids, so taking one per diff is cheap.
+class OsmChangeFilterMark {
+  final int _seen, _kept;
+  final Set<int> _addedNodes, _removedNodes, _addedWays, _removedWays;
+  final Set<int> _addedRelations, _removedRelations;
+  final Map<int, OsmChange> _newestWays;
+  final Set<int> _movedInNodes, _movedInWays, _movedOutNodes, _movedOutWays;
+
+  OsmChangeFilterMark._(
+    this._seen,
+    this._kept,
+    this._addedNodes,
+    this._removedNodes,
+    this._addedWays,
+    this._removedWays,
+    this._addedRelations,
+    this._removedRelations,
+    this._newestWays,
+    this._movedInNodes,
+    this._movedInWays,
+    this._movedOutNodes,
+    this._movedOutWays,
+  );
 }

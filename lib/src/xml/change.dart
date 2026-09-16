@@ -70,40 +70,73 @@ class OsmChange {
 /// anything larger wants the PBF reader.
 abstract final class OsmChangeFile {
   /// Reads the changes in the file at [path], gzipped or not.
-  static Future<List<OsmChange>> read(String path) async {
-    final bytes = await File(path).readAsBytes();
+  static Future<List<OsmChange>> read(String path) => stream(path).toList();
+
+  /// The changes in the file at [path], gzipped or not, read as it is
+  /// decompressed.
+  ///
+  /// The file is never whole in memory, compressed, decompressed or parsed:
+  /// the largest hour of the planet is 15 MB of gzip and close to a million
+  /// changes, and reading it all at once peaks at 866 MB.
+  static Stream<OsmChange> stream(String path) async* {
+    final file = File(path);
     // Replication diffs are served gzipped and usually kept that way, so
     // which it is comes from the bytes rather than from the name.
-    final decoded = bytes.length >= 2 &&
-            bytes[0] == _gzipMagic[0] &&
-            bytes[1] == _gzipMagic[1]
-        ? gzip.decode(bytes)
-        : bytes;
-    return parse(utf8.decode(decoded));
+    final start = await file.openRead(0, _gzipMagic.length).fold<List<int>>(
+      [],
+      (bytes, chunk) => bytes..addAll(chunk),
+    );
+    final gzipped = start.length == _gzipMagic.length &&
+        start[0] == _gzipMagic[0] &&
+        start[1] == _gzipMagic[1];
+
+    Stream<List<int>> bytes = file.openRead();
+    if (gzipped) bytes = bytes.transform(gzip.decoder);
+    yield* parseStream(bytes.transform(utf8.decoder));
+  }
+
+  /// The changes in XML handed over a piece at a time.
+  static Stream<OsmChange> parseStream(Stream<String> pieces) async* {
+    final ready = <OsmChange>[];
+    final reader = OsmXmlElementReader((read) {
+      final change = _changeOf(read);
+      if (change != null) ready.add(change);
+    });
+    await for (final piece in pieces) {
+      reader.add(piece);
+      yield* Stream.fromIterable(ready);
+      ready.clear();
+    }
+    reader.close();
+    yield* Stream.fromIterable(ready);
   }
 
   /// Reads the changes in [xml].
   static List<OsmChange> parse(String xml) {
     final changes = <OsmChange>[];
     readOsmXmlElements(xml, (read) {
-      // Only what sits in a create, modify or delete is a change.
-      final action = switch (read.action) {
-        'create' => OsmChangeAction.create,
-        'modify' => OsmChangeAction.modify,
-        'delete' => OsmChangeAction.delete,
-        _ => null,
-      };
-      if (action == null) return;
-      changes.add(
-        OsmChange(
-          action: action,
-          type: read.type,
-          id: read.id,
-          version: read.version,
-          element: read.element,
-        ),
-      );
+      final change = _changeOf(read);
+      if (change != null) changes.add(change);
     });
     return changes;
   }
+}
+
+/// The change an element in an `<osmChange>` makes, or null for one outside a
+/// create, modify or delete, which is not a change.
+OsmChange? _changeOf(XmlElement read) {
+  final action = switch (read.action) {
+    'create' => OsmChangeAction.create,
+    'modify' => OsmChangeAction.modify,
+    'delete' => OsmChangeAction.delete,
+    _ => null,
+  };
+  if (action == null) return null;
+  return OsmChange(
+    action: action,
+    type: read.type,
+    id: read.id,
+    version: read.version,
+    element: read.element,
+  );
 }

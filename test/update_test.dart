@@ -299,6 +299,48 @@ void main() {
       expect(updated.header.isSorted, isTrue);
     });
 
+    test('reads a diff that lists a way before its nodes', () async {
+      // The planet never writes one like this, but a diff from elsewhere
+      // might. The way only touches the snapshot through the nodes after it.
+      final input = await _snapshot();
+      final feed = _Feed(
+        minutes: {
+          1: _t0.subtract(const Duration(minutes: 1)),
+          2: _t0.add(const Duration(minutes: 1)),
+        },
+        hours: {1: _t0.subtract(const Duration(hours: 1))},
+        diffs: {
+          'minute/2': '''
+<osmChange version="0.6">
+  <create>
+    <way id="42000805" version="1">
+      <nd ref="42000010"/><nd ref="42000011"/>
+    </way>
+    <node id="42000010" version="1" lat="0.5001" lon="0.5001"/>
+    <node id="42000011" version="1" lat="0.5002" lon="0.5002"/>
+  </create>
+</osmChange>''',
+        },
+      );
+      final output = '${_work.path}/updated.osm.pbf';
+
+      final result = await updateOsmSnapshot(
+        input: input,
+        output: output,
+        replication: OsmReplication(fetch: feed.fetch),
+        cache: Directory('${_work.path}/cache'),
+      );
+      expect(result.seen, 3, reason: 'counted once, not once per read');
+      expect(result.kept, 3);
+      expect(result.edges.isEmpty, isTrue);
+
+      final ids = await (await OsmPbfFile.open(output))
+          .elements()
+          .map((e) => '${e.type.name}/${e.id}')
+          .toList();
+      expect(ids, containsAll(['node/42000010', 'way/42000805']));
+    });
+
     test('says what it could not settle when it may not look it up', () async {
       final input = await _snapshot();
       final feed = _Feed(

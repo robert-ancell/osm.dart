@@ -42,74 +42,95 @@ class XmlElement {
 void readOsmXmlElements(
   String xml,
   void Function(XmlElement element) onElement,
-) {
-  String? action;
-  OsmElementType? type;
-  Map<String, String>? attributes;
-  var tags = <String, String>{};
-  var nodeIds = <int>[];
-  var members = <OsmMember>[];
+) =>
+    (OsmXmlElementReader(onElement)..add(xml)).close();
 
-  void finish() {
-    final open = attributes;
-    final kind = type;
-    if (open == null || kind == null) return;
-    onElement(
-      _build(
-        action: action,
-        type: kind,
-        attributes: open,
-        tags: tags,
-        nodeIds: nodeIds,
-        members: members,
-      ),
-    );
-    attributes = null;
-    type = null;
-    tags = <String, String>{};
-    nodeIds = <int>[];
-    members = <OsmMember>[];
+/// Reads the elements of OSM XML handed over a piece at a time.
+class OsmXmlElementReader {
+  final void Function(XmlElement element) _onElement;
+  late final XmlTagReader _tags = XmlTagReader(
+    onOpen: _open,
+    onClose: _close,
+  );
+
+  String? _action;
+  OsmElementType? _type;
+  Map<String, String>? _attributes;
+  var _tagsOf = <String, String>{};
+  var _nodeIds = <int>[];
+  var _members = <OsmMember>[];
+
+  /// Creates a reader calling [onElement] for each element as it completes.
+  OsmXmlElementReader(void Function(XmlElement element) onElement)
+      : _onElement = onElement;
+
+  /// Reads the next piece of the document.
+  void add(String piece) => _tags.add(piece);
+
+  /// Says the document is done.
+  void close() {
+    _tags.close();
+    _finish();
   }
 
-  readXml(
-    xml,
-    onOpen: (name, open) {
-      switch (name) {
-        case 'create' || 'modify' || 'delete':
-          action = name;
-        case 'node' || 'way' || 'relation':
-          finish();
-          type = OsmElementType.values.byName(name);
-          attributes = open;
-        case 'tag':
-          final key = open['k'], value = open['v'];
-          if (key != null && value != null) tags[key] = value;
-        case 'nd':
-          final ref = int.tryParse(open['ref'] ?? '');
-          if (ref != null) nodeIds.add(ref);
-        case 'member':
-          final ref = int.tryParse(open['ref'] ?? '');
-          final kind = open['type'];
-          if (ref == null || kind == null) break;
-          if (!OsmElementType.values.any((t) => t.name == kind)) break;
-          members.add(
-            OsmMember(
-              type: OsmElementType.values.byName(kind),
-              ref: ref,
-              role: open['role'] ?? '',
-            ),
-          );
-      }
-    },
-    onClose: (name) {
-      switch (name) {
-        case 'node' || 'way' || 'relation':
-          finish();
-        case 'create' || 'modify' || 'delete':
-          action = null;
-      }
-    },
-  );
+  void _finish() {
+    final open = _attributes;
+    final kind = _type;
+    if (open == null || kind == null) return;
+    _onElement(
+      _build(
+        action: _action,
+        type: kind,
+        attributes: open,
+        tags: _tagsOf,
+        nodeIds: _nodeIds,
+        members: _members,
+      ),
+    );
+    _attributes = null;
+    _type = null;
+    _tagsOf = <String, String>{};
+    _nodeIds = <int>[];
+    _members = <OsmMember>[];
+  }
+
+  void _open(String name, Map<String, String> open) {
+    switch (name) {
+      case 'create' || 'modify' || 'delete':
+        _action = name;
+      case 'node' || 'way' || 'relation':
+        _finish();
+        _type = OsmElementType.values.byName(name);
+        _attributes = open;
+      case 'tag':
+        final key = open['k'], value = open['v'];
+        if (key != null && value != null) _tagsOf[key] = value;
+      case 'nd':
+        final ref = int.tryParse(open['ref'] ?? '');
+        if (ref != null) _nodeIds.add(ref);
+      case 'member':
+        final ref = int.tryParse(open['ref'] ?? '');
+        final kind = open['type'];
+        if (ref == null || kind == null) return;
+        if (!OsmElementType.values.any((t) => t.name == kind)) return;
+        _members.add(
+          OsmMember(
+            type: OsmElementType.values.byName(kind),
+            ref: ref,
+            role: open['role'] ?? '',
+          ),
+        );
+    }
+  }
+
+  void _close(String name) {
+    switch (name) {
+      case 'node' || 'way' || 'relation':
+        _finish();
+      case 'create' || 'modify' || 'delete':
+        _action = null;
+    }
+  }
 }
 
 XmlElement _build({

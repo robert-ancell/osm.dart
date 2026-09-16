@@ -170,6 +170,30 @@ void main() {
     expect(filter.edges.missingNodes, isEmpty);
   });
 
+  test('goes back to a mark', () {
+    final filter = _filter()
+      ..addAll([_node(OsmChangeAction.create, 100, _inside)]);
+    final mark = filter.mark();
+
+    filter.addAll([
+      _delete(OsmElementType.node, 1),
+      _node(OsmChangeAction.modify, 2, _outside),
+      _way(OsmChangeAction.create, 13, [3, 800]),
+    ]);
+    expect(filter.kept, hasLength(4));
+    expect(filter.edges.isEmpty, isFalse);
+
+    filter.restore(mark);
+    expect(_kept(filter), ['create node/100']);
+    expect(filter.seen, 1);
+    expect(filter.edges.isEmpty, isTrue);
+    // Node 1 is held again, so a way through it is kept.
+    filter.addAll([
+      _way(OsmChangeAction.create, 14, [1]),
+    ]);
+    expect(_kept(filter).last, 'create way/14');
+  });
+
   test('drops a way that touches nothing held', () {
     final filter = _filter()
       ..addAll([

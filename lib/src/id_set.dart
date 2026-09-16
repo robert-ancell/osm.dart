@@ -8,12 +8,16 @@ import 'dart:typed_data';
 /// is there to hold the nodes, not to be asked about them.
 ///
 /// Open addressed, linear probing, ids in an `Int64List`: no per entry object,
-/// no boxing, and a probe that stays in one cache line most of the time. Ids
-/// are positive in OpenStreetMap, so zero is free to mean an empty slot.
+/// no boxing, and a probe that stays in one cache line most of the time. Zero
+/// means an empty slot, and zero as an id is held beside the table instead:
+/// OpenStreetMap never issues it, but files from editors carry the negative
+/// and zero ids of objects nobody has uploaded, and a set that answered yes
+/// to zero whatever it held would be wrong about exactly those.
 class IdSet {
   Int64List _slots;
   int _mask;
   int _count = 0;
+  bool _hasZero = false;
 
   /// A set sized to hold [capacity] ids without growing.
   IdSet([int capacity = 0])
@@ -38,10 +42,14 @@ class IdSet {
   }
 
   /// How many ids are in the set.
-  int get length => _count;
+  int get length => _count + (_hasZero ? 1 : 0);
 
   /// Puts [id] in the set, or does nothing if it is already there.
   void add(int id) {
+    if (id == 0) {
+      _hasZero = true;
+      return;
+    }
     var i = _spread(id) & _mask;
     while (true) {
       final slot = _slots[i];
@@ -57,6 +65,7 @@ class IdSet {
 
   /// Whether [id] is in the set.
   bool contains(int id) {
+    if (id == 0) return _hasZero;
     var i = _spread(id) & _mask;
     while (true) {
       final slot = _slots[i];

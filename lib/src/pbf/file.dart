@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../bounds.dart';
+import '../id_set.dart';
 import '../element.dart';
 import '../filter.dart';
 import '../filter_plan.dart';
@@ -160,16 +161,23 @@ class OsmPbfFile {
     // because a relation can have a relation after it in the file as a member.
     final candidates = <OsmRelation>[];
 
+    // The same ids as [nodes], in a set built for being asked. Every node id
+    // of every way in the file is looked up here — forty million times over a
+    // country — and the map holding the nodes is not the thing to ask: see
+    // [IdSet]. Worth the second write of each id several times over.
+    final kept = IdSet();
+
     void keep(OsmElement element) {
       switch (element) {
         case OsmNode():
           nodes[element.id] = element;
+          kept.add(element.id);
         case OsmWay():
           // Indexed rather than `any`, which allocates an iterator and calls
           // a closure for each of those forty million.
           final ids = element.nodeIds;
           for (var i = 0; i < ids.length; i++) {
-            if (nodes.containsKey(ids[i])) {
+            if (kept.contains(ids[i])) {
               ways[element.id] = element;
               break;
             }

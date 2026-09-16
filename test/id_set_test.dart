@@ -28,6 +28,29 @@ void main() {
     expect(IdSet().length, 0);
   });
 
+  test('zero is an id like any other, not an empty slot', () {
+    // Zero marks a free slot in the table, so a set that looked for it
+    // there would find it in every set ever made.
+    final ids = IdSet();
+    expect(ids.contains(0), isFalse);
+    ids.add(5);
+    expect(ids.contains(0), isFalse);
+    ids.add(0);
+    ids.add(0);
+    expect(ids.contains(0), isTrue);
+    expect(ids.length, 2);
+  });
+
+  test('and negative ids are held too', () {
+    // What an editor gives the objects nobody has uploaded yet.
+    final ids = IdSet()
+      ..add(-1)
+      ..add(-9000000000);
+    expect(ids.contains(-1), isTrue);
+    expect(ids.contains(-9000000000), isTrue);
+    expect(ids.contains(-2), isFalse);
+  });
+
   test('grows past the size it was made at, keeping everything', () {
     // Sized for sixteen and given ten thousand, so it grows several times
     // over. Sequential ids, which is what a file is full of and what a hash

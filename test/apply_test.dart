@@ -81,6 +81,69 @@ void main() {
     }
   });
 
+  test('ignores a change no newer than what the file holds', () async {
+    // Node 42000001 is at version 3 in the file. Overlapping diffs can hand
+    // back an older version, or the same one, and neither may win.
+    final output = '${_work.path}/stale.osm.pbf';
+    final counts = await applyOsmChanges(
+      input: await _base(),
+      changes: const [
+        OsmChange(
+          action: OsmChangeAction.modify,
+          type: OsmElementType.node,
+          id: 42000001,
+          version: 2,
+          element: OsmNode(
+            id: 42000001,
+            latitude: 9,
+            longitude: 9,
+            info: OsmInfo(version: 2),
+          ),
+        ),
+        OsmChange(
+          action: OsmChangeAction.delete,
+          type: OsmElementType.node,
+          id: 42000002,
+          version: 1,
+        ),
+      ],
+      output: output,
+    );
+    expect(counts.stale, 2);
+    expect(counts.modified, 0);
+    expect(counts.deleted, 0);
+
+    final after = await _elementsOf(output);
+    final node = after.firstWhere((e) => e.id == 42000001) as OsmNode;
+    expect(node.latitude, closeTo(0.5001, 1e-9));
+    expect(after.any((e) => e.id == 42000002), isTrue);
+  });
+
+  test('takes the newest of several changes to one element', () async {
+    OsmChange version(int number) => OsmChange(
+          action: OsmChangeAction.modify,
+          type: OsmElementType.node,
+          id: 42000001,
+          version: number,
+          element: OsmNode(
+            id: 42000001,
+            latitude: number.toDouble(),
+            longitude: 0,
+            info: OsmInfo(version: number),
+          ),
+        );
+    final output = '${_work.path}/newest.osm.pbf';
+    await applyOsmChanges(
+      input: await _base(),
+      // An hour diff and then the minute diffs overlapping it.
+      changes: [version(6), version(4), version(5)],
+      output: output,
+    );
+    final node = (await _elementsOf(output)).firstWhere((e) => e.id == 42000001)
+        as OsmNode;
+    expect(node.info?.version, 6);
+  });
+
   test('counts a change for something the file never had', () async {
     final output = '${_work.path}/missed.osm.pbf';
     final counts = await applyOsmChanges(

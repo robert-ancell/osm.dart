@@ -161,6 +161,26 @@ so hand the diffs over in the order OpenStreetMap published them. Move the
 replication state on in the header, because a file that loses it can never be
 brought up to date again.
 
+## Keeping a snapshot up to date
+
+```
+dart run osm:osm_update new-zealand.osm.pbf --contact "Your Name <you@example.com>"
+```
+
+Reads the planet's replication diffs published since the snapshot's own
+timestamp — hours, then minutes — keeps the changes that touch what the
+snapshot holds, and writes it back with them applied. The rest of the planet's
+edits are dropped as they are read, so it works from the planet's own feed
+rather than waiting on a regional one.
+
+What the snapshot holds is decided by the nodes in it, so the region is its
+shape rather than its bounding box, and a country across the antimeridian is
+no trouble. A way reaching past the edge, or a node moved in from outside, is
+looked up through the OpenStreetMap API; with `--no-lookups` it is listed
+instead, and the tool exits with 2 to say a fresh snapshot is due.
+
+The same thing from code is `updateOsmSnapshot`.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed, and

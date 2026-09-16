@@ -4,6 +4,9 @@ version: 0.1.0
 repository: https://github.com/robert-ancell/osm.dart
 issue_tracker: https://github.com/robert-ancell/osm.dart/issues
 
+executables:
+  osm_update:
+
 environment:
   sdk: ^3.6.0
 

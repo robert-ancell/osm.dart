@@ -23,6 +23,14 @@ class OsmChangeCounts {
   /// nothing: a delete for something already gone, most often.
   final int missed;
 
+  /// Changes no newer than the element the file already holds, and so
+  /// ignored.
+  ///
+  /// Diffs of different lengths overlap: a day's diff and the hour diffs
+  /// after it can both carry an edit. Skipping what the file is already past
+  /// is what makes applying them over each other safe.
+  final int stale;
+
   /// Creates a count of what happened.
   const OsmChangeCounts({
     required this.created,
@@ -30,19 +38,22 @@ class OsmChangeCounts {
     required this.deleted,
     required this.unchanged,
     required this.missed,
+    this.stale = 0,
   });
 
   @override
   String toString() =>
       'OsmChangeCounts($created created, $modified modified, $deleted '
-      'deleted, $unchanged unchanged, $missed missed)';
+      'deleted, $unchanged unchanged, $missed missed, $stale stale)';
 }
 
 /// Writes [input] to [output] with [changes] applied.
 ///
-/// The equivalent of `osmium apply-changes`. Changes are taken in the order
-/// given, so hand the diffs over in the order OpenStreetMap published them
-/// and the last word on an element is the newest one.
+/// The equivalent of `osmium apply-changes`. When one element is changed more
+/// than once, the change with the highest version wins, and a change no newer
+/// than the version the file already holds is ignored, so diffs that overlap
+/// can be applied over each other. Changes with no version are taken in the
+/// order given, the last one winning.
 ///
 /// A change that creates an element the file does not hold puts it in its
 /// place in the order; one that modifies an element the file does hold
@@ -76,6 +87,8 @@ Future<OsmChangeCounts> applyOsmChanges({
     for (final type in OsmElementType.values) type: <int, OsmChange>{},
   };
   for (final change in changes) {
+    final held = wanted[change.type]![change.id];
+    if (held != null && _isOlder(change, than: held)) continue;
     wanted[change.type]![change.id] = change;
   }
   final pending = {
@@ -84,6 +97,7 @@ Future<OsmChangeCounts> applyOsmChanges({
   };
 
   var created = 0, modified = 0, deleted = 0, unchanged = 0, missed = 0;
+  var stale = 0;
 
   final writer = await OsmPbfWriter.create(
     output,
@@ -128,6 +142,15 @@ Future<OsmChangeCounts> applyOsmChanges({
     }
     pending[element.type]!.remove(element.id);
 
+    final version = element.info?.version;
+    if (version != null &&
+        change.version != null &&
+        change.version! <= version) {
+      writer.add(element);
+      stale++;
+      continue;
+    }
+
     switch (change.action) {
       case OsmChangeAction.delete:
         deleted++;
@@ -156,5 +179,13 @@ Future<OsmChangeCounts> applyOsmChanges({
     deleted: deleted,
     unchanged: unchanged,
     missed: missed,
+    stale: stale,
   );
+}
+
+/// Whether [change] is behind [than], both being changes to one element.
+bool _isOlder(OsmChange change, {required OsmChange than}) {
+  final version = change.version, other = than.version;
+  if (version == null || other == null) return false;
+  return version < other;
 }

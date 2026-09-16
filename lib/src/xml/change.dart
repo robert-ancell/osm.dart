@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../element.dart';
-import 'exception.dart';
-import 'reader.dart';
+import 'elements.dart';
 
 /// The two bytes every gzip stream starts with.
 const List<int> _gzipMagic = [0x1f, 0x8b];
@@ -86,156 +85,25 @@ abstract final class OsmChangeFile {
   /// Reads the changes in [xml].
   static List<OsmChange> parse(String xml) {
     final changes = <OsmChange>[];
-
-    // What the reader is in the middle of: the action from the enclosing
-    // create, modify or delete, and the element being built inside it.
-    OsmChangeAction? action;
-    OsmElementType? type;
-    Map<String, String>? attributes;
-    var tags = <String, String>{};
-    var nodeIds = <int>[];
-    var members = <OsmMember>[];
-
-    void finish() {
-      final open = attributes;
-      if (open == null || type == null || action == null) return;
+    readOsmXmlElements(xml, (read) {
+      // Only what sits in a create, modify or delete is a change.
+      final action = switch (read.action) {
+        'create' => OsmChangeAction.create,
+        'modify' => OsmChangeAction.modify,
+        'delete' => OsmChangeAction.delete,
+        _ => null,
+      };
+      if (action == null) return;
       changes.add(
-        _change(
-          action: action!,
-          type: type!,
-          attributes: open,
-          tags: tags,
-          nodeIds: nodeIds,
-          members: members,
+        OsmChange(
+          action: action,
+          type: read.type,
+          id: read.id,
+          version: read.version,
+          element: read.element,
         ),
       );
-      attributes = null;
-      type = null;
-      tags = <String, String>{};
-      nodeIds = <int>[];
-      members = <OsmMember>[];
-    }
-
-    readXml(
-      xml,
-      onOpen: (name, open) {
-        switch (name) {
-          case 'create':
-            action = OsmChangeAction.create;
-          case 'modify':
-            action = OsmChangeAction.modify;
-          case 'delete':
-            action = OsmChangeAction.delete;
-          case 'node' || 'way' || 'relation':
-            finish();
-            type = OsmElementType.values.byName(name);
-            attributes = open;
-          case 'tag':
-            final key = open['k'], value = open['v'];
-            if (key != null && value != null) tags[key] = value;
-          case 'nd':
-            final ref = int.tryParse(open['ref'] ?? '');
-            if (ref != null) nodeIds.add(ref);
-          case 'member':
-            final ref = int.tryParse(open['ref'] ?? '');
-            final kind = open['type'];
-            if (ref == null || kind == null) break;
-            if (!OsmElementType.values.any((t) => t.name == kind)) break;
-            members.add(
-              OsmMember(
-                type: OsmElementType.values.byName(kind),
-                ref: ref,
-                role: open['role'] ?? '',
-              ),
-            );
-        }
-      },
-      onClose: (name) {
-        switch (name) {
-          case 'node' || 'way' || 'relation':
-            finish();
-          case 'create' || 'modify' || 'delete':
-            action = null;
-        }
-      },
-    );
-
+    });
     return changes;
   }
-}
-
-OsmChange _change({
-  required OsmChangeAction action,
-  required OsmElementType type,
-  required Map<String, String> attributes,
-  required Map<String, String> tags,
-  required List<int> nodeIds,
-  required List<OsmMember> members,
-}) {
-  final id = int.tryParse(attributes['id'] ?? '');
-  if (id == null) {
-    throw OsmXmlException('A ${type.name} has no id');
-  }
-  final version = int.tryParse(attributes['version'] ?? '');
-  final info = _info(attributes, version);
-  final held = tags.isEmpty ? const <String, String>{} : tags;
-
-  final element = switch (type) {
-    OsmElementType.node => () {
-        final latitude = double.tryParse(attributes['lat'] ?? '');
-        final longitude = double.tryParse(attributes['lon'] ?? '');
-        // A deleted node is often given without one, and there is nothing
-        // honest to put in its place.
-        if (latitude == null || longitude == null) return null;
-        return OsmNode(
-          id: id,
-          latitude: latitude,
-          longitude: longitude,
-          tags: held,
-          info: info,
-        );
-      }(),
-    OsmElementType.way => OsmWay(
-        id: id,
-        nodeIds: nodeIds,
-        tags: held,
-        info: info,
-      ),
-    OsmElementType.relation => OsmRelation(
-        id: id,
-        members: members,
-        tags: held,
-        info: info,
-      ),
-  };
-
-  return OsmChange(
-    action: action,
-    type: type,
-    id: id,
-    version: version,
-    element: element,
-  );
-}
-
-OsmInfo? _info(Map<String, String> attributes, int? version) {
-  final timestamp = attributes['timestamp'];
-  final user = attributes['user'];
-  final info = OsmInfo(
-    version: version,
-    timestamp: timestamp == null ? null : DateTime.tryParse(timestamp)?.toUtc(),
-    changeset: int.tryParse(attributes['changeset'] ?? ''),
-    uid: int.tryParse(attributes['uid'] ?? ''),
-    user: user == null || user.isEmpty ? null : user,
-    // OsmChange says what happened with the enclosing tag, so an element
-    // inside one is there whatever `visible` claims.
-    visible: attributes['visible'] != 'false',
-  );
-  return info.version == null &&
-          info.timestamp == null &&
-          info.changeset == null &&
-          info.uid == null &&
-          info.user == null
-      ? null
-      : info;
 }

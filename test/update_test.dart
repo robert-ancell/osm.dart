@@ -1,0 +1,399 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:osm/osm.dart';
+import 'package:test/test.dart';
+
+late Directory _work;
+
+/// A replication feed held in memory: [minutes] and [hours] map a sequence
+/// to the moment its diff runs up to, and [diffs] to what it holds.
+class _Feed {
+  final Map<int, DateTime> minutes;
+  final Map<int, DateTime> hours;
+  final Map<String, String> diffs;
+  final List<Uri> asked = [];
+
+  _Feed({required this.minutes, this.hours = const {}, this.diffs = const {}});
+
+  Future<Uint8List?> fetch(Uri uri) async {
+    asked.add(uri);
+    final path = uri.path;
+    for (final (name, times) in [('minute', minutes), ('hour', hours)]) {
+      if (!path.contains('/$name/')) continue;
+      if (path.endsWith('/$name/state.txt')) {
+        final newest = times.keys.reduce((a, b) => a > b ? a : b);
+        return _state(newest, times[newest]!);
+      }
+      final match = RegExp(r'(\d{3})/(\d{3})/(\d{3})\.(state\.txt|osc\.gz)$')
+          .firstMatch(path);
+      if (match == null) return null;
+      final sequence = int.parse(
+        '${match.group(1)}${match.group(2)}${match.group(3)}',
+      );
+      if (match.group(4) == 'state.txt') {
+        final at = times[sequence];
+        return at == null ? null : _state(sequence, at);
+      }
+      final xml = diffs['$name/$sequence'];
+      return xml == null
+          ? null
+          : Uint8List.fromList(gzip.encode(utf8.encode(xml)));
+    }
+    return null;
+  }
+
+  static Uint8List _state(int sequence, DateTime at) => Uint8List.fromList(
+        utf8.encode(
+          '#written by a test\n'
+          'sequenceNumber=$sequence\n'
+          'timestamp=${at.toIso8601String().split('.').first.replaceAll(':', r'\:')}Z\n',
+        ),
+      );
+}
+
+final _t0 = DateTime.utc(2026, 1, 1);
+
+/// The hand written elements, in order, saying they are from [_t0].
+Future<String> _snapshot() async {
+  final source = await OsmPbfFile.open('test/data/elements.osm.pbf');
+  final path = '${_work.path}/snapshot.osm.pbf';
+  final writer = await OsmPbfWriter.create(
+    path,
+    header: OsmPbfHeader(
+      optionalFeatures: const ['Sort.Type_then_ID'],
+      replicationTimestamp: _t0,
+    ),
+  );
+  await writer.addAll(source.elements());
+  await writer.close();
+  return path;
+}
+
+void main() {
+  setUp(() => _work = Directory.systemTemp.createTempSync('osm_update'));
+  tearDown(() => _work.deleteSync(recursive: true));
+
+  group('replication', () {
+    test('reads a state file, escaped colons and all', () {
+      final state = OsmReplicationState.parse(
+        '#Wed Sep 09 23:28:47 UTC 2026\n'
+        'sequenceNumber=7280000\n'
+        r'timestamp=2026-09-09T23\:28\:18Z'
+        '\n',
+      );
+      expect(state.sequence, 7280000);
+      expect(state.timestamp, DateTime.utc(2026, 9, 9, 23, 28, 18));
+    });
+
+    test('lays sequences out the way the feed does', () {
+      expect(OsmReplication.sequencePath(7289011), '007/289/011');
+      expect(OsmReplication.sequencePath(5), '000/000/005');
+    });
+
+    test('finds the first diff after a moment', () async {
+      final feed = _Feed(
+        minutes: {
+          for (var s = 0; s <= 5000; s++) s: _t0.add(Duration(minutes: s)),
+        },
+      );
+      final replication = OsmReplication(fetch: feed.fetch);
+      final period = OsmReplicationPeriod.minute;
+
+      expect(
+        await replication.firstAfter(
+            period, _t0.add(const Duration(minutes: 1234))),
+        1235,
+      );
+      // Between two diffs' ends: the one that runs past it.
+      expect(
+        await replication.firstAfter(
+          period,
+          _t0.add(const Duration(minutes: 1234, seconds: 30)),
+        ),
+        1235,
+      );
+      expect(
+          await replication.firstAfter(
+              period, _t0.subtract(const Duration(days: 1))),
+          0);
+      expect(
+        await replication.firstAfter(period, _t0.add(const Duration(days: 30))),
+        5001,
+        reason: 'nothing yet',
+      );
+      expect(feed.asked.length, lessThan(60), reason: 'a search, not a walk');
+    });
+
+    test('finds it when the feed has gaps in its timing', () async {
+      // Diffs that each run longer than a period, which throws the guess off.
+      final feed = _Feed(
+        minutes: {
+          for (var s = 0; s <= 400; s++) s: _t0.add(Duration(minutes: s * 3)),
+        },
+      );
+      final replication = OsmReplication(fetch: feed.fetch);
+      expect(
+        await replication.firstAfter(
+          OsmReplicationPeriod.minute,
+          _t0.add(const Duration(minutes: 301)),
+        ),
+        101,
+      );
+    });
+
+    test('says when the feed no longer goes back far enough', () async {
+      // A feed that has thrown away everything before diff 100.
+      final feed = _Feed(
+        minutes: {
+          for (var s = 100; s <= 200; s++) s: _t0.add(Duration(minutes: s)),
+        },
+      );
+      final replication = OsmReplication(fetch: feed.fetch);
+      expect(
+        await replication.firstAfter(
+          OsmReplicationPeriod.minute,
+          _t0.add(const Duration(minutes: 150)),
+        ),
+        151,
+      );
+      await expectLater(
+        replication.firstAfter(
+          OsmReplicationPeriod.minute,
+          _t0.add(const Duration(minutes: 20)),
+        ),
+        throwsA(isA<OsmReplicationException>()),
+      );
+    });
+
+    test('keeps what it downloads and does not fetch it twice', () async {
+      final feed = _Feed(
+        minutes: {1: _t0},
+        diffs: {'minute/1': '<osmChange version="0.6"/>'},
+      );
+      final replication = OsmReplication(fetch: feed.fetch);
+      final first = await replication.download(
+        OsmReplicationPeriod.minute,
+        1,
+        _work,
+      );
+      final asked = feed.asked.length;
+      final second = await replication.download(
+        OsmReplicationPeriod.minute,
+        1,
+        _work,
+      );
+      expect(second.path, first.path);
+      expect(feed.asked.length, asked);
+      expect(await OsmChangeFile.read(first.path), isEmpty);
+    });
+  });
+
+  group('api', () {
+    Uint8List xml(String body) => Uint8List.fromList(
+          utf8.encode('<?xml version="1.0"?><osm version="0.6">$body</osm>'),
+        );
+
+    test('looks nodes up, leaving out the deleted', () async {
+      final api = OsmApi(
+        fetch: (uri) async => xml(
+          '<node id="1" visible="true" version="3" lat="-41.1" lon="174.1">'
+          '<tag k="a" v="b"/></node>'
+          '<node id="2" visible="false" version="4"/>',
+        ),
+      );
+      final nodes = await api.nodes([2, 1]);
+      expect(nodes.map((n) => n.id), [1]);
+      expect(nodes.single.tags, {'a': 'b'});
+      expect(nodes.single.info?.version, 3);
+    });
+
+    test('halves a batch refused for an id that never existed', () async {
+      final asked = <String>[];
+      final api = OsmApi(
+        fetch: (uri) async {
+          final ids = uri.queryParameters['nodes']!.split(',').map(int.parse);
+          asked.add(ids.join(','));
+          if (ids.contains(999)) return null;
+          return xml([
+            for (final id in ids)
+              '<node id="$id" visible="true" version="1" lat="0" lon="0"/>',
+          ].join());
+        },
+      );
+      final nodes = await api.nodes([1, 2, 999, 3]);
+      expect(nodes.map((n) => n.id).toList()..sort(), [1, 2, 3]);
+      expect(asked.first, '1,2,3,999');
+      expect(api.requests, asked.length);
+    });
+
+    test('looks up the ways of a node', () async {
+      final api = OsmApi(
+        fetch: (uri) async {
+          expect(uri.path, endsWith('/node/5/ways'));
+          return xml(
+            '<way id="50" visible="true" version="2">'
+            '<nd ref="5"/><nd ref="6"/></way>',
+          );
+        },
+      );
+      final ways = await api.waysOf(5);
+      expect(ways.single.nodeIds, [5, 6]);
+    });
+  });
+
+  group('updating a snapshot', () {
+    test('applies what touches it and nothing else', () async {
+      final input = await _snapshot();
+      final far = '''
+<osmChange version="0.6">
+  <create>
+    <node id="90000001" version="1" lat="51.5" lon="-0.12"/>
+    <way id="90000801" version="1"><nd ref="90000001"/><nd ref="90000002"/></way>
+  </create>
+</osmChange>''';
+      final feed = _Feed(
+        minutes: {
+          10: _t0.subtract(const Duration(minutes: 1)),
+          11: _t0.add(const Duration(minutes: 1)),
+          12: _t0.add(const Duration(minutes: 2)),
+        },
+        hours: {1: _t0.subtract(const Duration(hours: 1))},
+        diffs: {
+          'minute/11': File('test/data/changes.osc').readAsStringSync(),
+          'minute/12': far,
+        },
+      );
+      final output = '${_work.path}/updated.osm.pbf';
+
+      final result = await updateOsmSnapshot(
+        input: input,
+        output: output,
+        replication: OsmReplication(fetch: feed.fetch),
+        cache: Directory('${_work.path}/cache'),
+      );
+
+      expect(result.diffs, [
+        (OsmReplicationPeriod.minute, 11),
+        (OsmReplicationPeriod.minute, 12),
+      ]);
+      expect(result.seen, 8);
+      expect(result.kept, 6, reason: 'the two London changes are not');
+      expect(result.counts.created, 2);
+      expect(result.counts.modified, 2);
+      expect(result.counts.deleted, 2);
+      expect(result.state?.sequence, 12);
+      expect(result.incomplete, isFalse);
+
+      final updated = await OsmPbfFile.open(output);
+      final ids = await updated
+          .elements()
+          .map((e) => '${e.type.name}/${e.id}')
+          .toList();
+      expect(ids, contains('node/42000006'));
+      expect(ids, isNot(contains('node/90000001')));
+      expect(ids, isNot(contains('node/42000003')));
+      expect(updated.header.replicationSequenceNumber, 12);
+      expect(updated.header.replicationTimestamp, feed.minutes[12]);
+      expect(updated.header.isSorted, isTrue);
+    });
+
+    test('says what it could not settle when it may not look it up', () async {
+      final input = await _snapshot();
+      final feed = _Feed(
+        minutes: {
+          1: _t0.subtract(const Duration(minutes: 1)),
+          2: _t0.add(const Duration(minutes: 1)),
+        },
+        hours: {1: _t0.subtract(const Duration(hours: 1))},
+        diffs: {
+          'minute/2': '''
+<osmChange version="0.6">
+  <create>
+    <way id="42000804" version="1">
+      <nd ref="42000001"/><nd ref="77000001"/>
+    </way>
+  </create>
+</osmChange>''',
+        },
+      );
+
+      final result = await updateOsmSnapshot(
+        input: input,
+        output: '${_work.path}/updated.osm.pbf',
+        replication: OsmReplication(fetch: feed.fetch),
+        cache: Directory('${_work.path}/cache'),
+      );
+      expect(result.edges.incompleteWays, {42000804});
+      expect(result.edges.missingNodes, {77000001});
+      expect(result.incomplete, isTrue);
+    });
+
+    test('looks up what it could not settle when it may', () async {
+      final input = await _snapshot();
+      final feed = _Feed(
+        minutes: {
+          1: _t0.subtract(const Duration(minutes: 1)),
+          2: _t0.add(const Duration(minutes: 1)),
+        },
+        hours: {1: _t0.subtract(const Duration(hours: 1))},
+        diffs: {
+          'minute/2': '''
+<osmChange version="0.6">
+  <create>
+    <way id="42000804" version="1">
+      <nd ref="42000001"/><nd ref="77000001"/>
+    </way>
+  </create>
+</osmChange>''',
+        },
+      );
+      final api = OsmApi(
+        fetch: (uri) async => Uint8List.fromList(
+          utf8.encode(
+            '<osm version="0.6"><node id="77000001" visible="true" '
+            'version="5" lat="0.51" lon="0.51"/></osm>',
+          ),
+        ),
+      );
+      final output = '${_work.path}/updated.osm.pbf';
+
+      final result = await updateOsmSnapshot(
+        input: input,
+        output: output,
+        replication: OsmReplication(fetch: feed.fetch),
+        cache: Directory('${_work.path}/cache'),
+        api: api,
+      );
+      expect(result.lookedUpNodes, 1);
+      expect(result.incomplete, isFalse);
+
+      final updated = await OsmPbfFile.open(output);
+      final way = await updated.elements().firstWhere((e) => e.id == 42000804)
+          as OsmWay;
+      final subset = await updated.subset(
+        OsmFilter.ids(OsmElementType.way, {way.id}),
+      );
+      expect(subset.nodesOf(way), isNotNull, reason: 'whole again');
+    });
+
+    test('refuses a snapshot that does not say when it is from', () async {
+      final path = '${_work.path}/undated.osm.pbf';
+      await (await OsmPbfWriter.create(
+        path,
+        header: const OsmPbfHeader(optionalFeatures: ['Sort.Type_then_ID']),
+      ))
+          .close();
+      await expectLater(
+        updateOsmSnapshot(
+          input: path,
+          output: '${_work.path}/out.osm.pbf',
+          replication: OsmReplication(fetch: (_) async => null),
+          cache: _work,
+        ),
+        throwsStateError,
+      );
+    });
+  });
+}

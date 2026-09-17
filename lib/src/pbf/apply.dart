@@ -51,7 +51,8 @@ class OsmChangeCounts {
 ///
 /// The equivalent of `osmium apply-changes`. When one element is changed more
 /// than once, the change with the highest version wins, and a change no newer
-/// than the version the file already holds is ignored, so diffs that overlap
+/// than the version the file already holds is ignored — a delete only when it
+/// is older, since a delete can carry the version it deletes — so diffs that overlap
 /// can be applied over each other. Changes with no version are taken in the
 /// order given, the last one winning.
 ///
@@ -143,9 +144,16 @@ Future<OsmChangeCounts> applyOsmChanges({
     pending[element.type]!.remove(element.id);
 
     final version = element.info?.version;
+    final changed = change.version;
+    // A delete can carry the version of what it deletes rather than the one
+    // after it: an extract's own diffs, made by comparing one day's extract
+    // with the next, say it that way. Only a delete older than what the file
+    // holds is behind it.
     if (version != null &&
-        change.version != null &&
-        change.version! <= version) {
+        changed != null &&
+        (change.action == OsmChangeAction.delete
+            ? changed < version
+            : changed <= version)) {
       writer.add(element);
       stale++;
       continue;

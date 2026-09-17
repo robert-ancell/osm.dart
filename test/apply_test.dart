@@ -100,10 +100,12 @@ void main() {
             info: OsmInfo(version: 2),
           ),
         ),
+        // Node 42000004 is at version 2, and a delete of version 1 is
+        // older than it.
         OsmChange(
           action: OsmChangeAction.delete,
           type: OsmElementType.node,
-          id: 42000002,
+          id: 42000004,
           version: 1,
         ),
       ],
@@ -116,7 +118,39 @@ void main() {
     final after = await _elementsOf(output);
     final node = after.firstWhere((e) => e.id == 42000001) as OsmNode;
     expect(node.latitude, closeTo(0.5001, 1e-9));
-    expect(after.any((e) => e.id == 42000002), isTrue);
+    expect(after.any((e) => e.id == 42000004), isTrue);
+  });
+
+  test('deletes what a delete of the same version names', () async {
+    // An extract's own diffs are made by comparing one day's extract with
+    // the next, and say a delete with the version of what went. Read as
+    // no newer than the file, four deleted golf courses stayed in a
+    // country's extract for good.
+    final output = '${_work.path}/deleted.osm.pbf';
+    final counts = await applyOsmChanges(
+      input: await _base(),
+      changes: const [
+        OsmChange(
+          action: OsmChangeAction.delete,
+          type: OsmElementType.node,
+          id: 42000003,
+          version: 11,
+        ),
+        OsmChange(
+          action: OsmChangeAction.delete,
+          type: OsmElementType.way,
+          id: 42000801,
+          version: 7,
+        ),
+      ],
+      output: output,
+    );
+    expect(counts.deleted, 2);
+    expect(counts.stale, 0);
+
+    final ids = (await _elementsOf(output)).map((e) => e.id);
+    expect(ids, isNot(contains(42000003)));
+    expect(ids, isNot(contains(42000801)));
   });
 
   test('takes the newest of several changes to one element', () async {

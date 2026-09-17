@@ -258,6 +258,90 @@ void main() {
           utf8.encode('<?xml version="1.0"?><osm version="0.6">$body</osm>'),
         );
 
+    test("lists a mapper's changesets since a moment", () async {
+      late Uri asked;
+      final api = OsmApi(fetch: (uri) async {
+        asked = uri;
+        return xml(
+          '<changeset id="12" created_at="2026-09-17T08:00:00Z" '
+          'open="true" changes_count="3" user="Someone"/>'
+          '<changeset id="11" created_at="2026-09-17T06:00:00Z" '
+          'closed_at="2026-09-17T06:01:00Z" open="false" '
+          'changes_count="40" user="Someone"/>',
+        );
+      });
+      final changesets = await api.changesetsBy(
+        'Some One',
+        since: DateTime.utc(2026, 9, 16, 20, 21),
+      );
+
+      expect(asked.path, '/api/0.6/changesets');
+      expect(asked.queryParameters, {
+        'display_name': 'Some One',
+        'time': '2026-09-16T20:21:00.000Z',
+        'limit': '100',
+      });
+      expect(changesets.map((c) => c.id), [12, 11]);
+      expect(changesets.first.isOpen, isTrue);
+      expect(changesets.last.closedAt, DateTime.utc(2026, 9, 17, 6, 1));
+      expect(changesets.last.changesCount, 40);
+    });
+
+    test('and pages through more than the API lists at once', () async {
+      final asked = <Uri>[];
+      final api = OsmApi(fetch: (uri) async {
+        asked.add(uri);
+        final before = uri.queryParameters['time']!.split(',').skip(1);
+        // 150 changesets, an hour apart, the newest first; 100 a page.
+        final top = before.isEmpty
+            ? 150
+            : DateTime.parse(before.single)
+                .difference(DateTime.utc(2026))
+                .inHours;
+        return xml([
+          for (var id = top; id > 0 && id > top - 100; id--)
+            '<changeset id="$id" '
+                'created_at="${DateTime.utc(2026).add(Duration(hours: id)).toIso8601String()}" '
+                'closed_at="${DateTime.utc(2026).add(Duration(hours: id)).toIso8601String()}" '
+                'changes_count="1"/>',
+        ].join());
+      });
+      final changesets =
+          await api.changesetsBy('Some One', since: DateTime.utc(2025));
+      expect(
+          changesets.map((c) => c.id), [for (var id = 150; id > 0; id--) id]);
+      expect(asked, hasLength(2));
+    });
+
+    test('says when there is no such mapper', () async {
+      final api = OsmApi(fetch: (uri) async => null);
+      await expectLater(
+        api.changesetsBy('Nobody', since: DateTime.utc(2026)),
+        throwsA(isA<OsmHttpException>()),
+      );
+    });
+
+    test('reads what a changeset changed', () async {
+      late Uri asked;
+      final api = OsmApi(fetch: (uri) async {
+        asked = uri;
+        return Uint8List.fromList(utf8.encode(
+          '<osmChange version="0.6">'
+          '<modify><node id="5" version="2" lat="1" lon="2" '
+          'changeset="12"/></modify>'
+          '<delete><way id="7" version="3" changeset="12"/></delete>'
+          '</osmChange>',
+        ));
+      });
+      final changes = await api.changesetChanges(12);
+
+      expect(asked.path, '/api/0.6/changeset/12/download');
+      expect(changes.map((c) => (c.action, c.type, c.id, c.version)), [
+        (OsmChangeAction.modify, OsmElementType.node, 5, 2),
+        (OsmChangeAction.delete, OsmElementType.way, 7, 3),
+      ]);
+    });
+
     test('looks nodes up, leaving out the deleted', () async {
       final api = OsmApi(
         fetch: (uri) async => xml(

@@ -23,5 +23,7 @@
   copies the blocks no change alters without decoding them.
 * `OsmReplication.single` and `OsmReplication.geofabrik` for a feed of one
   period, such as the daily diffs Geofabrik publishes for each extract.
+* `OsmApi.changesetsBy` and `OsmApi.changesetChanges` for taking one mapper's
+  edits in ahead of the diffs.
 * `OsmXmlFile` for reading OSM XML, and `OsmRegion` for the ground a
   snapshot covers.

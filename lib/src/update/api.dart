@@ -1,8 +1,45 @@
 import 'dart:convert';
+import 'dart:io';
 
 import '../element.dart';
+import '../xml/change.dart';
 import '../xml/osm_xml.dart';
+import '../xml/reader.dart';
 import 'http.dart';
+
+/// A changeset, as the API lists one.
+class OsmChangeset {
+  /// The changeset's id.
+  final int id;
+
+  /// When it was opened.
+  final DateTime createdAt;
+
+  /// When it was closed, or null while it is still open and can take more
+  /// changes.
+  final DateTime? closedAt;
+
+  /// How many changes it holds so far.
+  final int changesCount;
+
+  /// Creates a changeset.
+  const OsmChangeset({
+    required this.id,
+    required this.createdAt,
+    required this.closedAt,
+    required this.changesCount,
+  });
+
+  /// Whether it can still take more changes.
+  bool get isOpen => closedAt == null;
+
+  @override
+  String toString() => 'OsmChangeset($id, $changesCount changes'
+      '${isOpen ? ', open' : ''})';
+}
+
+/// How many changesets the API lists at once, at most.
+const int _changesetPage = 100;
 
 /// How many ids go in one request. Kept well inside the length a URL can
 /// have, eleven digits and a comma apiece.
@@ -61,6 +98,78 @@ class OsmApi {
       ...await _nodes(ids.sublist(0, half)),
       ...await _nodes(ids.sublist(half)),
     ];
+  }
+
+  /// The changesets [displayName] has open, or closed after [since], newest
+  /// first.
+  ///
+  /// For taking one mapper's edits in ahead of a diff that has them: a
+  /// changeset is a few kilobytes, where the minutes of the whole planet
+  /// they fall in are megabytes. Throws an [OsmHttpException] if there is no
+  /// such mapper.
+  Future<List<OsmChangeset>> changesetsBy(
+    String displayName, {
+    required DateTime since,
+  }) async {
+    final found = <OsmChangeset>[];
+    DateTime? before;
+    while (true) {
+      final time = [
+        since.toUtc().toIso8601String(),
+        if (before != null) before.toUtc().toIso8601String(),
+      ].join(',');
+      final uri = base.resolve('changesets').replace(queryParameters: {
+        'display_name': displayName,
+        'time': time,
+        'limit': '$_changesetPage',
+      });
+      requests++;
+      final body = await _fetch(uri);
+      if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
+      final page = _changesets(utf8.decode(body));
+      found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
+      if (page.length < _changesetPage) break;
+      // The rest were opened no later than the oldest of these. A second
+      // on, so one opened in the same second is not missed; the ones seen
+      // twice are left out above.
+      before = page
+          .map((c) => c.createdAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b)
+          .add(const Duration(seconds: 1));
+    }
+    return found;
+  }
+
+  static List<OsmChangeset> _changesets(String xml) {
+    final found = <OsmChangeset>[];
+    readXml(
+      xml,
+      onOpen: (name, attributes) {
+        if (name != 'changeset') return;
+        final id = int.tryParse(attributes['id'] ?? '');
+        final created = DateTime.tryParse(attributes['created_at'] ?? '');
+        if (id == null || created == null) return;
+        found.add(OsmChangeset(
+          id: id,
+          createdAt: created.toUtc(),
+          closedAt: attributes['open'] == 'true'
+              ? null
+              : DateTime.tryParse(attributes['closed_at'] ?? '')?.toUtc(),
+          changesCount: int.tryParse(attributes['changes_count'] ?? '') ?? 0,
+        ));
+      },
+      onClose: (_) {},
+    );
+    return found;
+  }
+
+  /// The changes changeset [id] made, in the order it made them.
+  Future<List<OsmChange>> changesetChanges(int id) async {
+    requests++;
+    final uri = base.resolve('changeset/$id/download');
+    final body = await _fetch(uri);
+    if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
+    return OsmChangeFile.parse(utf8.decode(body));
   }
 
   /// The ways that use node [id].

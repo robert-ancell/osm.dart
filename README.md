@@ -204,6 +204,23 @@ and then `applyOsmChanges` as above. A block of the file no change falls in is
 copied as it is, so a day of a country's changes is seconds rather than the
 whole file written again.
 
+A day is a long time to wait for an edit of your own. `OsmApi` lists a
+mapper's changesets since a moment and gives back what each one changed, a few
+kilobytes apiece, to apply the same way:
+
+```dart
+final api = OsmApi(fetch: fetch);
+final since = file.header.replicationTimestamp!;
+final changes = [
+  for (final changeset in (await api.changesetsBy('Your Name', since: since))
+      .reversed)
+    ...await api.changesetChanges(changeset.id),
+];
+```
+
+When the day's diff arrives with the same edits in it, they are no newer than
+the file and are skipped.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed, and

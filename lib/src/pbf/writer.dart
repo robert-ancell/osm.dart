@@ -5,6 +5,7 @@ import '../element.dart';
 import 'exception.dart';
 import 'fields.dart';
 import '../version.g.dart';
+import 'block.dart';
 import 'header.dart';
 import 'protobuf_writer.dart';
 
@@ -78,6 +79,28 @@ class OsmPbfWriter {
     _block.add(element);
   }
 
+  /// Adds a block read from another file, as it is.
+  ///
+  /// [body] is the blob as it sat in that file, still compressed, and
+  /// [span] what it holds. Nothing is decoded or compressed again, which is
+  /// what makes copying most of a file through an update cheap. What has
+  /// been added before it is written first, so the order holds.
+  void addBlock(Uint8List body, PbfBlockSpan span) {
+    if (_sorted) {
+      _checkOrderOf(span.type, span.first);
+      _lastId = span.last;
+    }
+    _flush();
+    _sink.add(_frame('OSMData', body));
+  }
+
+  /// Waits for what has been written so far to reach the file.
+  ///
+  /// [add] and [addBlock] do not wait, so a caller streaming a whole file
+  /// through should, now and then, or the file is held in memory on its
+  /// way out.
+  Future<void> flush() => _sink.flush();
+
   /// Adds every element of [elements].
   Future<void> addAll(Stream<OsmElement> elements) async {
     await for (final element in elements) {
@@ -92,19 +115,21 @@ class OsmPbfWriter {
     await _sink.close();
   }
 
-  void _checkOrder(OsmElement element) {
+  void _checkOrder(OsmElement element) =>
+      _checkOrderOf(element.type, element.id);
+
+  void _checkOrderOf(OsmElementType type, int id) {
     final last = _lastType;
     if (last != null) {
-      if (element.type.index < last.index ||
-          (element.type == last && element.id <= _lastId)) {
+      if (type.index < last.index || (type == last && id <= _lastId)) {
         throw OsmPbfException(
-          'The header says the file is sorted, but ${element.type.name} '
-          '${element.id} comes after ${last.name} $_lastId',
+          'The header says the file is sorted, but ${type.name} '
+          '$id comes after ${last.name} $_lastId',
         );
       }
     }
-    _lastType = element.type;
-    _lastId = element.id;
+    _lastType = type;
+    _lastId = id;
   }
 
   void _flush() {
@@ -356,8 +381,11 @@ Uint8List _blob(String type, Uint8List block) {
   final blob = ProtobufWriter()
     ..writeUint(BlobField.rawSize, block.length)
     ..writeBytes(BlobField.zlibData, compressed);
-  final body = blob.takeBytes();
+  return _frame(type, blob.takeBytes());
+}
 
+/// [body], an encoded `Blob`, with the length and header in front of it.
+Uint8List _frame(String type, Uint8List body) {
   final header = ProtobufWriter()
     ..writeString(BlobHeaderField.type, type)
     ..writeUint(BlobHeaderField.dataSize, body.length);

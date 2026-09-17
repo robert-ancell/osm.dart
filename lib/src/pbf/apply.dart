@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import '../element.dart';
 import '../xml/change.dart';
+import 'blob.dart';
+import 'block.dart';
 import 'exception.dart';
 import 'file.dart';
 import 'header.dart';
@@ -110,38 +114,57 @@ Future<OsmChangeCounts> applyOsmChanges({
     ),
   );
 
+  // Where elements go: the writer, or a block being held until it is known
+  // whether anything in it changed.
+  void Function(OsmElement element) emit = writer.add;
+
+  // How far through each type's pending ids the file has got.
+  final next = {for (final type in OsmElementType.values) type: 0};
+
   /// Writes the elements a change adds, up to but not including [before].
   void insertBefore(OsmElementType type, int? before) {
     final ids = pending[type]!;
-    while (ids.isNotEmpty && (before == null || ids.first < before)) {
-      final change = wanted[type]!.remove(ids.removeAt(0))!;
+    var at = next[type]!;
+    while (at < ids.length && (before == null || ids[at] < before)) {
+      final change = wanted[type]!.remove(ids[at++]);
+      if (change == null) continue;
       final element = change.element;
       if (change.action == OsmChangeAction.delete || element == null) {
         missed++;
         continue;
       }
-      writer.add(element);
+      emit(element);
       created++;
     }
+    next[type] = at;
   }
 
   var reached = 0;
-  await for (final element in source.elements()) {
-    // Everything of an earlier type that the file did not hold goes in
-    // before this one does.
-    while (reached < element.type.index) {
+
+  /// Everything of a type before [type] that the file did not hold, and
+  /// everything of [type] before [id].
+  void catchUp(OsmElementType type, int id) {
+    while (reached < type.index) {
       insertBefore(OsmElementType.values[reached], null);
       reached++;
     }
-    insertBefore(element.type, element.id);
+    insertBefore(type, id);
+  }
+
+  void apply(OsmElement element) {
+    catchUp(element.type, element.id);
 
     final change = wanted[element.type]!.remove(element.id);
     if (change == null) {
-      writer.add(element);
+      emit(element);
       unchanged++;
-      continue;
+      return;
     }
-    pending[element.type]!.remove(element.id);
+    final ids = pending[element.type]!;
+    final at = next[element.type]!;
+    if (at < ids.length && ids[at] == element.id) {
+      next[element.type] = at + 1;
+    }
 
     final version = element.info?.version;
     final changed = change.version;
@@ -154,9 +177,9 @@ Future<OsmChangeCounts> applyOsmChanges({
         (change.action == OsmChangeAction.delete
             ? changed < version
             : changed <= version)) {
-      writer.add(element);
+      emit(element);
       stale++;
-      continue;
+      return;
     }
 
     switch (change.action) {
@@ -166,13 +189,58 @@ Future<OsmChangeCounts> applyOsmChanges({
         final replacement = change.element;
         if (replacement == null) {
           // Nothing to put in its place, so the element stays as it was.
-          writer.add(element);
+          emit(element);
           missed++;
         } else {
-          writer.add(replacement);
+          emit(replacement);
           modified++;
         }
     }
+  }
+
+  // Block by block. A block no change falls inside is copied as it is,
+  // still compressed: an update of a few thousand elements is otherwise
+  // every element of the file decoded, encoded and compressed again.
+  final file = await File(input).open();
+  try {
+    final blobs = BlobReader(file);
+    for (var blob = await blobs.next();
+        blob != null;
+        blob = await blobs.next()) {
+      if (blob.type != 'OSMData') continue;
+      final block = decodeBlob(blob.body, offset: blob.offset);
+      final span = blockSpan(block);
+      if (span != null) {
+        catchUp(span.type, span.first);
+        final ids = pending[span.type]!;
+        final at = next[span.type]!;
+        if (at >= ids.length || ids[at] > span.last) {
+          writer.addBlock(blob.body, span);
+          unchanged += span.count;
+          await writer.flush();
+          continue;
+        }
+      }
+      // Decoded to see what the changes do, and written again only if they
+      // do something: a block whose changes are all ones the file already
+      // has — which is most of them, when diffs overlap — is copied too.
+      final held = <OsmElement>[];
+      final before = created + modified + deleted;
+      emit = held.add;
+      try {
+        decodePrimitiveBlock(block, apply, offset: blob.offset);
+      } finally {
+        emit = writer.add;
+      }
+      if (span != null && created + modified + deleted == before) {
+        writer.addBlock(blob.body, span);
+      } else {
+        held.forEach(writer.add);
+      }
+      await writer.flush();
+    }
+  } finally {
+    await file.close();
   }
 
   while (reached < OsmElementType.values.length) {

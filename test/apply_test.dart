@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/src/pbf/blob.dart';
 import 'package:test/test.dart';
 
 late Directory _work;
@@ -151,6 +152,133 @@ void main() {
     final ids = (await _elementsOf(output)).map((e) => e.id);
     expect(ids, isNot(contains(42000003)));
     expect(ids, isNot(contains(42000801)));
+  });
+
+  group('a file of many blocks', () {
+    // Three blocks of nodes, 8000 to a block, and one of ways.
+    late String input;
+    setUpAll(() async {
+      input = '${_work.path}/blocks.osm.pbf';
+      final writer = await OsmPbfWriter.create(
+        input,
+        header: const OsmPbfHeader(optionalFeatures: ['Sort.Type_then_ID']),
+      );
+      for (var id = 1; id <= 20000; id++) {
+        writer.add(OsmNode(
+          id: id * 2,
+          latitude: id / 1e5,
+          longitude: 0,
+          info: const OsmInfo(version: 1),
+        ));
+      }
+      writer.add(const OsmWay(
+        id: 1,
+        nodeIds: [2, 4],
+        info: OsmInfo(version: 1),
+      ));
+      await writer.close();
+    });
+
+    Future<List<List<int>>> blocksOf(String path) async {
+      final file = await File(path).open();
+      try {
+        final blobs = BlobReader(file);
+        return [
+          for (var blob = await blobs.next();
+              blob != null;
+              blob = await blobs.next())
+            if (blob.type == 'OSMData') blob.body,
+        ];
+      } finally {
+        await file.close();
+      }
+    }
+
+    test('copies the blocks no change falls in as they are', () async {
+      final output = '${_work.path}/blocks-applied.osm.pbf';
+      final counts = await applyOsmChanges(
+        input: input,
+        changes: const [
+          // In the second block.
+          OsmChange(
+            action: OsmChangeAction.modify,
+            type: OsmElementType.node,
+            id: 20000,
+            version: 2,
+            element: OsmNode(
+              id: 20000,
+              latitude: 1,
+              longitude: 1,
+              info: OsmInfo(version: 2),
+            ),
+          ),
+          // Between two ids of the second block, which the file does not
+          // hold.
+          OsmChange(
+            action: OsmChangeAction.create,
+            type: OsmElementType.node,
+            id: 20001,
+            version: 1,
+            element: OsmNode(id: 20001, latitude: 2, longitude: 2),
+          ),
+          // Past everything, and before the ways.
+          OsmChange(
+            action: OsmChangeAction.create,
+            type: OsmElementType.node,
+            id: 90000,
+            version: 1,
+            element: OsmNode(id: 90000, latitude: 3, longitude: 3),
+          ),
+        ],
+        output: output,
+      );
+      expect(counts.modified, 1);
+      expect(counts.created, 2);
+      expect(counts.unchanged, 20000);
+
+      final before = await blocksOf(input);
+      final after = await blocksOf(output);
+      // The second block gains a node, and the writer puts the one it has
+      // no room for in a block of its own; the node past the end has one
+      // of its own too.
+      expect(after, hasLength(before.length + 2));
+      expect(after, anyElement(equals(before[0])),
+          reason: 'the first block, copied');
+      expect(after, isNot(anyElement(equals(before[1]))),
+          reason: 'the second, written again');
+      expect(after, anyElement(equals(before[2])), reason: 'the third, copied');
+      expect(after.last, before.last, reason: 'the ways, copied');
+
+      final elements = await _elementsOf(output);
+      expect(elements.length, 20003);
+      final nodes = elements.whereType<OsmNode>().toList();
+      expect(
+          nodes.map((n) => n.id).toList(), [...nodes.map((n) => n.id)]..sort(),
+          reason: 'still in order');
+      expect(nodes.firstWhere((n) => n.id == 20000).latitude, 1);
+      expect(nodes.any((n) => n.id == 20001), isTrue);
+      expect(nodes.last.id, 90000);
+      expect(elements.last, isA<OsmWay>());
+    });
+
+    test('and a delete in a block is the only thing that changes', () async {
+      final output = '${_work.path}/blocks-deleted.osm.pbf';
+      await applyOsmChanges(
+        input: input,
+        changes: const [
+          OsmChange(
+            action: OsmChangeAction.delete,
+            type: OsmElementType.node,
+            id: 40000,
+            version: 1,
+          ),
+        ],
+        output: output,
+      );
+      final ids = (await _elementsOf(output)).map((e) => e.id).toSet();
+      expect(ids.contains(40000), isFalse);
+      expect(ids.length, 20000);
+    });
   });
 
   test('takes the newest of several changes to one element', () async {

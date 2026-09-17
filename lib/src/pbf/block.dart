@@ -729,3 +729,101 @@ OsmRelation? _decodeRelation(ProtobufReader reader, _BlockContext context) {
   );
   return context.wants(relation) ? relation : null;
 }
+
+/// What a data block holds, read without building any of it.
+///
+/// Enough to know whether a block can be copied from one file to another as
+/// it is: which type of element it holds, the first and last id, and how
+/// many.
+class PbfBlockSpan {
+  /// The type of every element in the block.
+  final OsmElementType type;
+
+  /// The lowest and highest id in the block.
+  final int first, last;
+
+  /// How many elements the block holds.
+  final int count;
+
+  /// Creates a span.
+  const PbfBlockSpan(this.type, this.first, this.last, this.count);
+
+  @override
+  String toString() => 'PbfBlockSpan(${type.name} $first to $last, $count)';
+}
+
+/// The span of [block], a decompressed `OSMData` block, or null where it
+/// cannot be treated as one run of ids: empty, holding more than one type of
+/// element, or not in order.
+///
+/// Reads the ids and skips everything else, which is a small part of what
+/// decoding the block costs.
+PbfBlockSpan? blockSpan(Uint8List block) {
+  final reader = ProtobufReader(block);
+  OsmElementType? type;
+  var first = 0, last = 0, count = 0;
+  var usable = true;
+
+  void saw(OsmElementType of, int id) {
+    if (type == null) {
+      type = of;
+      first = id;
+    } else if (of != type || id <= last) {
+      usable = false;
+    }
+    last = id;
+    count++;
+  }
+
+  int idOf(ProtobufReader element, {required bool signed}) {
+    while (!element.isAtEnd) {
+      final tag = element.readTag();
+      // The id is field 1 of a node, a way and a relation alike.
+      if (ProtobufReader.fieldOf(tag) == NodeField.id) {
+        return signed ? element.readSignedVarint() : element.readVarint();
+      }
+      element.skipField(tag);
+    }
+    return 0;
+  }
+
+  while (usable && !reader.isAtEnd) {
+    final tag = reader.readTag();
+    if (ProtobufReader.fieldOf(tag) != PrimitiveBlockField.primitiveGroup) {
+      reader.skipField(tag);
+      continue;
+    }
+    final group = reader.readMessage();
+    while (usable && !group.isAtEnd) {
+      final tag = group.readTag();
+      switch (ProtobufReader.fieldOf(tag)) {
+        case PrimitiveGroupField.dense:
+          final dense = group.readMessage();
+          while (!dense.isAtEnd) {
+            final tag = dense.readTag();
+            if (ProtobufReader.fieldOf(tag) != DenseNodesField.ids) {
+              dense.skipField(tag);
+              continue;
+            }
+            final ids = <int>[];
+            dense.readPackedDeltas(ids);
+            for (final id in ids) {
+              saw(OsmElementType.node, id);
+            }
+          }
+        case PrimitiveGroupField.nodes:
+          saw(OsmElementType.node, idOf(group.readMessage(), signed: true));
+        case PrimitiveGroupField.ways:
+          saw(OsmElementType.way, idOf(group.readMessage(), signed: false));
+        case PrimitiveGroupField.relations:
+          saw(OsmElementType.relation,
+              idOf(group.readMessage(), signed: false));
+        default:
+          group.skipField(tag);
+      }
+    }
+  }
+  final found = type;
+  if (!usable || found == null) return null;
+  return PbfBlockSpan(found, first, last, count);
+}

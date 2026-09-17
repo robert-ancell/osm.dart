@@ -18,6 +18,10 @@
 * `osm_update` and `updateOsmSnapshot` for bringing a snapshot up to date from
   the planet's replication diffs, keeping only what touches it.
 * `applyOsmChanges` skips changes no newer than what the file holds, so diffs
-  that overlap can be applied over each other.
+  that overlap can be applied over each other — a delete only when it is
+  older, since an extract's diffs give a delete the version it deletes — and
+  copies the blocks no change alters without decoding them.
+* `OsmReplication.single` and `OsmReplication.geofabrik` for a feed of one
+  period, such as the daily diffs Geofabrik publishes for each extract.
 * `OsmXmlFile` for reading OSM XML, and `OsmRegion` for the ground a
   snapshot covers.

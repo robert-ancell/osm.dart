@@ -181,6 +181,29 @@ instead, and the tool exits with 2 to say a fresh snapshot is due.
 
 The same thing from code is `updateOsmSnapshot`.
 
+### From an extract's own diffs
+
+Geofabrik publishes a diff a day for each of its extracts, made by comparing
+one day's extract with the next. For a country that is a few hundred kilobytes
+a day rather than the planet's gigabytes, and nothing in it needs deciding: it
+already holds what entered or left the extract.
+
+```dart
+final feed = OsmReplication.geofabrik('australia-oceania/new-zealand',
+    fetch: httpFetch(contact: 'Your Name <you@example.com>'));
+const day = OsmReplicationPeriod.day;
+final first = await feed.firstAfter(day, file.header.replicationTimestamp!);
+final latest = await feed.latest(day);
+final changes = [
+  for (var s = first; s <= latest.sequence; s++)
+    ...await OsmChangeFile.read((await feed.download(day, s, cache)).path),
+];
+```
+
+and then `applyOsmChanges` as above. A block of the file no change falls in is
+copied as it is, so a day of a country's changes is seconds rather than the
+whole file written again.
+
 ## What is supported
 
 Reading `.osm.pbf` files, either zlib compressed or uncompressed, and

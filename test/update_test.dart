@@ -190,6 +190,69 @@ void main() {
     });
   });
 
+  group('a feed of one period', () {
+    // Geofabrik's: state.txt and the diffs straight under the extract's
+    // directory, a day to a diff.
+    final days = {
+      for (var s = 4900; s <= 4911; s++) s: _t0.add(Duration(days: s - 4900)),
+    };
+    Future<Uint8List?> fetch(Uri uri) async {
+      final path = uri.path;
+      if (!path.startsWith('/australia-oceania/new-zealand-updates/')) {
+        return null;
+      }
+      if (path.endsWith('-updates/state.txt')) {
+        return _Feed._state(4911, days[4911]!);
+      }
+      final match =
+          RegExp(r'-updates/(\d{3})/(\d{3})/(\d{3})\.(state\.txt|osc\.gz)$')
+              .firstMatch(path);
+      if (match == null) return null;
+      final sequence =
+          int.parse('${match.group(1)}${match.group(2)}${match.group(3)}');
+      final at = days[sequence];
+      if (at == null) return null;
+      return match.group(4) == 'state.txt'
+          ? _Feed._state(sequence, at)
+          : Uint8List.fromList(
+              gzip.encode(utf8.encode('<osmChange version="0.6"/>')));
+    }
+
+    final replication =
+        OsmReplication.geofabrik('australia-oceania/new-zealand', fetch: fetch);
+    const day = OsmReplicationPeriod.day;
+
+    test('is laid out under its own directory', () {
+      expect(
+        replication.diff(day, 4911).toString(),
+        'https://download.geofabrik.de/australia-oceania/'
+        'new-zealand-updates/000/004/911.osc.gz',
+      );
+    });
+
+    test('says where it has got to', () async {
+      expect((await replication.latest(day)).sequence, 4911);
+    });
+
+    test('finds the first diff after a moment', () async {
+      expect(
+        await replication.firstAfter(
+            day, _t0.add(const Duration(days: 5, hours: 3))),
+        4906,
+      );
+    });
+
+    test('and downloads it', () async {
+      final file = await replication.download(day, 4906, _work);
+      expect(await OsmChangeFile.read(file.path), isEmpty);
+    });
+
+    test('has no other period', () {
+      expect(() => replication.feed(OsmReplicationPeriod.minute),
+          throwsArgumentError);
+    });
+  });
+
   group('api', () {
     Uint8List xml(String body) => Uint8List.fromList(
           utf8.encode('<?xml version="1.0"?><osm version="0.6">$body</osm>'),

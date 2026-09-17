@@ -84,13 +84,54 @@ class OsmReplication {
 
   final OsmFetch _fetch;
 
+  /// The one period a feed without a directory for each has, or null.
+  final OsmReplicationPeriod? only;
+
   /// Creates a client for the feeds under [base].
   OsmReplication({Uri? base, required OsmFetch fetch})
       : base = base ?? planet,
-        _fetch = fetch;
+        _fetch = fetch,
+        only = null;
+
+  /// Creates a client for a feed of one [period], laid out straight under
+  /// [base] rather than in a directory named for the period.
+  ///
+  /// That is how Geofabrik publishes the diffs of each of its extracts: a
+  /// day to a diff, made by comparing one day's extract with the next, so
+  /// they hold everything that entered or left the extract and nothing else.
+  /// For a country that is a few hundred kilobytes a day, against the
+  /// planet's gigabytes.
+  OsmReplication.single(
+    Uri base, {
+    required OsmReplicationPeriod period,
+    required OsmFetch fetch,
+  })  : base = base.path.endsWith('/')
+            ? base
+            : base.replace(path: '${base.path}/'),
+        _fetch = fetch,
+        only = period;
+
+  /// The feed of the extract Geofabrik publishes at [extract], such as
+  /// `australia-oceania/new-zealand`.
+  factory OsmReplication.geofabrik(String extract, {required OsmFetch fetch}) =>
+      OsmReplication.single(
+        Uri.parse('https://download.geofabrik.de/$extract-updates/'),
+        period: OsmReplicationPeriod.day,
+        fetch: fetch,
+      );
 
   /// The directory of one period's feed.
-  Uri feed(OsmReplicationPeriod period) => base.resolve('${period.name}/');
+  ///
+  /// Throws an [ArgumentError] for a period a single feed does not have.
+  Uri feed(OsmReplicationPeriod period) {
+    final one = only;
+    if (one == null) return base.resolve('${period.name}/');
+    if (period != one) {
+      throw ArgumentError.value(
+          period, 'period', 'The feed at $base only has ${one.name} diffs');
+    }
+    return base;
+  }
 
   /// Where diff [sequence] is kept, as the feed lays them out:
   /// 7289011 is `007/289/011`.

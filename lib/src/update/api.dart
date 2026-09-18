@@ -148,11 +148,25 @@ class OsmApi {
   /// it. Ways therefore arrive whole, which is what lets a box be drawn on
   /// its own without waiting for its neighbours.
   ///
+  /// Completing [abandon] gives up on the answer, which matters here more
+  /// than anywhere else: a box stops being wanted the moment the map is moved
+  /// off it, and a box being read is holding a turn that the box now on
+  /// screen could be using.
+  ///
+  /// Giving up does not always throw the answer away. If the server had
+  /// already begun replying, the elements arrive at [onLate] once they are
+  /// all in, so a box that was scrolled off can still be kept rather than
+  /// asked for again later.
+  ///
   /// Throws [OsmTooMuchDataException] if the box covers more than
   /// [OsmCapabilities.maximumArea] or holds more elements than the API will
   /// answer with at once. Ask for a smaller box, or four quarters of this
-  /// one.
-  Future<List<OsmElement>> map(OsmBounds bounds) async {
+  /// one. Throws [OsmAbandonedException] if it was given up on.
+  Future<List<OsmElement>> map(
+    OsmBounds bounds, {
+    Future<void>? abandon,
+    void Function(List<OsmElement> elements)? onLate,
+  }) async {
     final uri = base.resolve('map').replace(queryParameters: {
       'bbox': [
         bounds.minLongitude,
@@ -164,7 +178,13 @@ class OsmApi {
     requests++;
     final Uint8List? body;
     try {
-      body = await _fetch(uri);
+      body = await _fetch(
+        uri,
+        abandon: abandon,
+        onLate: onLate == null
+            ? null
+            : (late) => onLate(OsmXmlFile.parse(utf8.decode(late))),
+      );
     } on OsmHttpException catch (e) {
       if (e.status == HttpStatus.badRequest) {
         throw OsmTooMuchDataException(bounds, 'the API refused the box');

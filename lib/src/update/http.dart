@@ -5,7 +5,22 @@ import 'dart:typed_data';
 import '../version.g.dart';
 
 /// Fetches a URL's body, or null if the server says there is nothing there.
-typedef OsmFetch = Future<Uint8List?> Function(Uri uri);
+///
+/// Completing [abandon] says the answer is no longer wanted: the call throws
+/// [OsmAbandonedException] and stops holding a turn, so whatever is wanted
+/// now can go instead.
+///
+/// What happens to the answer depends on how far it had got. Before the
+/// server has begun replying, the request is torn down, which saves it the
+/// work. Once it has begun, the work is already done and the rest is a few
+/// kilobytes, so the body is read to the end and handed to [onLate] rather
+/// than thrown away. Whoever asked can keep it even though they stopped
+/// waiting for it.
+typedef OsmFetch = Future<Uint8List?> Function(
+  Uri uri, {
+  Future<void>? abandon,
+  void Function(Uint8List body)? onLate,
+});
 
 /// Thrown when a server answers with something other than the body or a
 /// plain not found.
@@ -24,6 +39,18 @@ class OsmHttpException implements IOException {
 
   @override
   String toString() => 'OsmHttpException: $status from $uri';
+}
+
+/// Thrown when a fetch is given up on before it finished.
+///
+/// Not a failure: whoever asked stopped wanting the answer. Nothing is
+/// retried and nothing is held against the server.
+class OsmAbandonedException implements IOException {
+  /// Creates the exception.
+  const OsmAbandonedException();
+
+  @override
+  String toString() => 'OsmAbandonedException';
 }
 
 /// A fetch over HTTP that says who is asking and waits its turn.
@@ -45,12 +72,24 @@ OsmFetch httpFetch({String? contact, int concurrency = 2}) {
         : 'osm.dart/$packageVersion ($contact)';
   final turnstile = _Turnstile(concurrency);
 
-  return (uri) async {
+  return (uri, {abandon, onLate}) async {
+    var abandoned = false;
+    if (abandon != null) {
+      unawaited(abandon.then((_) => abandoned = true));
+    }
+
     // A long download meets a dropped connection sooner or later. Try again a
     // few times, waiting longer each time, before giving up on it.
     for (var attempt = 1;; attempt++) {
+      if (abandoned) throw const OsmAbandonedException();
       try {
-        return await turnstile.run(() => _get(client, uri));
+        return await turnstile.run(() {
+          // Waiting for a turn can take longer than the answer is wanted for.
+          if (abandoned) throw const OsmAbandonedException();
+          return _get(client, uri, abandon, onLate);
+        });
+      } on OsmAbandonedException {
+        rethrow;
       } on OsmHttpException catch (e) {
         if (attempt >= _attempts) rethrow;
         if (_backOff.contains(e.status)) {
@@ -128,9 +167,36 @@ class _Turnstile {
   }
 }
 
-Future<Uint8List?> _get(HttpClient client, Uri uri) async {
+Future<Uint8List?> _get(
+  HttpClient client,
+  Uri uri,
+  Future<void>? abandon,
+  void Function(Uint8List body)? onLate,
+) async {
   final request = await client.getUrl(uri);
-  final response = await request.close();
+
+  // Until the server starts replying, giving up means tearing the request
+  // down: the answer has not been worked out yet, so nobody has to.
+  var replying = false;
+  var abandoned = false;
+  if (abandon != null) {
+    unawaited(
+      abandon.then((_) {
+        abandoned = true;
+        if (!replying) request.abort(const OsmAbandonedException());
+      }),
+    );
+  }
+
+  final HttpClientResponse response;
+  try {
+    response = await request.close();
+  } on Object {
+    if (abandoned) throw const OsmAbandonedException();
+    rethrow;
+  }
+  replying = true;
+
   if (response.statusCode == HttpStatus.notFound ||
       response.statusCode == HttpStatus.gone) {
     await response.drain<void>();
@@ -141,10 +207,44 @@ Future<Uint8List?> _get(HttpClient client, Uri uri) async {
     throw OsmHttpException(
       uri,
       response.statusCode,
-      retryAfter:
-          _retryAfter(response.headers.value(HttpHeaders.retryAfterHeader)),
+      retryAfter: _retryAfter(
+        response.headers.value(HttpHeaders.retryAfterHeader),
+      ),
     );
   }
+
+  final reading = _collect(response);
+  if (abandon == null) return reading;
+
+  // From here the answer is on its way. Giving up stops the waiting and
+  // frees the turn, and the body is still read to the end so that whoever
+  // asked can keep what the server already went to the trouble of making.
+  final settled = Completer<Uint8List?>();
+  unawaited(
+    reading.then(
+      (body) {
+        if (settled.isCompleted) {
+          if (body != null) onLate?.call(body);
+        } else {
+          settled.complete(body);
+        }
+      },
+      onError: (Object error, StackTrace trace) {
+        if (!settled.isCompleted) settled.completeError(error, trace);
+      },
+    ),
+  );
+  unawaited(
+    abandon.then((_) {
+      if (!settled.isCompleted) {
+        settled.completeError(const OsmAbandonedException());
+      }
+    }),
+  );
+  return settled.future;
+}
+
+Future<Uint8List?> _collect(HttpClientResponse response) async {
   final bytes = BytesBuilder(copy: false);
   await for (final chunk in response) {
     bytes.add(chunk);

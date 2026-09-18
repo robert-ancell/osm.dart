@@ -70,12 +70,10 @@ void main() {
     final wanted = {for (var i = 1; i <= _elements; i += 7) i};
     final filter = OsmFilter.ids(OsmElementType.node, wanted);
 
-    final onWorkers =
-        await file.elements(filter: filter, isolates: 4).toList();
+    final onWorkers = await file.elements(filter: filter, isolates: 4).toList();
     final here = await file.elements(filter: filter, isolates: 1).toList();
 
-    expect(onWorkers.map((e) => e.id).toList(),
-        here.map((e) => e.id).toList());
+    expect(onWorkers.map((e) => e.id).toList(), here.map((e) => e.id).toList());
     expect(onWorkers, hasLength(wanted.length));
   });
 }

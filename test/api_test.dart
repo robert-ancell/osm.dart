@@ -14,7 +14,11 @@ class _Api {
 
   _Api({this.answers = const {}, this.refuse = const {}});
 
-  Future<Uint8List?> fetch(Uri uri) async {
+  Future<Uint8List?> fetch(
+    Uri uri, {
+    Future<void>? abandon,
+    void Function(Uint8List body)? onLate,
+  }) async {
     asked.add(uri);
     final key =
         '${uri.path.split('/').last}${uri.hasQuery ? '?${uri.query}' : ''}';

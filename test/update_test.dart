@@ -17,7 +17,11 @@ class _Feed {
 
   _Feed({required this.minutes, this.hours = const {}, this.diffs = const {}});
 
-  Future<Uint8List?> fetch(Uri uri) async {
+  Future<Uint8List?> fetch(
+    Uri uri, {
+    Future<void>? abandon,
+    void Function(Uint8List body)? onLate,
+  }) async {
     asked.add(uri);
     final path = uri.path;
     for (final (name, times) in [('minute', minutes), ('hour', hours)]) {
@@ -196,7 +200,11 @@ void main() {
     final days = {
       for (var s = 4900; s <= 4911; s++) s: _t0.add(Duration(days: s - 4900)),
     };
-    Future<Uint8List?> fetch(Uri uri) async {
+    Future<Uint8List?> fetch(
+      Uri uri, {
+      Future<void>? abandon,
+      void Function(Uint8List body)? onLate,
+    }) async {
       final path = uri.path;
       if (!path.startsWith('/australia-oceania/new-zealand-updates/')) {
         return null;
@@ -260,7 +268,7 @@ void main() {
 
     test("lists a mapper's changesets since a moment", () async {
       late Uri asked;
-      final api = OsmApi(fetch: (uri) async {
+      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
         asked = uri;
         return xml(
           '<changeset id="12" created_at="2026-09-17T08:00:00Z" '
@@ -289,7 +297,7 @@ void main() {
 
     test('and pages through more than the API lists at once', () async {
       final asked = <Uri>[];
-      final api = OsmApi(fetch: (uri) async {
+      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
         asked.add(uri);
         final before = uri.queryParameters['time']!.split(',').skip(1);
         // 150 changesets, an hour apart, the newest first; 100 a page.
@@ -314,7 +322,7 @@ void main() {
     });
 
     test('says when there is no such mapper', () async {
-      final api = OsmApi(fetch: (uri) async => null);
+      final api = OsmApi(fetch: (uri, {abandon, onLate}) async => null);
       await expectLater(
         api.changesetsBy('Nobody', since: DateTime.utc(2026)),
         throwsA(isA<OsmHttpException>()),
@@ -323,7 +331,7 @@ void main() {
 
     test('reads what a changeset changed', () async {
       late Uri asked;
-      final api = OsmApi(fetch: (uri) async {
+      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
         asked = uri;
         return Uint8List.fromList(utf8.encode(
           '<osmChange version="0.6">'
@@ -344,7 +352,7 @@ void main() {
 
     test('looks nodes up, leaving out the deleted', () async {
       final api = OsmApi(
-        fetch: (uri) async => xml(
+        fetch: (uri, {abandon, onLate}) async => xml(
           '<node id="1" visible="true" version="3" lat="-41.1" lon="174.1">'
           '<tag k="a" v="b"/></node>'
           '<node id="2" visible="false" version="4"/>',
@@ -359,7 +367,7 @@ void main() {
     test('halves a batch refused for an id that never existed', () async {
       final asked = <String>[];
       final api = OsmApi(
-        fetch: (uri) async {
+        fetch: (uri, {abandon, onLate}) async {
           final ids = uri.queryParameters['nodes']!.split(',').map(int.parse);
           asked.add(ids.join(','));
           if (ids.contains(999)) return null;
@@ -377,7 +385,7 @@ void main() {
 
     test('looks up the ways of a node', () async {
       final api = OsmApi(
-        fetch: (uri) async {
+        fetch: (uri, {abandon, onLate}) async {
           expect(uri.path, endsWith('/node/5/ways'));
           return xml(
             '<way id="50" visible="true" version="2">'
@@ -539,7 +547,7 @@ void main() {
         },
       );
       final api = OsmApi(
-        fetch: (uri) async => Uint8List.fromList(
+        fetch: (uri, {abandon, onLate}) async => Uint8List.fromList(
           utf8.encode(
             '<osm version="0.6"><node id="77000001" visible="true" '
             'version="5" lat="0.51" lon="0.51"/></osm>',
@@ -578,7 +586,8 @@ void main() {
         updateOsmSnapshot(
           input: path,
           output: '${_work.path}/out.osm.pbf',
-          replication: OsmReplication(fetch: (_) async => null),
+          replication:
+              OsmReplication(fetch: (_, {abandon, onLate}) async => null),
           cache: _work,
         ),
         throwsStateError,

@@ -39,3 +39,9 @@
   entity tag to ask a bounding box with, so a held copy is checked by asking
   what has been edited near it instead.
 * `OsmBounds.intersects`.
+* `OsmFetch` takes an `abandon` future. Completing it gives up on a request:
+  before the server has begun replying it is torn down, and once it has, the
+  body is still read to the end and handed to `onLate` rather than wasted.
+  Either way the call throws `OsmAbandonedException` at once and stops holding
+  a turn, so what is wanted now can go instead. `OsmApi.map` passes both
+  through.

@@ -27,3 +27,10 @@
   edits in ahead of the diffs.
 * `OsmXmlFile` for reading OSM XML, and `OsmRegion` for the ground a
   snapshot covers.
+* `OsmApi.map` for everything inside a bounding box, which is what an editor
+  draws, and `OsmApi.capabilities` for the limits the server itself declares.
+  A box the API will not answer raises `OsmTooMuchDataException`, which is
+  asking for a smaller one rather than an error.
+* `httpFetch` keeps at most `concurrency` requests in flight and stops sending
+  altogether while a server answers too many requests, service unavailable or
+  bandwidth exceeded, for as long as its `Retry-After` asks.

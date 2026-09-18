@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import '../bounds.dart';
 import '../element.dart';
 import '../xml/change.dart';
 import '../xml/osm_xml.dart';
@@ -38,6 +40,60 @@ class OsmChangeset {
       '${isOpen ? ', open' : ''})';
 }
 
+/// What the API says it will and will not do.
+///
+/// Worth asking for rather than assuming: the limits differ between the live
+/// API and the development server, and they have changed before.
+class OsmCapabilities {
+  /// The largest bounding box a map call will answer, in square degrees.
+  final double maximumArea;
+
+  /// The most nodes a single way may have.
+  final int maximumWayNodes;
+
+  /// How long the API will spend on one request before giving up.
+  final Duration timeout;
+
+  /// Whether the API is taking requests at all. It is turned off for
+  /// maintenance, and asked to be left alone while it is.
+  final bool online;
+
+  /// Whether the API is taking edits, which stops before reading does.
+  final bool writable;
+
+  /// Creates a description of an API.
+  const OsmCapabilities({
+    required this.maximumArea,
+    required this.maximumWayNodes,
+    required this.timeout,
+    required this.online,
+    required this.writable,
+  });
+
+  @override
+  String toString() => 'OsmCapabilities(area $maximumArea, '
+      '${online ? 'online' : 'offline'})';
+}
+
+/// Thrown when the API will not answer for a bounding box because it covers
+/// too much ground or holds too much data.
+///
+/// Which of the two it is does not change what can be done about it, which is
+/// to ask for less at a time.
+class OsmTooMuchDataException implements IOException {
+  /// The box that was refused.
+  final OsmBounds bounds;
+
+  /// What the API said about it.
+  final String reason;
+
+  /// Creates an exception for a box the API would not answer.
+  const OsmTooMuchDataException(this.bounds, this.reason);
+
+  @override
+  String toString() => 'OsmTooMuchDataException: $reason';
+}
+
 /// How many changesets the API lists at once, at most.
 const int _changesetPage = 100;
 
@@ -45,12 +101,18 @@ const int _changesetPage = 100;
 /// have, eleven digits and a comma apiece.
 const int _batch = 500;
 
-/// The parts of OpenStreetMap's editing API that look elements up.
+/// The parts of OpenStreetMap's editing API that read.
 ///
-/// For what a set of changes cannot supply: the nodes of a way reaching past
-/// the edge of a snapshot, and the ways using a node that moved in. The API
-/// is run on donated hardware for editing, not for bulk reads, so this asks
-/// for as little as it can, one request at a time.
+/// Enough to draw a map and to edit it: [map] for everything in a box, and
+/// the rest for what a set of changes cannot supply on its own, such as the
+/// nodes of a way reaching past the edge of a snapshot or the ways using a
+/// node that moved in.
+///
+/// The API runs on donated hardware and is meant for editing rather than for
+/// bulk reads. Ask for no more than is being looked at, keep what comes back
+/// rather than asking twice, and use a fetch that limits how many requests
+/// are in flight and stops when the server asks it to. [httpFetch] does the
+/// last of those.
 class OsmApi {
   /// The API's own address.
   static final Uri openStreetMap = Uri.parse(
@@ -69,6 +131,85 @@ class OsmApi {
   OsmApi({Uri? base, required OsmFetch fetch})
       : base = base ?? openStreetMap,
         _fetch = fetch;
+
+  /// Everything OpenStreetMap holds inside [bounds].
+  ///
+  /// This is the call every editor is built on. It answers with the nodes in
+  /// the box, the ways any of them belong to, the rest of the nodes of those
+  /// ways even where they fall outside the box, and the relations over any of
+  /// it. Ways therefore arrive whole, which is what lets a box be drawn on
+  /// its own without waiting for its neighbours.
+  ///
+  /// Throws [OsmTooMuchDataException] if the box covers more than
+  /// [OsmCapabilities.maximumArea] or holds more elements than the API will
+  /// answer with at once. Ask for a smaller box, or four quarters of this
+  /// one.
+  Future<List<OsmElement>> map(OsmBounds bounds) async {
+    final uri = base.resolve('map').replace(queryParameters: {
+      'bbox': [
+        bounds.minLongitude,
+        bounds.minLatitude,
+        bounds.maxLongitude,
+        bounds.maxLatitude,
+      ].join(','),
+    });
+    requests++;
+    final Uint8List? body;
+    try {
+      body = await _fetch(uri);
+    } on OsmHttpException catch (e) {
+      if (e.status == HttpStatus.badRequest) {
+        throw OsmTooMuchDataException(bounds, 'the API refused the box');
+      }
+      rethrow;
+    }
+    // An empty box is answered with an empty document, not a not found, so
+    // nothing here means the ocean rather than a mistake.
+    if (body == null) return const [];
+    return OsmXmlFile.parse(utf8.decode(body));
+  }
+
+  /// What this API will answer.
+  Future<OsmCapabilities> capabilities() async {
+    final uri = base.resolve('capabilities');
+    requests++;
+    final body = await _fetch(uri);
+    if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
+    return _capabilities(utf8.decode(body));
+  }
+
+  static OsmCapabilities _capabilities(String xml) {
+    var area = 0.25;
+    var wayNodes = 2000;
+    var timeout = const Duration(seconds: 300);
+    var online = true;
+    var writable = true;
+    readXml(
+      xml,
+      onOpen: (name, attributes) {
+        switch (name) {
+          case 'area':
+            area = double.tryParse(attributes['maximum'] ?? '') ?? area;
+          case 'waynodes':
+            wayNodes = int.tryParse(attributes['maximum'] ?? '') ?? wayNodes;
+          case 'timeout':
+            final seconds = int.tryParse(attributes['seconds'] ?? '');
+            if (seconds != null) timeout = Duration(seconds: seconds);
+          case 'status':
+            online = attributes['api'] != 'offline';
+            writable = attributes['api'] == 'online';
+        }
+      },
+      onClose: (_) {},
+    );
+    return OsmCapabilities(
+      maximumArea: area,
+      maximumWayNodes: wayNodes,
+      timeout: timeout,
+      online: online,
+      writable: writable,
+    );
+  }
 
   /// The nodes with [ids] that still exist.
   ///

@@ -24,12 +24,20 @@ class OsmChangeset {
   /// How many changes it holds so far.
   final int changesCount;
 
+  /// The ground the changeset touched, or null if it touched nothing.
+  ///
+  /// This is the box around everything it changed, so a changeset that moved
+  /// one node in Auckland and fixed a typo in Dunedin covers the whole
+  /// country. Useful for ruling areas out, not for ruling them in.
+  final OsmBounds? bounds;
+
   /// Creates a changeset.
   const OsmChangeset({
     required this.id,
     required this.createdAt,
     required this.closedAt,
     required this.changesCount,
+    this.bounds,
   });
 
   /// Whether it can still take more changes.
@@ -268,8 +276,12 @@ class OsmApi {
       final body = await _fetch(uri);
       if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
       final page = _changesets(utf8.decode(body));
+      final held = found.length;
       found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
       if (page.length < _changesetPage) break;
+      // A full page that holds nothing new means the next request would be
+      // the one just made. Stop rather than ask for it forever.
+      if (found.length == held) break;
       // The rest were opened no later than the oldest of these. A second
       // on, so one opened in the same second is not missed; the ones seen
       // twice are left out above.
@@ -290,6 +302,10 @@ class OsmApi {
         final id = int.tryParse(attributes['id'] ?? '');
         final created = DateTime.tryParse(attributes['created_at'] ?? '');
         if (id == null || created == null) return;
+        final minLatitude = double.tryParse(attributes['min_lat'] ?? '');
+        final minLongitude = double.tryParse(attributes['min_lon'] ?? '');
+        final maxLatitude = double.tryParse(attributes['max_lat'] ?? '');
+        final maxLongitude = double.tryParse(attributes['max_lon'] ?? '');
         found.add(OsmChangeset(
           id: id,
           createdAt: created.toUtc(),
@@ -297,11 +313,71 @@ class OsmApi {
               ? null
               : DateTime.tryParse(attributes['closed_at'] ?? '')?.toUtc(),
           changesCount: int.tryParse(attributes['changes_count'] ?? '') ?? 0,
+          bounds: minLatitude == null ||
+                  minLongitude == null ||
+                  maxLatitude == null ||
+                  maxLongitude == null
+              ? null
+              : OsmBounds(
+                  minLatitude: minLatitude,
+                  minLongitude: minLongitude,
+                  maxLatitude: maxLatitude,
+                  maxLongitude: maxLongitude,
+                ),
         ));
       },
       onClose: (_) {},
     );
     return found;
+  }
+
+  /// The changesets that touched [bounds] and closed after [since], newest
+  /// first.
+  ///
+  /// What a held copy of an area is checked against. The API will not say
+  /// whether a box has changed, and holds no entity tag to ask with, so the
+  /// question has to be turned around: rather than asking whether this area
+  /// is still current, ask what has been edited near it.
+  ///
+  /// Answers are capped at [limit] changesets. More than that means the copy
+  /// is too far behind to patch and is better read again.
+  Future<List<OsmChangeset>?> changesetsIn(
+    OsmBounds bounds, {
+    required DateTime since,
+    int limit = 500,
+  }) async {
+    final found = <OsmChangeset>[];
+    DateTime? before;
+    while (found.length < limit) {
+      final uri = base.resolve('changesets').replace(queryParameters: {
+        'bbox': [
+          bounds.minLongitude,
+          bounds.minLatitude,
+          bounds.maxLongitude,
+          bounds.maxLatitude,
+        ].join(','),
+        'time': [
+          since.toUtc().toIso8601String(),
+          if (before != null) before.toUtc().toIso8601String(),
+        ].join(','),
+        'limit': '$_changesetPage',
+      });
+      requests++;
+      final body = await _fetch(uri);
+      if (body == null) return found;
+      final page = _changesets(utf8.decode(body));
+      final held = found.length;
+      found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
+      if (page.length < _changesetPage) return found;
+      // A full page that holds nothing new means the next request would be
+      // the one just made, so there is no way to get any further.
+      if (found.length == held) return null;
+      before = page
+          .map((c) => c.createdAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b)
+          .add(const Duration(seconds: 1));
+    }
+    return null;
   }
 
   /// The changes changeset [id] made, in the order it made them.

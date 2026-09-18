@@ -27,6 +27,13 @@ class OsmBounds {
       longitude >= minLongitude &&
       longitude <= maxLongitude;
 
+  /// Whether the two areas share any ground, edges included.
+  bool intersects(OsmBounds other) =>
+      minLatitude <= other.maxLatitude &&
+      maxLatitude >= other.minLatitude &&
+      minLongitude <= other.maxLongitude &&
+      maxLongitude >= other.minLongitude;
+
   @override
   String toString() =>
       'OsmBounds($minLatitude, $minLongitude, $maxLatitude, $maxLongitude)';

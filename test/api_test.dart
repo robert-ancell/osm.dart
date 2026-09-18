@@ -143,4 +143,62 @@ void main() {
     await api.map(_bounds);
     expect(api.requests, 3);
   });
+  test('reads the ground a changeset touched', () async {
+    final server = _Api(answers: {'changesets': _changesets});
+    final found = await OsmApi(fetch: server.fetch)
+        .changesetsIn(_bounds, since: DateTime.utc(2026));
+    expect(found, isNotNull);
+    expect(found!.length, 2);
+    expect(found.first.bounds!.minLatitude, -36.848);
+    expect(found.last.bounds, isNull);
+  });
+
+  test('asks for changesets over the box and since the time', () async {
+    final server = _Api(answers: {'changesets': _changesets});
+    await OsmApi(fetch: server.fetch)
+        .changesetsIn(_bounds, since: DateTime.utc(2026, 9, 16));
+    final query = server.asked.single.queryParameters;
+    expect(query['bbox'], '174.76,-36.85,174.77,-36.84');
+    expect(query['time'], '2026-09-16T00:00:00.000Z');
+  });
+
+  test('gives up on an area with more changesets than it will take', () async {
+    final server = _Api(answers: {'changesets': _fullPage});
+    final found = await OsmApi(fetch: server.fetch)
+        .changesetsIn(_bounds, since: DateTime.utc(2026), limit: 150);
+    // Every page comes back full, so there is no end to reach: the area is
+    // too far behind to patch and has to be read again instead.
+    expect(found, isNull);
+  });
 }
+
+const _changesets = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6">
+  <changeset id="1" created_at="2026-09-18T06:59:56Z" open="false"
+    closed_at="2026-09-18T07:59:57Z" changes_count="3"
+    min_lat="-36.848" min_lon="174.754" max_lat="-36.847" max_lon="174.755"/>
+  <changeset id="2" created_at="2026-09-17T06:59:56Z" open="false"
+    closed_at="2026-09-17T07:59:57Z" changes_count="1"/>
+</osm>
+''';
+
+/// A page with nothing left over, so the caller keeps asking for more.
+///
+/// Each changeset needs its own id and a created time a second apart, or the
+/// caller sees the same ones again and stops.
+String get _fullPage {
+  final buffer = StringBuffer('<osm version="0.6">');
+  for (var i = 0; i < 100; i++) {
+    final id = _served++;
+    final at = DateTime.utc(2026, 9, 18).subtract(Duration(seconds: id));
+    buffer.write(
+      '<changeset id="$id" created_at="${at.toIso8601String()}" '
+      'open="false" closed_at="${at.toIso8601String()}" changes_count="1"/>',
+    );
+  }
+  buffer.write('</osm>');
+  return buffer.toString();
+}
+
+int _served = 1;

@@ -34,3 +34,8 @@
 * `httpFetch` keeps at most `concurrency` requests in flight and stops sending
   altogether while a server answers too many requests, service unavailable or
   bandwidth exceeded, for as long as its `Retry-After` asks.
+* `OsmApi.changesetsIn` for what has been edited over an area since a time,
+  and `OsmChangeset.bounds` for the ground each one touched. The API holds no
+  entity tag to ask a bounding box with, so a held copy is checked by asking
+  what has been edited near it instead.
+* `OsmBounds.intersects`.

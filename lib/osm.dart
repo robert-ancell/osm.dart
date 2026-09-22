@@ -6,6 +6,7 @@ export 'src/bounds.dart';
 export 'src/element.dart';
 export 'src/exception.dart';
 export 'src/filter.dart';
+export 'src/imagery.dart';
 export 'src/pbf/apply.dart';
 export 'src/pbf/exception.dart';
 export 'src/pbf/file.dart';

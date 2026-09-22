@@ -45,3 +45,7 @@
   Either way the call throws `OsmAbandonedException` at once and stops holding
   a turn, so what is wanted now can go instead. `OsmApi.map` passes both
   through.
+* `OsmImageryIndex` for the editor layer index, the list of background imagery
+  editors share, with the ground each layer covers, what it asks to be
+  credited as, and which the index says to prefer. Layers that cannot be asked
+  for a tile at a time are left out.

@@ -49,3 +49,9 @@
   editors share, with the ground each layer covers, what it asks to be
   credited as, and which the index says to prefer. Layers that cannot be asked
   for a tile at a time are left out.
+* `OsmTile` and `Mercator` for the tile numbering and projection everything
+  served a piece at a time uses.
+* `OsmTileCache` for holding boxes of data on disk between runs, and
+  `OsmImageryCache` and `OsmImageryTiles` for fetching and holding imagery
+  tiles, including remembering ground a layer has nothing for.
+  `OsmImageryIndexFile` reads the editor layer index and keeps a copy.

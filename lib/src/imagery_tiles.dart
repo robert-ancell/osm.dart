@@ -49,6 +49,10 @@ class OsmImageryTiles {
   /// would be wasted.
   bool isEmptyAt(OsmTile tile) => cache?.entry(tile)?.missing ?? false;
 
+  /// Whether what is held for [tile] is old enough to be worth fetching
+  /// again, which a caller holding a decoded copy has no other way to tell.
+  bool isStaleAt(OsmTile tile) => cache?.entry(tile)?.isStale ?? false;
+
   /// The tile as the server sends it, or null where the source has nothing.
   ///
   /// A tile already held and still within [osmImageryFreshness] is given back

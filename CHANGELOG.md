@@ -55,3 +55,6 @@
   `OsmImageryCache` and `OsmImageryTiles` for fetching and holding imagery
   tiles, including remembering ground a layer has nothing for.
   `OsmImageryIndexFile` reads the editor layer index and keeps a copy.
+* `OsmEdits` for changes made to a dataset, kept as a list so that they can be
+  undone one at a time. Nothing it holds touches what was read: what has been
+  changed is laid over the top.

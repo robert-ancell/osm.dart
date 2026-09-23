@@ -56,5 +56,8 @@
   tiles, including remembering ground a layer has nothing for.
   `OsmImageryIndexFile` reads the editor layer index and keeps a copy.
 * `OsmEdits` for changes made to a dataset, kept as a list so that they can be
-  undone one at a time. Nothing it holds touches what was read: what has been
-  changed is laid over the top.
+  undone one at a time: nodes moved, made and taken off the map, ways made,
+  and the nodes a way runs through changed. Nothing it holds touches what was
+  read: what has been changed is laid over the top. Deleting a node takes it
+  out of the ways through it as one change, so putting it back puts them back
+  with it.

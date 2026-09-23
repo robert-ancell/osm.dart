@@ -61,3 +61,5 @@
   read: what has been changed is laid over the top. Deleting a node takes it
   out of the ways through it as one change, so putting it back puts them back
   with it.
+* `OsmEdits.combineSince` gathers a run of changes into one, so that
+  something built a piece at a time is undone as the thing it became.

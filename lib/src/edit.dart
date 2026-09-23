@@ -104,6 +104,29 @@ class OsmWayNodesChanged extends OsmEdit {
   String toString() => 'OsmWayNodesChanged($id)';
 }
 
+/// Several changes that are one change to whoever made them.
+///
+/// Drawing a line is a node at a time and a way at the end of it, which is
+/// one thing done and should be one thing undone. While it is still being
+/// drawn its points come back one at a time; once it is finished it is a
+/// line, and a line is what is put back.
+class OsmEditGroup extends OsmEdit {
+  /// What was done, in the order it was done.
+  final List<OsmEdit> changes;
+
+  /// Creates a group.
+  const OsmEditGroup(this.changes);
+
+  @override
+  OsmElementType get type => changes.last.type;
+
+  @override
+  int get id => changes.last.id;
+
+  @override
+  String toString() => 'OsmEditGroup(${changes.length})';
+}
+
 /// A node moved to somewhere else.
 class OsmNodeMoved extends OsmEdit {
   /// Where it was.
@@ -289,11 +312,33 @@ class OsmEdits {
     onChanged?.call();
   }
 
+  /// Gathers everything done since [mark] into one change.
+  ///
+  /// [mark] is a [length] taken before the run of changes started. Nothing
+  /// happens if fewer than two changes have been made since, there being
+  /// nothing to gather.
+  void combineSince(int mark) {
+    if (mark < 0 || _done.length - mark < 2) return;
+    final gathered = _done.sublist(mark);
+    _done.removeRange(mark, _done.length);
+    _done.add(OsmEditGroup(gathered));
+    onChanged?.call();
+  }
+
   /// Undoes the last change, and says whether there was one to undo.
   bool undo() {
     if (_done.isEmpty) return false;
-    final last = _done.removeLast();
+    _undoOne(_done.removeLast());
+    onChanged?.call();
+    return true;
+  }
+
+  void _undoOne(OsmEdit last) {
     switch (last) {
+      case OsmEditGroup():
+        for (final change in last.changes.reversed) {
+          _undoOne(change);
+        }
       case OsmNodeMoved():
         _restoreNode(last.id);
       case OsmNodeCreated():
@@ -309,8 +354,6 @@ class OsmEdits {
       case OsmWayNodesChanged():
         _undoWay(last);
     }
-    onChanged?.call();
-    return true;
   }
 
   /// Puts a way back to however it ran before a change.

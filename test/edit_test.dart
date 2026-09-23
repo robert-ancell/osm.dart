@@ -124,6 +124,7 @@ void main() {
   });
 
   _more();
+  _groups();
 
   test('hands out a list of changes that cannot be written to', () {
     final edits = OsmEdits();
@@ -258,5 +259,75 @@ void _more() {
     expect(edits.changedWays, isEmpty);
     expect(edits.movedNodes, isEmpty);
     expect(edits.isGone(OsmElementType.node, _node.id), isFalse);
+  });
+}
+
+void _groups() {
+  group('changes made as one', () {
+    test('gathers what was done since a mark', () {
+      final edits = OsmEdits();
+      final mark = edits.length;
+      final first = edits.createNode(latitude: 0, longitude: 0);
+      final second = edits.createNode(latitude: 1, longitude: 1);
+      edits.createWay(nodeIds: [first.id, second.id]);
+      expect(edits.length, 3);
+
+      edits.combineSince(mark);
+      expect(edits.length, 1);
+      expect(edits.changes.single, isA<OsmEditGroup>());
+    });
+
+    test('undoes the whole of it at once', () {
+      final edits = OsmEdits();
+      final mark = edits.length;
+      final first = edits.createNode(latitude: 0, longitude: 0);
+      final second = edits.createNode(latitude: 1, longitude: 1);
+      final way = edits.createWay(nodeIds: [first.id, second.id]);
+      edits.combineSince(mark);
+
+      expect(edits.undo(), isTrue);
+      expect(edits.isEmpty, isTrue);
+      expect(edits.changedWay(way.id), isNull);
+      expect(edits.movedNode(first.id), isNull);
+      expect(edits.movedNode(second.id), isNull);
+    });
+
+    test('leaves what was done before the mark alone', () {
+      final edits = OsmEdits();
+      final kept = edits.createNode(latitude: 5, longitude: 5);
+      final mark = edits.length;
+      final first = edits.createNode(latitude: 0, longitude: 0);
+      edits.createWay(nodeIds: [first.id]);
+      edits.combineSince(mark);
+
+      edits.undo();
+      expect(edits.length, 1);
+      expect(edits.movedNode(kept.id), isNotNull);
+    });
+
+    test('gathers nothing when there is nothing to gather', () {
+      final edits = OsmEdits();
+      edits.createNode(latitude: 0, longitude: 0);
+      final mark = edits.length;
+      edits.combineSince(mark);
+      expect(edits.length, 1);
+      expect(edits.changes.single, isA<OsmNodeCreated>());
+
+      edits.createNode(latitude: 1, longitude: 1);
+      edits.combineSince(mark);
+      expect(edits.length, 2, reason: 'one change is not a group');
+    });
+
+    test('undoes a group of moves back to where things started', () {
+      const node = OsmNode(id: 1, latitude: 0, longitude: 0);
+      final edits = OsmEdits();
+      final mark = edits.length;
+      edits.moveNode(node, latitude: 1, longitude: 1);
+      edits.moveNode(node, latitude: 2, longitude: 2);
+      edits.combineSince(mark);
+
+      edits.undo();
+      expect(edits.movedNode(1), isNull);
+    });
   });
 }

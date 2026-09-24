@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
+import 'cached_files.dart';
 import 'presets.dart';
 import 'update/http.dart';
 
@@ -42,84 +42,21 @@ abstract final class OsmPresetsFile {
     required OsmFetch fetch,
     String language = 'en',
     Uri? from,
-  }) async {
-    final files = filesFor(language);
-    final held = await _held(directory, files);
-    if (held != null) return held;
-
-    try {
-      final base = from ?? Uri.parse(osmPresetsUrl);
-      final fetched = <String>[];
-      for (final file in files) {
-        final body = await fetch(base.resolve(file));
-        if (body == null) throw const FormatException('missing');
-        fetched.add(utf8.decode(body));
-      }
-      final presets = await _parse(fetched);
-      if (presets.byId.isNotEmpty) {
-        await _keep(directory, files, fetched);
-        return presets;
-      }
-    } on IOException {
-      // No network, or the schema has moved.
-    } on FormatException {
-      // A file missing, or something that is not the schema at all.
-    }
-
-    return _held(directory, files, however: true);
-  }
-
-  static Future<OsmPresets> _parse(List<String> files) => Isolate.run(
-        () => OsmPresets.parse(
-          presets: files[0],
-          categories: files[1],
-          defaults: files[2],
-          translations: files[3],
+  }) =>
+      readCachedFiles(
+        directory: directory,
+        files: filesFor(language),
+        from: from ?? Uri.parse(osmPresetsUrl),
+        fetch: fetch,
+        freshness: osmPresetsFreshness,
+        parse: (files) => Isolate.run(
+          () => OsmPresets.parse(
+            presets: files[0],
+            categories: files[1],
+            defaults: files[2],
+            translations: files[3],
+          ),
         ),
+        isEmpty: (presets) => presets.byId.isEmpty,
       );
-
-  /// The copy on disk, or null if there is none worth using.
-  ///
-  /// Set [however] to take one whatever its age, which is what happens when
-  /// the network cannot be reached.
-  static Future<OsmPresets?> _held(
-    Directory directory,
-    List<String> files, {
-    bool however = false,
-  }) async {
-    try {
-      final held = [for (final file in files) File('${directory.path}/$file')];
-      if (!held.every((file) => file.existsSync())) return null;
-      if (!however) {
-        final age = DateTime.now().difference(await held.first.lastModified());
-        if (age > osmPresetsFreshness) return null;
-      }
-      final presets = await _parse([
-        for (final file in held) await file.readAsString(),
-      ]);
-      return presets.byId.isEmpty ? null : presets;
-    } on IOException {
-      return null;
-    } on FormatException {
-      return null;
-    }
-  }
-
-  /// Keeps a set of files, the presets last: they are what says how old the
-  /// copy is, so they are only written once everything else is there.
-  static Future<void> _keep(
-    Directory directory,
-    List<String> files,
-    List<String> bodies,
-  ) async {
-    try {
-      for (var i = files.length - 1; i >= 0; i--) {
-        final file = File('${directory.path}/${files[i]}');
-        await file.parent.create(recursive: true);
-        await file.writeAsString(bodies[i]);
-      }
-    } on IOException {
-      // Being unable to keep it costs a fetch next time, nothing more.
-    }
-  }
 }

@@ -1,100 +1,19 @@
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
-/// Data as it was read, with the edits laid over it.
-class _View implements OsmEditView {
-  @override
-  final edits = OsmEdits();
-
-  final Map<int, OsmNode> nodes;
-  final Map<int, OsmWay> ways;
-  final Map<int, OsmRelation> relations;
-
-  _View({
-    required List<OsmNode> nodes,
-    List<OsmWay> ways = const [],
-    List<OsmRelation> relations = const [],
-  })  : nodes = {for (final n in nodes) n.id: n},
-        ways = {for (final w in ways) w.id: w},
-        relations = {for (final r in relations) r.id: r};
-
-  @override
-  OsmNode? node(int id) => edits.isGone(OsmElementType.node, id)
-      ? null
-      : edits.changedNode(id) ?? nodes[id];
-
-  @override
-  OsmWay? way(int id) => edits.isGone(OsmElementType.way, id)
-      ? null
-      : edits.changedWay(id) ?? ways[id];
-
-  @override
-  OsmRelation? relation(int id) => edits.isGone(OsmElementType.relation, id)
-      ? null
-      : edits.changedRelation(id) ?? relations[id];
-
-  Iterable<OsmWay> get _allWays => {
-        ...ways.keys,
-        ...edits.changedWays.keys,
-      }.map(way).whereType<OsmWay>();
-
-  Iterable<OsmRelation> get _allRelations => {
-        ...relations.keys,
-        ...edits.changedRelations.keys,
-      }.map(relation).whereType<OsmRelation>();
-
-  @override
-  List<OsmWay> waysUsing(int nodeId) => [
-        for (final way in _allWays)
-          if (way.nodeIds.contains(nodeId)) way,
-      ];
-
-  @override
-  List<OsmRelation> relationsUsing(OsmElementType type, int id) => [
-        for (final relation in _allRelations)
-          if (relation.members.any((m) => m.type == type && m.ref == id))
-            relation,
-      ];
-
-  @override
-  OsmGeometry geometryOf(OsmElement element) => switch (element) {
-        OsmNode() => waysUsing(element.id).isEmpty
-            ? OsmGeometry.point
-            : OsmGeometry.vertex,
-        OsmWay() => element.isClosed &&
-                element.tags['area'] != 'no' &&
-                (element.tags.containsKey('building') ||
-                    element.tags['area'] == 'yes')
-            ? OsmGeometry.area
-            : OsmGeometry.line,
-        OsmRelation() => OsmGeometry.relation,
-      };
-}
-
-OsmNode _node(int id, double latitude, double longitude,
-        [Map<String, String> tags = const {}]) =>
-    OsmNode(
-      id: id,
-      latitude: latitude,
-      longitude: longitude,
-      tags: tags,
-      info: const OsmInfo(version: 1),
-    );
-
-OsmWay _way(int id, List<int> nodes, [Map<String, String> tags = const {}]) =>
-    OsmWay(id: id, nodeIds: nodes, tags: tags, info: const OsmInfo(version: 1));
+import 'test_view.dart';
 
 /// A road of three nodes, west to east, with a side road off its middle.
-_View _roads() => _View(
+TestView _roads() => TestView(
       nodes: [
-        _node(1, 0, 0),
-        _node(2, 0, 0.001, {'highway': 'crossing'}),
-        _node(3, 0, 0.002),
-        _node(4, 0.001, 0.001),
+        testNode(1, 0, 0),
+        testNode(2, 0, 0.001, {'highway': 'crossing'}),
+        testNode(3, 0, 0.002),
+        testNode(4, 0.001, 0.001),
       ],
       ways: [
-        _way(10, [1, 2, 3], {'highway': 'residential'}),
-        _way(11, [2, 4], {'highway': 'service'}),
+        testWay(10, [1, 2, 3], {'highway': 'residential'}),
+        testWay(11, [2, 4], {'highway': 'service'}),
       ],
     );
 
@@ -111,13 +30,13 @@ void main() {
     });
 
     test('keeps a node of a deleted way that says something', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0),
-          _node(2, 0, 0.001, {'barrier': 'gate'}),
+          testNode(1, 0, 0),
+          testNode(2, 0, 0.001, {'barrier': 'gate'}),
         ],
         ways: [
-          _way(10, [1, 2], {'highway': 'track'}),
+          testWay(10, [1, 2], {'highway': 'track'}),
         ],
       );
       OsmDelete(view, [view.way(10)!]).apply();
@@ -126,13 +45,13 @@ void main() {
     });
 
     test('keeps a node of a deleted way that only says where it came from', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0, {'source': 'survey'}),
-          _node(2, 0, 0.001),
+          testNode(1, 0, 0, {'source': 'survey'}),
+          testNode(2, 0, 0.001),
         ],
         ways: [
-          _way(10, [1, 2], {'highway': 'track'}),
+          testWay(10, [1, 2], {'highway': 'track'}),
         ],
       );
       OsmDelete(view, [view.way(10)!]).apply();
@@ -148,8 +67,8 @@ void main() {
     });
 
     test('deletes a relation left with no members', () {
-      final view = _View(
-        nodes: [_node(1, 0, 0)],
+      final view = TestView(
+        nodes: [testNode(1, 0, 0)],
         relations: [
           const OsmRelation(
             id: 20,
@@ -199,8 +118,8 @@ void main() {
     });
 
     test('will not delete something with a Wikidata tag', () {
-      final view = _View(nodes: [
-        _node(1, 0, 0, {'wikidata': 'Q1'})
+      final view = TestView(nodes: [
+        testNode(1, 0, 0, {'wikidata': 'Q1'})
       ]);
       expect(OsmDelete(view, [view.node(1)!]).disabled, 'has_wikidata_tag');
     });
@@ -217,10 +136,10 @@ void main() {
 
   group('reversing', () {
     test('turns a line round, and its tags with it', () {
-      final view = _View(
-        nodes: [_node(1, 0, 0), _node(2, 0, 0.001)],
+      final view = TestView(
+        nodes: [testNode(1, 0, 0), testNode(2, 0, 0.001)],
         ways: [
-          _way(10, [
+          testWay(10, [
             1,
             2
           ], {
@@ -249,13 +168,13 @@ void main() {
     });
 
     test('turns round the nodes along a line, but not their bearings', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0, {'direction': 'forward', 'highway': 'stop'}),
-          _node(2, 0, 0.001, {'direction': 'N'}),
+          testNode(1, 0, 0, {'direction': 'forward', 'highway': 'stop'}),
+          testNode(2, 0, 0.001, {'direction': 'N'}),
         ],
         ways: [
-          _way(10, [1, 2], {'highway': 'residential'}),
+          testWay(10, [1, 2], {'highway': 'residential'}),
         ],
       );
       OsmReverse(view, [view.way(10)!]).apply();
@@ -264,10 +183,10 @@ void main() {
     });
 
     test('turns a node on its own right round', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0, {'direction': '90'}),
-          _node(2, 0, 0, {'direction': 'NE;190'}),
+          testNode(1, 0, 0, {'direction': '90'}),
+          testNode(2, 0, 0, {'direction': 'NE;190'}),
         ],
       );
       OsmReverse(view, [view.node(1)!, view.node(2)!]).apply();
@@ -289,15 +208,15 @@ void main() {
     });
 
     test('has nothing to reverse in an area or a node with no direction', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0),
-          _node(2, 0, 1),
-          _node(3, 1, 1),
-          _node(4, 5, 5, {'amenity': 'bench'}),
+          testNode(1, 0, 0),
+          testNode(2, 0, 1),
+          testNode(3, 1, 1),
+          testNode(4, 5, 5, {'amenity': 'bench'}),
         ],
         ways: [
-          _way(10, [1, 2, 3, 1], {'building': 'yes'}),
+          testWay(10, [1, 2, 3, 1], {'building': 'yes'}),
         ],
       );
       expect(OsmReverse(view, [view.way(10)!]).available, isFalse);
@@ -305,14 +224,14 @@ void main() {
     });
 
     test('says what it reverses', () {
-      final view = _View(
+      final view = TestView(
         nodes: [
-          _node(1, 0, 0),
-          _node(2, 0, 0.001),
-          _node(3, 5, 5, {'direction': 'N'}),
+          testNode(1, 0, 0),
+          testNode(2, 0, 0.001),
+          testNode(3, 5, 5, {'direction': 'N'}),
         ],
         ways: [
-          _way(10, [1, 2], {'highway': 'residential'}),
+          testWay(10, [1, 2], {'highway': 'residential'}),
         ],
       );
       expect(OsmReverse(view, [view.way(10)!]).kind, 'line');
@@ -340,8 +259,8 @@ void main() {
     test('has nothing to take out of an untagged node or one on its own', () {
       final view = _roads();
       expect(OsmExtract(view, [view.node(1)!]).available, isFalse);
-      final alone = _View(nodes: [
-        _node(1, 0, 0, {'amenity': 'bench'})
+      final alone = TestView(nodes: [
+        testNode(1, 0, 0, {'amenity': 'bench'})
       ]);
       expect(OsmExtract(alone, [alone.node(1)!]).available, isFalse);
     });
@@ -355,15 +274,15 @@ void main() {
         translations: '{"en": {"presets": {"presets": {}}}}',
       );
 
-      _View shop(Map<String, String> tags) => _View(
+      TestView shop(Map<String, String> tags) => TestView(
             nodes: [
-              _node(1, 0, 0),
-              _node(2, 0, 0.002),
-              _node(3, 0.002, 0.002),
-              _node(4, 0.002, 0),
+              testNode(1, 0, 0),
+              testNode(2, 0, 0.002),
+              testNode(3, 0.002, 0.002),
+              testNode(4, 0.002, 0),
             ],
             ways: [
-              _way(10, [1, 2, 3, 4, 1], tags),
+              testWay(10, [1, 2, 3, 4, 1], tags),
             ],
           );
 
@@ -422,21 +341,21 @@ void main() {
     });
 
     test('finds nothing to continue from the middle of a line', () {
-      final view = _View(
-        nodes: [_node(1, 0, 0), _node(2, 0, 1), _node(3, 0, 2)],
+      final view = TestView(
+        nodes: [testNode(1, 0, 0), testNode(2, 0, 1), testNode(3, 0, 2)],
         ways: [
-          _way(10, [1, 2, 3])
+          testWay(10, [1, 2, 3])
         ],
       );
       expect(osmContinuable(view, [view.node(2)!]), isEmpty);
     });
 
     test('finds every line that ends there, and one when one is chosen', () {
-      final view = _View(
-        nodes: [_node(1, 0, 0), _node(2, 0, 1), _node(3, 1, 1)],
+      final view = TestView(
+        nodes: [testNode(1, 0, 0), testNode(2, 0, 1), testNode(3, 1, 1)],
         ways: [
-          _way(10, [1, 2]),
-          _way(11, [2, 3])
+          testWay(10, [1, 2]),
+          testWay(11, [2, 3])
         ],
       );
       expect(osmContinuable(view, [view.node(2)!]), hasLength(2));

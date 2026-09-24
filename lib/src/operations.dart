@@ -235,7 +235,7 @@ class OsmReverse {
         for (final element in _reversible) {
           switch (element) {
             case OsmWay():
-              _reverseWay(element);
+              osmReverseWay(_view, element);
             case OsmNode():
               _reverseNode(element.id, absolute: true);
             case OsmRelation():
@@ -243,33 +243,6 @@ class OsmReverse {
           }
         }
       });
-
-  void _reverseWay(OsmWay way) {
-    for (final relation in _view.relationsUsing(OsmElementType.way, way.id)) {
-      var changed = false;
-      final members = [
-        for (final member in relation.members)
-          if (member.type == OsmElementType.way &&
-              member.ref == way.id &&
-              _roles[member.role] != null)
-            OsmMember(
-                type: member.type, ref: member.ref, role: _roles[member.role]!)
-          else
-            member,
-      ];
-      for (var i = 0; i < members.length; i++) {
-        if (!identical(members[i], relation.members[i])) changed = true;
-      }
-      if (changed) _view.edits.setRelationMembers(relation, members);
-    }
-    final nodes = way.nodeIds.reversed.toList();
-    for (final id in nodes.toSet()) {
-      _reverseNode(id, absolute: false);
-    }
-    _view.edits.setWayNodes(way, nodes);
-    final now = _view.way(way.id) ?? way;
-    _view.edits.setTags(now, osmReversedTags(way.tags, absolute: false));
-  }
 
   void _reverseNode(int id, {required bool absolute}) {
     final node = _view.node(id);
@@ -282,14 +255,53 @@ class OsmReverse {
     if (reversed.length != tags.length) return true;
     return tags.entries.any((e) => reversed[e.key] != e.value);
   }
-
-  static const _roles = {
-    'forward': 'backward',
-    'backward': 'forward',
-    'forwards': 'backward',
-    'backwards': 'forward',
-  };
 }
+
+/// Turns [way] round in [view]'s edits: its nodes run the other way, and
+/// its tags, its nodes' tags and its part in any route going forward or
+/// backward turn round with it.
+///
+/// Its `oneway` only turns round with [oneway]: reversing a way on its own
+/// is usually done to put right a oneway drawn backwards, and turning the
+/// tag round too would undo the point of it; reversing one to join it to
+/// another has to keep traffic going the way it went.
+void osmReverseWay(OsmEditView view, OsmWay way, {bool oneway = false}) {
+  for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
+    var changed = false;
+    final members = [
+      for (final member in relation.members)
+        if (member.type == OsmElementType.way &&
+            member.ref == way.id &&
+            _roles[member.role] != null)
+          OsmMember(
+              type: member.type, ref: member.ref, role: _roles[member.role]!)
+        else
+          member,
+    ];
+    for (var i = 0; i < members.length; i++) {
+      if (!identical(members[i], relation.members[i])) changed = true;
+    }
+    if (changed) view.edits.setRelationMembers(relation, members);
+  }
+  final nodes = way.nodeIds.reversed.toList();
+  for (final id in nodes.toSet()) {
+    final node = view.node(id);
+    if (node == null || node.tags.isEmpty) continue;
+    view.edits.setTags(node, osmReversedTags(node.tags, absolute: false));
+  }
+  view.edits.setWayNodes(way, nodes);
+  view.edits.setTags(
+    view.way(way.id) ?? way,
+    osmReversedTags(way.tags, absolute: false, oneway: oneway),
+  );
+}
+
+const _roles = {
+  'forward': 'backward',
+  'backward': 'forward',
+  'forwards': 'backward',
+  'backwards': 'forward',
+};
 
 /// [tags] turned round for something that now faces the other way, as iD
 /// turns them.
@@ -304,11 +316,16 @@ class OsmReverse {
 Map<String, String> osmReversedTags(
   Map<String, String> tags, {
   required bool absolute,
+  bool oneway = false,
 }) =>
     {
       for (final MapEntry(:key, :value) in tags.entries)
-        _reverseKey(key): _reverseValue(key, value, absolute, tags),
+        _reverseKey(key): oneway && key == 'oneway'
+            ? (_onewayReplacements[value] ?? value)
+            : _reverseValue(key, value, absolute, tags),
     };
+
+const _onewayReplacements = {'yes': '-1', '1': '-1', '-1': 'yes'};
 
 final _keyReplacements = [
   (RegExp(r':right$'), ':left'),

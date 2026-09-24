@@ -62,6 +62,9 @@ class OsmUpload {
   /// Ways taken off the map, as they were.
   final List<OsmWay> deletedWays;
 
+  /// Relations that were not on the map before.
+  final List<OsmRelation> createdRelations;
+
   /// Relations whose members have changed.
   final List<OsmRelation> changedRelations;
 
@@ -93,6 +96,10 @@ class OsmUpload {
           if (way.id > 0) way,
       ],
       deletedWays: edits.deletedWays.values.toList(),
+      createdRelations: [
+        for (final relation in edits.changedRelations.values)
+          if (relation.id < 0) relation,
+      ],
       changedRelations: [
         for (final relation in edits.changedRelations.values)
           if (relation.id > 0 &&
@@ -110,6 +117,7 @@ class OsmUpload {
     required this.createdWays,
     required this.changedWays,
     required this.deletedWays,
+    required this.createdRelations,
     required this.changedRelations,
     required this.deletedRelations,
   });
@@ -122,6 +130,7 @@ class OsmUpload {
       createdWays.length +
       changedWays.length +
       deletedWays.length +
+      createdRelations.length +
       changedRelations.length +
       deletedRelations.length;
 
@@ -140,6 +149,9 @@ class OsmUpload {
         for (final node in createdNodes) 'Create node ${_name(node.id)}',
         for (final way in createdWays)
           'Create way ${_name(way.id)} through ${way.nodeIds.length} node(s)',
+        for (final relation in createdRelations)
+          'Create relation ${_name(relation.id)} of '
+              '${relation.members.length} member(s)',
         // Changed rather than moved or retagged: what is sent is the element
         // as it now stands, which says nothing of what it was.
         for (final node in changedNodes) 'Change node/${node.id}',
@@ -171,13 +183,18 @@ class OsmUpload {
         '<osmChange version="0.6" generator="${_escaped(generator)}">',
       );
 
-    if (createdNodes.isNotEmpty || createdWays.isNotEmpty) {
+    if (createdNodes.isNotEmpty ||
+        createdWays.isNotEmpty ||
+        createdRelations.isNotEmpty) {
       out.writeln('  <create>');
       for (final node in createdNodes) {
         _node(out, node, changeset: changeset, version: 0);
       }
       for (final way in createdWays) {
         _way(out, way, changeset: changeset, version: 0);
+      }
+      for (final relation in createdRelations) {
+        _relation(out, relation, changeset: changeset, version: 0);
       }
       out.writeln('  </create>');
     }
@@ -260,10 +277,11 @@ class OsmUpload {
     StringBuffer out,
     OsmRelation relation, {
     required int changeset,
+    int? version,
   }) {
     out.writeln(
       '    <relation id="${relation.id}" '
-      'version="${_versionOf(relation)}" changeset="$changeset">',
+      'version="${version ?? _versionOf(relation)}" changeset="$changeset">',
     );
     for (final member in relation.members) {
       out.writeln(

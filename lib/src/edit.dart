@@ -122,6 +122,24 @@ class OsmWayDeleted extends OsmEdit {
   String toString() => 'OsmWayDeleted($id)';
 }
 
+/// A relation that was not there before.
+class OsmRelationCreated extends OsmEdit {
+  /// The relation made.
+  final OsmRelation relation;
+
+  /// Creates a record of a new relation.
+  const OsmRelationCreated(this.relation);
+
+  @override
+  OsmElementType get type => OsmElementType.relation;
+
+  @override
+  int get id => relation.id;
+
+  @override
+  String toString() => 'OsmRelationCreated($id)';
+}
+
 /// A relation taken off the map.
 class OsmRelationDeleted extends OsmEdit {
   /// The relation as it was.
@@ -416,6 +434,22 @@ class OsmEdits {
     _done.add(OsmWayCreated(way));
     onChanged?.call();
     return way;
+  }
+
+  /// Makes a relation of [members].
+  OsmRelation createRelation({
+    required List<OsmMember> members,
+    Map<String, String> tags = const {},
+  }) {
+    final relation = OsmRelation(
+      id: _nextId--,
+      members: List.unmodifiable(members),
+      tags: tags,
+    );
+    _relations[relation.id] = relation;
+    _done.add(OsmRelationCreated(relation));
+    onChanged?.call();
+    return relation;
   }
 
   /// Takes [node] off the map.
@@ -729,6 +763,8 @@ class OsmEdits {
         }
       case OsmRelationChanged():
         _undoRelation(last);
+      case OsmRelationCreated():
+        _relations.remove(last.id);
       case OsmRelationDeleted():
         _gone.remove((OsmElementType.relation, last.id));
         _deletedRelations.remove(last.id);

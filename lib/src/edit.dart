@@ -44,12 +44,23 @@ class OsmNodeDeleted extends OsmEdit {
   /// there, so putting the node back has to put the ways back with it.
   final List<OsmWayNodesChanged> ways;
 
+  /// What it being gone did to the relations it was a member of.
+  ///
+  /// Part of the same change for the same reason: OpenStreetMap will not
+  /// delete something a relation still lists.
+  final List<OsmRelationChanged> relations;
+
   /// Whether [node] is the node as it was read, rather than as an earlier
   /// change left it. Undoing back to what was read means holding nothing.
   final bool wasRead;
 
   /// Creates a record of a deletion.
-  const OsmNodeDeleted(this.node, {this.ways = const [], this.wasRead = false});
+  const OsmNodeDeleted(
+    this.node, {
+    this.ways = const [],
+    this.relations = const [],
+    this.wasRead = false,
+  });
 
   @override
   OsmElementType get type => OsmElementType.node;
@@ -77,6 +88,98 @@ class OsmWayCreated extends OsmEdit {
 
   @override
   String toString() => 'OsmWayCreated($id)';
+}
+
+/// A way taken off the map.
+///
+/// Only the way: whichever of its nodes go with it are deletions of their
+/// own, gathered into the same change by whoever deleted it.
+class OsmWayDeleted extends OsmEdit {
+  /// The way as it was.
+  final OsmWay way;
+
+  /// What it being gone did to the relations it was a member of.
+  final List<OsmRelationChanged> relations;
+
+  /// Whether [way] is the way as it was read, rather than as an earlier
+  /// change left it. Undoing back to what was read means holding nothing.
+  final bool wasRead;
+
+  /// Creates a record of a deletion.
+  const OsmWayDeleted(
+    this.way, {
+    this.relations = const [],
+    this.wasRead = false,
+  });
+
+  @override
+  OsmElementType get type => OsmElementType.way;
+
+  @override
+  int get id => way.id;
+
+  @override
+  String toString() => 'OsmWayDeleted($id)';
+}
+
+/// A relation taken off the map.
+class OsmRelationDeleted extends OsmEdit {
+  /// The relation as it was.
+  final OsmRelation relation;
+
+  /// What it being gone did to the relations it was a member of.
+  final List<OsmRelationChanged> relations;
+
+  /// Whether [relation] is the relation as it was read, rather than as an
+  /// earlier change left it. Undoing back to what was read means holding
+  /// nothing.
+  final bool wasRead;
+
+  /// Creates a record of a deletion.
+  const OsmRelationDeleted(
+    this.relation, {
+    this.relations = const [],
+    this.wasRead = false,
+  });
+
+  @override
+  OsmElementType get type => OsmElementType.relation;
+
+  @override
+  int get id => relation.id;
+
+  @override
+  String toString() => 'OsmRelationDeleted($id)';
+}
+
+/// The members of a relation, changed.
+class OsmRelationChanged extends OsmEdit {
+  /// The relation as it was.
+  final OsmRelation from;
+
+  /// The relation as it is now.
+  final OsmRelation to;
+
+  /// Whether [from] is the relation as it was read, rather than as an
+  /// earlier change left it. Undoing back to what was read means holding
+  /// nothing.
+  final bool wasRead;
+
+  /// Creates a record of a change to a relation's members.
+  const OsmRelationChanged({
+    required this.from,
+    required this.to,
+    this.wasRead = false,
+  });
+
+  @override
+  OsmElementType get type => OsmElementType.relation;
+
+  @override
+  int get id => from.id;
+
+  @override
+  String toString() => 'OsmRelationChanged($id)';
 }
 
 /// The nodes a way runs through, changed.
@@ -212,6 +315,15 @@ class OsmEdits {
   /// Kept because an upload has to name the version it is deleting, which is
   /// only in the element itself.
   final _deleted = <int, OsmNode>{};
+
+  /// The ways taken off the map, as they were read, for the same reason.
+  final _deletedWays = <int, OsmWay>{};
+
+  /// The relations whose members have been changed.
+  final _relations = <int, OsmRelation>{};
+
+  /// The relations taken off the map, as they were read.
+  final _deletedRelations = <int, OsmRelation>{};
   var _nextId = -1;
 
   /// Called whenever what has been changed changes.
@@ -251,6 +363,21 @@ class OsmEdits {
   /// Only nodes that were on the map to begin with. One made and then
   /// deleted again never existed as far as anything outside is concerned.
   Map<int, OsmNode> get deletedNodes => Map.unmodifiable(_deleted);
+
+  /// The ways taken off the map, as they were before, by id: only ways that
+  /// were on the map to begin with.
+  Map<int, OsmWay> get deletedWays => Map.unmodifiable(_deletedWays);
+
+  /// The relations taken off the map, as they were before, by id.
+  Map<int, OsmRelation> get deletedRelations =>
+      Map.unmodifiable(_deletedRelations);
+
+  /// The relation with [id] as it now stands, or null if it has not been
+  /// touched.
+  OsmRelation? changedRelation(int id) => _relations[id];
+
+  /// The relations whose members have been changed, by id.
+  Map<int, OsmRelation> get changedRelations => Map.unmodifiable(_relations);
 
   /// Whether the element has been taken off the map.
   bool isGone(OsmElementType type, int id) => _gone.contains((type, id));
@@ -295,7 +422,14 @@ class OsmEdits {
   ///
   /// It is taken out of every way in [from] as well, since a way cannot run
   /// through something that is no longer there.
-  void deleteNode(OsmNode node, {Iterable<OsmWay> from = const []}) {
+  ///
+  /// And out of every relation in [relations], since OpenStreetMap will not
+  /// delete something a relation still lists.
+  void deleteNode(
+    OsmNode node, {
+    Iterable<OsmWay> from = const [],
+    Iterable<OsmRelation> relations = const [],
+  }) {
     final ways = <OsmWayNodesChanged>[];
     for (final way in from) {
       final running = _ways[way.id] ?? way;
@@ -303,22 +437,127 @@ class OsmEdits {
       ways.add(
         _change(
           running,
-          [
-            for (final id in running.nodeIds)
-              if (id != node.id) id,
-          ],
+          withoutNode(running, node.id),
           wasRead: !_ways.containsKey(way.id),
         ),
       );
     }
+    final members = _withoutMember(relations, OsmElementType.node, node.id);
     final wasRead = !_nodes.containsKey(node.id);
     final current = _nodes.remove(node.id) ?? node;
     _gone.add((OsmElementType.node, node.id));
     // A node that was never uploaded is not deleted from anywhere: it goes
     // out of the edits and there is nothing to tell OpenStreetMap about.
     if (node.id > 0) _deleted[node.id] = current;
-    _done.add(OsmNodeDeleted(current, ways: ways, wasRead: wasRead));
+    _done.add(
+      OsmNodeDeleted(
+        current,
+        ways: ways,
+        relations: members,
+        wasRead: wasRead,
+      ),
+    );
     onChanged?.call();
+  }
+
+  /// Takes [way] off the map, and out of every relation in [relations].
+  ///
+  /// Only the way. Its nodes stay unless they are deleted as well, which is
+  /// for whoever deletes the way to decide: some are shared with other ways
+  /// or say something of their own.
+  void deleteWay(OsmWay way, {Iterable<OsmRelation> relations = const []}) {
+    if (isGone(OsmElementType.way, way.id)) return;
+    final members = _withoutMember(relations, OsmElementType.way, way.id);
+    final wasRead = !_ways.containsKey(way.id);
+    final current = _ways.remove(way.id) ?? way;
+    _gone.add((OsmElementType.way, way.id));
+    if (way.id > 0) _deletedWays[way.id] = current;
+    _done.add(
+      OsmWayDeleted(current, relations: members, wasRead: wasRead),
+    );
+    onChanged?.call();
+  }
+
+  /// Takes [relation] off the map, and out of every relation in
+  /// [relations].
+  void deleteRelation(
+    OsmRelation relation, {
+    Iterable<OsmRelation> relations = const [],
+  }) {
+    if (isGone(OsmElementType.relation, relation.id)) return;
+    final members = _withoutMember(
+      relations,
+      OsmElementType.relation,
+      relation.id,
+    );
+    final wasRead = !_relations.containsKey(relation.id);
+    final current = _relations.remove(relation.id) ?? relation;
+    _gone.add((OsmElementType.relation, relation.id));
+    if (relation.id > 0) _deletedRelations[relation.id] = current;
+    _done.add(
+      OsmRelationDeleted(current, relations: members, wasRead: wasRead),
+    );
+    onChanged?.call();
+  }
+
+  /// The nodes of [way] without the node [id], as they are once it is taken
+  /// out: every time the way ran through it, and any repeat that leaves.
+  ///
+  /// A way that was closed stays closed. The node a ring was drawn from is
+  /// also the one it comes back to, so taking it out would leave the ring
+  /// open, and the next node along closes it instead.
+  static List<int> withoutNode(OsmWay way, int id) {
+    final nodes = <int>[];
+    for (final node in way.nodeIds) {
+      if (node == id) continue;
+      if (nodes.isNotEmpty && nodes.last == node) continue;
+      nodes.add(node);
+    }
+    if (way.isClosed &&
+        nodes.isNotEmpty &&
+        (nodes.length == 1 || nodes.first != nodes.last)) {
+      nodes.add(nodes.first);
+    }
+    return nodes;
+  }
+
+  /// Gives [relation] [members] in place of the ones it has.
+  void setRelationMembers(OsmRelation relation, List<OsmMember> members) {
+    _done.add(_changeRelation(relation, members));
+    onChanged?.call();
+  }
+
+  /// Takes every membership of the element out of each of [relations], and
+  /// says what that changed.
+  List<OsmRelationChanged> _withoutMember(
+    Iterable<OsmRelation> relations,
+    OsmElementType type,
+    int id,
+  ) =>
+      [
+        for (final relation in relations)
+          if (_relations[relation.id] ?? relation case final running
+              when running.members.any((m) => m.type == type && m.ref == id))
+            _changeRelation(running, [
+              for (final member in running.members)
+                if (member.type != type || member.ref != id) member,
+            ]),
+      ];
+
+  OsmRelationChanged _changeRelation(
+    OsmRelation relation,
+    List<OsmMember> members,
+  ) {
+    final wasRead = !_relations.containsKey(relation.id);
+    final was = _relations[relation.id] ?? relation;
+    final now = OsmRelation(
+      id: was.id,
+      members: List.unmodifiable(members),
+      tags: was.tags,
+      info: was.info,
+    );
+    _relations[relation.id] = now;
+    return OsmRelationChanged(from: was, to: now, wasRead: wasRead);
   }
 
   /// Puts [way] through [nodeIds] instead of what it ran through before.
@@ -475,8 +714,27 @@ class OsmEdits {
         _gone.remove((OsmElementType.node, last.id));
         _deleted.remove(last.id);
         _putNode(last.node, wasRead: last.wasRead);
+        for (final change in last.relations.reversed) {
+          _undoRelation(change);
+        }
         for (final change in last.ways.reversed) {
           _undoWay(change);
+        }
+      case OsmWayDeleted():
+        _gone.remove((OsmElementType.way, last.id));
+        _deletedWays.remove(last.id);
+        if (!last.wasRead) _ways[last.id] = last.way;
+        for (final change in last.relations.reversed) {
+          _undoRelation(change);
+        }
+      case OsmRelationChanged():
+        _undoRelation(last);
+      case OsmRelationDeleted():
+        _gone.remove((OsmElementType.relation, last.id));
+        _deletedRelations.remove(last.id);
+        if (!last.wasRead) _relations[last.id] = last.relation;
+        for (final change in last.relations.reversed) {
+          _undoRelation(change);
         }
       case OsmWayCreated():
         _ways.remove(last.id);
@@ -484,6 +742,14 @@ class OsmEdits {
         _undoWay(last);
       case OsmTagsChanged():
         _undoTags(last);
+    }
+  }
+
+  void _undoRelation(OsmRelationChanged change) {
+    if (change.wasRead) {
+      _relations.remove(change.id);
+    } else {
+      _relations[change.id] = change.from;
     }
   }
 
@@ -528,6 +794,9 @@ class OsmEdits {
     _ways.clear();
     _gone.clear();
     _deleted.clear();
+    _deletedWays.clear();
+    _relations.clear();
+    _deletedRelations.clear();
     onChanged?.call();
   }
 
@@ -548,6 +817,9 @@ class OsmEdits {
     }
     for (final id in _ways.keys) {
       touched.add((OsmElementType.way, id));
+    }
+    for (final id in _relations.keys) {
+      touched.add((OsmElementType.relation, id));
     }
     for (final (type, id) in _gone) {
       if (type != OsmElementType.node) continue;

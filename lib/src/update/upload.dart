@@ -59,6 +59,15 @@ class OsmUpload {
   /// Ways that were, and now run through other nodes or have other tags.
   final List<OsmWay> changedWays;
 
+  /// Ways taken off the map, as they were.
+  final List<OsmWay> deletedWays;
+
+  /// Relations whose members have changed.
+  final List<OsmRelation> changedRelations;
+
+  /// Relations taken off the map, as they were.
+  final List<OsmRelation> deletedRelations;
+
   /// Gathers what [edits] would send.
   factory OsmUpload.of(OsmEdits edits) {
     final nodes = edits.changedNodes;
@@ -83,6 +92,14 @@ class OsmUpload {
         for (final way in ways.values)
           if (way.id > 0) way,
       ],
+      deletedWays: edits.deletedWays.values.toList(),
+      changedRelations: [
+        for (final relation in edits.changedRelations.values)
+          if (relation.id > 0 &&
+              !edits.isGone(OsmElementType.relation, relation.id))
+            relation,
+      ],
+      deletedRelations: edits.deletedRelations.values.toList(),
     );
   }
 
@@ -92,6 +109,9 @@ class OsmUpload {
     required this.deletedNodes,
     required this.createdWays,
     required this.changedWays,
+    required this.deletedWays,
+    required this.changedRelations,
+    required this.deletedRelations,
   });
 
   /// How many elements would be written.
@@ -100,7 +120,10 @@ class OsmUpload {
       changedNodes.length +
       deletedNodes.length +
       createdWays.length +
-      changedWays.length;
+      changedWays.length +
+      deletedWays.length +
+      changedRelations.length +
+      deletedRelations.length;
 
   /// Whether there is nothing to send.
   bool get isEmpty => length == 0;
@@ -121,6 +144,11 @@ class OsmUpload {
         // as it now stands, which says nothing of what it was.
         for (final node in changedNodes) 'Change node/${node.id}',
         for (final way in changedWays) 'Change way/${way.id}',
+        for (final relation in changedRelations)
+          'Change relation/${relation.id}',
+        for (final relation in deletedRelations)
+          'Delete relation/${relation.id}',
+        for (final way in deletedWays) 'Delete way/${way.id}',
         for (final node in deletedNodes) 'Delete node/${node.id}',
       ];
 
@@ -154,7 +182,9 @@ class OsmUpload {
       out.writeln('  </create>');
     }
 
-    if (changedNodes.isNotEmpty || changedWays.isNotEmpty) {
+    if (changedNodes.isNotEmpty ||
+        changedWays.isNotEmpty ||
+        changedRelations.isNotEmpty) {
       out.writeln('  <modify>');
       for (final node in changedNodes) {
         _node(out, node, changeset: changeset);
@@ -162,14 +192,26 @@ class OsmUpload {
       for (final way in changedWays) {
         _way(out, way, changeset: changeset);
       }
+      for (final relation in changedRelations) {
+        _relation(out, relation, changeset: changeset);
+      }
       out.writeln('  </modify>');
     }
 
-    if (deletedNodes.isNotEmpty) {
-      // Deletions last. A node this took out of a way is only free to go
-      // once the way above has been written without it, which is exactly
-      // the order these are in.
+    if (deletedRelations.isNotEmpty ||
+        deletedWays.isNotEmpty ||
+        deletedNodes.isNotEmpty) {
+      // Deletions last: relations, then ways, then nodes. Something is only
+      // free to go once everything that referred to it — a way through a
+      // node, a relation listing a way — has been written without it or is
+      // gone itself, which is exactly the order these are in.
       out.writeln('  <delete>');
+      for (final relation in deletedRelations) {
+        _relation(out, relation, changeset: changeset);
+      }
+      for (final way in deletedWays) {
+        _way(out, way, changeset: changeset);
+      }
       for (final node in deletedNodes) {
         _node(out, node, changeset: changeset);
       }
@@ -212,6 +254,25 @@ class OsmUpload {
     }
     _tags(out, way.tags);
     out.writeln('    </way>');
+  }
+
+  static void _relation(
+    StringBuffer out,
+    OsmRelation relation, {
+    required int changeset,
+  }) {
+    out.writeln(
+      '    <relation id="${relation.id}" '
+      'version="${_versionOf(relation)}" changeset="$changeset">',
+    );
+    for (final member in relation.members) {
+      out.writeln(
+        '      <member type="${member.type.name}" ref="${member.ref}" '
+        'role="${_escaped(member.role)}"/>',
+      );
+    }
+    _tags(out, relation.tags);
+    out.writeln('    </relation>');
   }
 
   static void _tags(StringBuffer out, Map<String, String> tags) {

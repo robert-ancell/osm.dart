@@ -446,4 +446,183 @@ void _groups() {
       expect(OsmUpload.of(edits).describe(), ['Change node/1']);
     });
   });
+
+  group('ways and relations', () {
+    const way = OsmWay(
+      id: 9,
+      nodeIds: [1, 2],
+      tags: {'highway': 'residential'},
+      info: OsmInfo(version: 4),
+    );
+    const route = OsmRelation(
+      id: 30,
+      members: [
+        OsmMember(type: OsmElementType.node, ref: 1, role: 'stop'),
+        OsmMember(type: OsmElementType.way, ref: 9, role: ''),
+        OsmMember(type: OsmElementType.way, ref: 8, role: ''),
+      ],
+      tags: {'type': 'route'},
+      info: OsmInfo(version: 7),
+    );
+
+    test('deletes a way', () {
+      final edits = OsmEdits()..deleteWay(way);
+      expect(edits.isGone(OsmElementType.way, 9), isTrue);
+      expect(edits.deletedWays[9], way);
+    });
+
+    test('takes a deleted way out of the relations it was in', () {
+      final edits = OsmEdits()..deleteWay(way, relations: [route]);
+      final now = edits.changedRelation(30)!;
+      expect(now.members.map((m) => (m.type, m.ref)), [
+        (OsmElementType.node, 1),
+        (OsmElementType.way, 8),
+      ]);
+      expect(now.info?.version, 7);
+    });
+
+    test('undoes a way deletion, relations and all', () {
+      final edits = OsmEdits()..deleteWay(way, relations: [route]);
+      edits.undo();
+      expect(edits.isGone(OsmElementType.way, 9), isFalse);
+      expect(edits.deletedWays, isEmpty);
+      expect(edits.changedRelation(30), isNull);
+    });
+
+    test('says nothing about a way made and then deleted again', () {
+      final edits = OsmEdits();
+      final made = edits.createWay(nodeIds: [1, 2]);
+      edits.deleteWay(made);
+      expect(edits.deletedWays, isEmpty);
+      expect(edits.changedWay(made.id), isNull);
+      edits.undo();
+      expect(edits.changedWay(made.id), isNotNull);
+    });
+
+    test('takes a deleted node out of the relations it was in', () {
+      final edits = OsmEdits()
+        ..deleteNode(_node, from: [way], relations: [route]);
+      expect(
+        edits.changedRelation(30)!.members.map((m) => m.ref),
+        [9, 8],
+      );
+      edits.undo();
+      expect(edits.changedRelation(30), isNull);
+      expect(edits.changedWay(9), isNull);
+    });
+
+    test('changes the members of a relation, and undoes it', () {
+      final edits = OsmEdits()
+        ..setRelationMembers(route, [route.members.first]);
+      expect(edits.changedRelation(30)!.members, hasLength(1));
+      edits.undo();
+      expect(edits.changedRelation(30), isNull);
+    });
+
+    test('keeps changes to one relation from different deletions', () {
+      final edits = OsmEdits()
+        ..deleteWay(way, relations: [route])
+        ..deleteNode(_node, relations: [route]);
+      expect(edits.changedRelation(30)!.members.map((m) => m.ref), [8]);
+      edits.undo();
+      expect(edits.changedRelation(30)!.members.map((m) => m.ref), [1, 8]);
+    });
+
+    test('says a relation that has changed has to be drawn again', () {
+      final edits = OsmEdits()..setRelationMembers(route, const []);
+      expect(
+        edits.touching((_) => const []),
+        contains((OsmElementType.relation, 30)),
+      );
+    });
+
+    test('uploads a relation before the way it no longer lists goes', () {
+      final edits = OsmEdits()
+        ..deleteNode(
+          const OsmNode(
+            id: 2,
+            latitude: 0,
+            longitude: 0,
+            info: OsmInfo(version: 1),
+          ),
+          from: [way],
+        )
+        // The way as the edits have it by now, without the node.
+        ..deleteWay(way, relations: [route]);
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      final relation = xml.indexOf('<relation id="30" version="7"');
+      final deletedWay = xml.indexOf('<way id="9"', xml.indexOf('<delete>'));
+      final deletedNode = xml.indexOf('<node id="2"', xml.indexOf('<delete>'));
+      expect(relation, greaterThan(0));
+      expect(relation, lessThan(xml.indexOf('<delete>')));
+      expect(deletedWay, lessThan(deletedNode));
+      expect(xml, contains('<member type="way" ref="8" role=""/>'));
+      expect(xml, isNot(contains('ref="9" role')));
+      expect(OsmUpload.of(edits).describe(), [
+        'Change relation/30',
+        'Delete way/9',
+        'Delete node/2',
+      ]);
+    });
+  });
+
+  group('keeping rings closed', () {
+    const ring = OsmWay(id: 5, nodeIds: [1, 2, 3, 4, 1]);
+
+    test('closes a ring again when the node it was drawn from goes', () {
+      expect(OsmEdits.withoutNode(ring, 1), [2, 3, 4, 2]);
+    });
+
+    test('leaves a ring closed when any other node goes', () {
+      expect(OsmEdits.withoutNode(ring, 3), [1, 2, 4, 1]);
+    });
+
+    test('leaves no repeat where a node went', () {
+      const line = OsmWay(id: 6, nodeIds: [1, 2, 3, 2, 4]);
+      expect(OsmEdits.withoutNode(line, 3), [1, 2, 4]);
+    });
+
+    test('keeps a building closed when a corner of it is deleted', () {
+      final edits = OsmEdits()
+        ..deleteNode(
+          const OsmNode(id: 1, latitude: 0, longitude: 0),
+          from: [ring],
+        );
+      expect(edits.changedWay(5)!.isClosed, isTrue);
+    });
+  });
+
+  group('deleting relations', () {
+    const inner = OsmRelation(
+      id: 40,
+      members: [],
+      info: OsmInfo(version: 2),
+    );
+    const outer = OsmRelation(
+      id: 41,
+      members: [
+        OsmMember(type: OsmElementType.relation, ref: 40, role: 'part'),
+      ],
+      info: OsmInfo(version: 3),
+    );
+
+    test('deletes a relation and takes it out of those it was in', () {
+      final edits = OsmEdits()..deleteRelation(inner, relations: [outer]);
+      expect(edits.isGone(OsmElementType.relation, 40), isTrue);
+      expect(edits.changedRelation(41)!.members, isEmpty);
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      expect(
+        xml.indexOf('<relation id="41"'),
+        lessThan(xml.indexOf('<relation id="40"')),
+      );
+    });
+
+    test('undoes deleting a relation', () {
+      final edits = OsmEdits()..deleteRelation(inner, relations: [outer]);
+      edits.undo();
+      expect(edits.isGone(OsmElementType.relation, 40), isFalse);
+      expect(edits.deletedRelations, isEmpty);
+      expect(edits.changedRelation(41), isNull);
+    });
+  });
 }

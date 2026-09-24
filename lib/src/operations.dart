@@ -1,6 +1,6 @@
 /// Things done to what is selected, each as one change: deleting it,
-/// reversing it, pulling a point out of it, and knowing what line it would
-/// continue.
+/// reversing it, pulling a point out of it, knowing what line it would
+/// continue, copying and pasting it, and moving it.
 ///
 /// As iD does them, rule for rule, so that an edit made here is the edit
 /// someone who knows iD expects. Each works on an [OsmEditView] — what was
@@ -648,4 +648,156 @@ List<OsmWay>? osmContinuable(OsmEditView view, List<OsmElement> selected) {
           (lines.isEmpty || lines.single.id == way.id))
         way,
   ];
+}
+
+/// What was copied: the elements as they stood when they were, and the
+/// nodes of any ways among them, to make new ones from however they have
+/// changed since.
+class OsmCopied {
+  /// The elements copied, without the nodes of copied ways.
+  final List<OsmElement> elements;
+
+  /// Every node needed to copy them, by id: the nodes copied, and the nodes
+  /// of the ways copied.
+  final Map<int, OsmNode> nodes;
+
+  /// Where on the map the copies are to be anchored: the point the pointer
+  /// was at when they were copied, so that pasting puts them the same way
+  /// round the pointer. Null to anchor them by their middle instead.
+  final (double, double)? anchor;
+
+  const OsmCopied._(this.elements, this.nodes, this.anchor);
+
+  /// How many things were copied.
+  int get length => elements.length;
+
+  /// The middle of what was copied, in world coordinates.
+  (double, double) get middle {
+    var left = double.infinity, top = double.infinity;
+    var right = double.negativeInfinity, bottom = double.negativeInfinity;
+    for (final node in nodes.values) {
+      final x = Mercator.x(node.longitude), y = Mercator.y(node.latitude);
+      left = math.min(left, x);
+      right = math.max(right, x);
+      top = math.min(top, y);
+      bottom = math.max(bottom, y);
+    }
+    return ((left + right) / 2, (top + bottom) / 2);
+  }
+}
+
+/// Copies [selected], as iD copies it, or null if there is nothing in it to
+/// copy.
+///
+/// A node along a way that says nothing of its own is part of the way, not
+/// something to copy on its own; a way is copied with its nodes. [anchor]
+/// is where on the map, in world coordinates, the pointer was; a single
+/// node needs none, being its own anchor.
+OsmCopied? osmCopy(
+  OsmEditView view,
+  List<OsmElement> selected, {
+  (double, double)? anchor,
+}) {
+  final chosen = [
+    for (final element in selected)
+      if (osmHasInterestingTags(element.tags) ||
+          view.geometryOf(element) != OsmGeometry.vertex)
+        element,
+  ];
+  final elements = <OsmElement>[];
+  final nodes = <int, OsmNode>{};
+  for (final way in chosen.whereType<OsmWay>()) {
+    final now = view.way(way.id);
+    if (now == null) continue;
+    elements.add(now);
+    for (final id in now.nodeIds) {
+      if (view.node(id) case final node?) nodes[id] = node;
+    }
+  }
+  for (final node in chosen.whereType<OsmNode>()) {
+    if (nodes.containsKey(node.id)) continue;
+    final now = view.node(node.id);
+    if (now == null) continue;
+    elements.add(now);
+    nodes[now.id] = now;
+  }
+  if (elements.isEmpty) return null;
+  final single = elements.length == 1 && elements.single is OsmNode;
+  return OsmCopied._(elements, nodes, single ? null : anchor);
+}
+
+/// Adds a copy of [copied] to [edits], [dx] and [dy] across the world from
+/// where it was, as one change, and gives back the copies of what was
+/// copied — not the nodes of copied ways, which come with them.
+///
+/// Everything is new: new nodes, new ways through them, and the same tags.
+List<OsmElement> osmPaste(
+  OsmEdits edits,
+  OsmCopied copied, {
+  required double dx,
+  required double dy,
+}) {
+  final made = <OsmElement>[];
+  _asOne(edits, () {
+    final newNodes = <int, OsmNode>{};
+    OsmNode copyOf(int id) => newNodes[id] ??= () {
+          final node = copied.nodes[id]!;
+          return edits.createNode(
+            latitude: Mercator.latitude(
+              (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
+            ),
+            longitude: Mercator.longitude(Mercator.x(node.longitude) + dx),
+            tags: node.tags,
+          );
+        }();
+    for (final element in copied.elements) {
+      switch (element) {
+        case OsmNode():
+          made.add(copyOf(element.id));
+        case OsmWay():
+          made.add(
+            edits.createWay(
+              nodeIds: [for (final id in element.nodeIds) copyOf(id).id],
+              tags: element.tags,
+            ),
+          );
+        case OsmRelation():
+          break;
+      }
+    }
+  });
+  return made;
+}
+
+/// Moves [selected] [dx] and [dy] across the world, as one change: every
+/// node selected, and every node of every way selected, once.
+///
+/// Ways joined to them but not selected stretch to follow.
+void osmMove(
+  OsmEditView view,
+  List<OsmElement> selected, {
+  required double dx,
+  required double dy,
+}) {
+  final ids = <int>{
+    for (final element in selected)
+      ...switch (element) {
+        OsmNode() => [element.id],
+        OsmWay() => view.way(element.id)?.nodeIds ?? element.nodeIds,
+        OsmRelation() => const <int>[],
+      },
+  };
+  _asOne(view.edits, () {
+    for (final id in ids) {
+      final node = view.node(id);
+      if (node == null) continue;
+      view.edits.moveNode(
+        node,
+        latitude: Mercator.latitude(
+          (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
+        ),
+        longitude: Mercator.longitude(Mercator.x(node.longitude) + dx),
+      );
+    }
+  });
 }

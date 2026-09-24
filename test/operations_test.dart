@@ -371,4 +371,60 @@ void main() {
       expect(osmContinuable(view, [view.node(1)!, view.node(3)!]), isNull);
     });
   });
+
+  group('copying and pasting', () {
+    test('copies a way with its nodes, and pastes it somewhere else', () {
+      final view = _roads();
+      final copied = osmCopy(view, [view.way(11)!], anchor: (0.5, 0.5))!;
+      expect(copied.length, 1);
+      expect(copied.nodes.keys, containsAll([2, 4]));
+      final pasted = osmPaste(view.edits, copied, dx: 0.001, dy: 0);
+      final way = pasted.single as OsmWay;
+      expect(way.id, isNegative);
+      expect(way.tags, {'highway': 'service'});
+      final start = view.node(way.nodeIds.first)!;
+      expect(start.id, isNegative);
+      // What the node said comes too.
+      expect(start.tags, {'highway': 'crossing'});
+      expect(
+        Mercator.x(start.longitude),
+        closeTo(Mercator.x(view.node(2)!.longitude) + 0.001, 1e-12),
+      );
+      expect(view.edits.length, 1);
+    });
+
+    test('leaves out an untagged node of a way copied with it', () {
+      final view = _roads();
+      final copied = osmCopy(view, [view.way(10)!, view.node(1)!])!;
+      expect(copied.elements.map((e) => e.id), [10]);
+    });
+
+    test('anchors a single node by itself', () {
+      final view = TestView(nodes: [
+        testNode(1, 0, 0, {'amenity': 'bench'})
+      ]);
+      expect(
+          osmCopy(view, [view.node(1)!], anchor: (0.5, 0.5))!.anchor, isNull);
+    });
+
+    test('has nothing to copy in a lone untagged vertex', () {
+      final view = _roads();
+      expect(osmCopy(view, [view.node(1)!]), isNull);
+    });
+  });
+
+  group('moving', () {
+    test('moves a way and its nodes, once each, as one change', () {
+      final view = _roads();
+      final before = Mercator.x(view.node(2)!.longitude);
+      osmMove(view, [view.way(10)!, view.node(2)!], dx: 0.0001, dy: 0);
+      expect(
+        Mercator.x(view.node(2)!.longitude),
+        closeTo(before + 0.0001, 1e-12),
+      );
+      expect(view.edits.length, 1);
+      view.edits.undo();
+      expect(view.edits.changedNodes, isEmpty);
+    });
+  });
 }

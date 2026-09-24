@@ -1,0 +1,379 @@
+/// Writing changes back to OpenStreetMap.
+///
+/// Reads can be JSON, but writes have to be XML: `changeset/create` and
+/// `changeset/upload` accept nothing else. Building it is a page of
+/// string-writing rather than a dependency.
+///
+/// **There is no useful sandbox.** api06.dev.openstreetmap.org keeps its own
+/// database rather than a copy of the real one, so the ways an editor is
+/// looking at are not there to be modified. What stands in for one is the
+/// list of changes: nothing is sent until somebody has read what would
+/// change and asked for it to go.
+library;
+
+import 'dart:convert';
+import 'dart:io';
+
+import '../edit.dart';
+import '../element.dart';
+
+/// Where the API that takes edits lives.
+final osmApiBase = Uri.parse('https://api.openstreetmap.org/api/0.6/');
+
+/// What OpenStreetMap said when it would not take something.
+class OsmUploadException implements Exception {
+  /// What to say about it.
+  final String message;
+
+  /// The HTTP status, where there was one.
+  ///
+  /// 409 is the interesting one: somebody else changed an element while this
+  /// was open, and what is held is a version behind.
+  final int? status;
+
+  /// Creates the exception.
+  const OsmUploadException(this.message, {this.status});
+
+  @override
+  String toString() => status == null ? message : '$message (HTTP $status)';
+}
+
+/// What an upload would send, gathered out of a set of edits.
+///
+/// Made once and shown before it is sent: the list somebody reads and the
+/// document that goes are built from the same thing, so what was agreed to
+/// is what happens.
+class OsmUpload {
+  /// Nodes that were not on the map before.
+  final List<OsmNode> createdNodes;
+
+  /// Nodes that were, and have been moved.
+  final List<OsmNode> movedNodes;
+
+  /// Nodes taken off the map, as they were.
+  final List<OsmNode> deletedNodes;
+
+  /// Ways that were not on the map before.
+  final List<OsmWay> createdWays;
+
+  /// Ways that were, and now run through other nodes.
+  final List<OsmWay> changedWays;
+
+  /// Gathers what [edits] would send.
+  factory OsmUpload.of(OsmEdits edits) {
+    final nodes = edits.movedNodes;
+    final ways = edits.changedWays;
+    return OsmUpload._(
+      // A negative id is something made here that OpenStreetMap has never
+      // seen; anything else is an element that was read and changed.
+      createdNodes: [
+        for (final node in nodes.values)
+          if (node.id < 0) node,
+      ],
+      movedNodes: [
+        for (final node in nodes.values)
+          if (node.id > 0) node,
+      ],
+      deletedNodes: edits.deletedNodes.values.toList(),
+      createdWays: [
+        for (final way in ways.values)
+          if (way.id < 0) way,
+      ],
+      changedWays: [
+        for (final way in ways.values)
+          if (way.id > 0) way,
+      ],
+    );
+  }
+
+  const OsmUpload._({
+    required this.createdNodes,
+    required this.movedNodes,
+    required this.deletedNodes,
+    required this.createdWays,
+    required this.changedWays,
+  });
+
+  /// How many elements would be written.
+  int get length =>
+      createdNodes.length +
+      movedNodes.length +
+      deletedNodes.length +
+      createdWays.length +
+      changedWays.length;
+
+  /// Whether there is nothing to send.
+  bool get isEmpty => length == 0;
+
+  /// Whether there is.
+  bool get isNotEmpty => length != 0;
+
+  /// A line for each element, in the order they would be sent.
+  ///
+  /// For showing before the button is pressed. Short on purpose: what
+  /// matters to whoever is reading is how many of what, and which ones, not
+  /// the XML.
+  List<String> describe() => [
+        for (final node in createdNodes) 'Create node ${_name(node.id)}',
+        for (final way in createdWays)
+          'Create way ${_name(way.id)} through ${way.nodeIds.length} node(s)',
+        for (final node in movedNodes)
+          'Move node/${node.id} to '
+              '${node.latitude.toStringAsFixed(7)}, '
+              '${node.longitude.toStringAsFixed(7)}',
+        for (final way in changedWays)
+          'Change way/${way.id} to run through ${way.nodeIds.length} node(s)',
+        for (final node in deletedNodes) 'Delete node/${node.id}',
+      ];
+
+  /// What to call an element that has no id of its own yet.
+  static String _name(int id) => id < 0 ? 'new ($id)' : '$id';
+
+  /// The osmChange document that makes these changes in [changeset].
+  ///
+  /// Every element in full: OpenStreetMap replaces an element rather than
+  /// patching one, so a way sent without its nodes is a way emptied and a
+  /// tag left out is a tag deleted. Both are why the edits keep whole
+  /// elements rather than the parts that changed.
+  ///
+  /// Order matters. Everything is created before anything refers to it, and
+  /// nothing is deleted until every way that ran through it has been written
+  /// without it.
+  String toXml({required int changeset, required String generator}) {
+    final out = StringBuffer()
+      ..writeln(
+        '<osmChange version="0.6" generator="${_escaped(generator)}">',
+      );
+
+    if (createdNodes.isNotEmpty || createdWays.isNotEmpty) {
+      out.writeln('  <create>');
+      for (final node in createdNodes) {
+        _node(out, node, changeset: changeset, version: 0);
+      }
+      for (final way in createdWays) {
+        _way(out, way, changeset: changeset, version: 0);
+      }
+      out.writeln('  </create>');
+    }
+
+    if (movedNodes.isNotEmpty || changedWays.isNotEmpty) {
+      out.writeln('  <modify>');
+      for (final node in movedNodes) {
+        _node(out, node, changeset: changeset);
+      }
+      for (final way in changedWays) {
+        _way(out, way, changeset: changeset);
+      }
+      out.writeln('  </modify>');
+    }
+
+    if (deletedNodes.isNotEmpty) {
+      // Deletions last. A node this took out of a way is only free to go
+      // once the way above has been written without it, which is exactly
+      // the order these are in.
+      out.writeln('  <delete>');
+      for (final node in deletedNodes) {
+        _node(out, node, changeset: changeset);
+      }
+      out.writeln('  </delete>');
+    }
+
+    out.writeln('</osmChange>');
+    return out.toString();
+  }
+
+  static void _node(
+    StringBuffer out,
+    OsmNode node, {
+    required int changeset,
+    int? version,
+  }) {
+    final at = 'lat="${node.latitude}" lon="${node.longitude}" '
+        'version="${version ?? _versionOf(node)}" changeset="$changeset"';
+    if (node.tags.isEmpty) {
+      out.writeln('    <node id="${node.id}" $at/>');
+      return;
+    }
+    out.writeln('    <node id="${node.id}" $at>');
+    _tags(out, node.tags);
+    out.writeln('    </node>');
+  }
+
+  static void _way(
+    StringBuffer out,
+    OsmWay way, {
+    required int changeset,
+    int? version,
+  }) {
+    out.writeln(
+      '    <way id="${way.id}" version="${version ?? _versionOf(way)}" '
+      'changeset="$changeset">',
+    );
+    for (final id in way.nodeIds) {
+      out.writeln('      <nd ref="$id"/>');
+    }
+    _tags(out, way.tags);
+    out.writeln('    </way>');
+  }
+
+  static void _tags(StringBuffer out, Map<String, String> tags) {
+    for (final key in tags.keys.toList()..sort()) {
+      out.writeln('      ${_tag(key, tags[key]!)}');
+    }
+  }
+
+  /// The version an element is being changed from.
+  ///
+  /// OpenStreetMap refuses a change that does not name the version it was
+  /// made against, which is how it catches two people editing the same thing
+  /// at once. An element read without one cannot be written back.
+  static int _versionOf(OsmElement element) {
+    final version = element.info?.version;
+    if (version == null) {
+      throw OsmUploadException(
+        '${element.type.name}/${element.id} was read without a version, so '
+        'it cannot be written back.',
+      );
+    }
+    return version;
+  }
+}
+
+/// Opens a changeset, writes to it, and closes it again.
+///
+/// Holds one [HttpClient] rather than making one per call: an upload is
+/// three requests in a row to the same host, and a changeset left open
+/// because the second one opened a fresh connection and failed is a mess to
+/// clean up by hand.
+class OsmUploader {
+  /// Where the API is.
+  final Uri base;
+
+  /// The bearer token of whoever the edit is made as.
+  final String token;
+
+  /// What the program calls itself, in the User-Agent and in the
+  /// changeset's `created_by`.
+  final String generator;
+
+  final HttpClient _client;
+
+  /// Creates an uploader signed in as the holder of [token].
+  OsmUploader({
+    required this.token,
+    required this.generator,
+    Uri? base,
+    HttpClient? client,
+  })  : base = base ?? osmApiBase,
+        _client = client ?? HttpClient();
+
+  /// Lets go of the connection.
+  void close() => _client.close(force: true);
+
+  /// Sends [upload] as one changeset, and gives back its number.
+  ///
+  /// One changeset for the lot, which is what it is: somebody sat down and
+  /// made a set of changes. Closed in a `finally`, so a failure part way
+  /// through does not leave one open on the account — an open changeset
+  /// picks up the next hour of anybody's edits.
+  Future<int> send(
+    OsmUpload upload, {
+    required String comment,
+    Map<String, String> tags = const {},
+  }) async {
+    if (upload.isEmpty) {
+      throw const OsmUploadException('Nothing has been changed.');
+    }
+    if (comment.trim().isEmpty) {
+      // Asked for by the API and by everybody who will read the changeset
+      // afterwards wondering what it was for.
+      throw const OsmUploadException('A changeset needs a comment.');
+    }
+    final changeset = await _open(comment: comment.trim(), tags: tags);
+    try {
+      await _write(
+        base.resolve('changeset/$changeset/upload'),
+        upload.toXml(changeset: changeset, generator: generator),
+        method: 'POST',
+      );
+    } finally {
+      await _write(base.resolve('changeset/$changeset/close'), '');
+    }
+    return changeset;
+  }
+
+  /// Who the token belongs to, for the line saying who is signed in.
+  Future<String> whoAmI() async {
+    final request = await _client.getUrl(base.resolve('user/details.json'));
+    request.headers.set(HttpHeaders.userAgentHeader, generator);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode != HttpStatus.ok) {
+      throw OsmUploadException(_said(body), status: response.statusCode);
+    }
+    return '${((jsonDecode(body) as Map)['user'] as Map)['display_name']}';
+  }
+
+  Future<int> _open({
+    required String comment,
+    required Map<String, String> tags,
+  }) async {
+    final xml = StringBuffer()
+      ..writeln('<osm>')
+      ..writeln('  <changeset>')
+      ..writeln('    ${_tag('comment', comment)}')
+      ..writeln('    ${_tag('created_by', generator)}');
+    for (final key in tags.keys.toList()..sort()) {
+      if (key == 'comment' || key == 'created_by') continue;
+      xml.writeln('    ${_tag(key, tags[key]!)}');
+    }
+    xml
+      ..writeln('  </changeset>')
+      ..writeln('</osm>');
+    final body = await _write(
+      base.resolve('changeset/create'),
+      xml.toString(),
+    );
+    final id = int.tryParse(body.trim());
+    if (id == null) {
+      throw OsmUploadException(
+        'OpenStreetMap did not give a changeset number: ${body.trim()}',
+      );
+    }
+    return id;
+  }
+
+  Future<String> _write(Uri url, String body, {String method = 'PUT'}) async {
+    final request = await _client.openUrl(method, url);
+    request.headers.set(HttpHeaders.userAgentHeader, generator);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.contentType = ContentType('text', 'xml', charset: 'utf-8');
+    request.add(utf8.encode(body));
+    final response = await request.close();
+    final said = await response.transform(utf8.decoder).join();
+    if (response.statusCode != HttpStatus.ok) {
+      throw OsmUploadException(_said(said), status: response.statusCode);
+    }
+    return said;
+  }
+
+  /// What the API said went wrong, which is a plain sentence in the body, or
+  /// the status on its own.
+  static String _said(String body) {
+    final said = body.trim();
+    if (said.isEmpty) return 'OpenStreetMap refused the request.';
+    return said.length > 400 ? '${said.substring(0, 400)}…' : said;
+  }
+}
+
+String _tag(String key, String value) =>
+    '<tag k="${_escaped(key)}" v="${_escaped(value)}"/>';
+
+/// XML's five, which a name like "Bill & Ben" needs and a number never will.
+String _escaped(String raw) => raw
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');

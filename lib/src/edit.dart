@@ -160,6 +160,12 @@ class OsmEdits {
   final _nodes = <int, OsmNode>{};
   final _ways = <int, OsmWay>{};
   final _gone = <(OsmElementType, int)>{};
+
+  /// The nodes taken off the map, as they were read.
+  ///
+  /// Kept because an upload has to name the version it is deleting, which is
+  /// only in the element itself.
+  final _deleted = <int, OsmNode>{};
   var _nextId = -1;
 
   /// Called whenever what has been changed changes.
@@ -192,6 +198,12 @@ class OsmEdits {
 
   /// The ways that have been made or changed, by id.
   Map<int, OsmWay> get changedWays => Map.unmodifiable(_ways);
+
+  /// The nodes taken off the map, as they were before, by id.
+  ///
+  /// Only nodes that were on the map to begin with. One made and then
+  /// deleted again never existed as far as anything outside is concerned.
+  Map<int, OsmNode> get deletedNodes => Map.unmodifiable(_deleted);
 
   /// Whether the element has been taken off the map.
   bool isGone(OsmElementType type, int id) => _gone.contains((type, id));
@@ -254,6 +266,9 @@ class OsmEdits {
     }
     _nodes.remove(node.id);
     _gone.add((OsmElementType.node, node.id));
+    // A node that was never uploaded is not deleted from anywhere: it goes
+    // out of the edits and there is nothing to tell OpenStreetMap about.
+    if (node.id > 0) _deleted[node.id] = node;
     _done.add(OsmNodeDeleted(node, ways: ways));
     onChanged?.call();
   }
@@ -345,6 +360,7 @@ class OsmEdits {
         _nodes.remove(last.id);
       case OsmNodeDeleted():
         _gone.remove((OsmElementType.node, last.id));
+        _deleted.remove(last.id);
         _restoreNode(last.id);
         for (final change in last.ways) {
           _undoWay(change);
@@ -393,6 +409,7 @@ class OsmEdits {
     _nodes.clear();
     _ways.clear();
     _gone.clear();
+    _deleted.clear();
     onChanged?.call();
   }
 

@@ -180,9 +180,28 @@ void main() {
       ]);
     });
 
-    test('adds nothing for a new star line with nothing to take it from', () {
+    test('writes a new star line as a star, there being nothing mixed', () {
       final out = _edited([queen, king], (t) => '$t\nsurface=*');
-      expect(out, [queen, king]);
+      expect(out.map((tags) => tags['surface']), ['*', '*']);
+    });
+
+    test('writes a star over a shared value as a star', () {
+      final out = _edited(
+        [queen, king],
+        (t) => t.replaceFirst('highway=residential', 'highway=*'),
+      );
+      expect(out.map((tags) => tags['highway']), ['*', '*']);
+      expect(out.map((tags) => tags['name']), ['Queen Street', 'King Street']);
+    });
+
+    test('carries values across a rename only from a mixed line', () {
+      // highway is shared, so renaming it with a star says to write a star;
+      // there is no mix of values for the star to stand for.
+      final out = _edited([queen, king], (t) => 'road=*\nname=*');
+      expect(out, [
+        {'road': '*', 'name': 'Queen Street'},
+        {'road': '*', 'name': 'King Street'},
+      ]);
     });
 
     test('gives back the same tags for those it did not change', () {
@@ -191,6 +210,95 @@ void main() {
         (t) => t.replaceFirst('name=*', ''),
       );
       expect(identical(out[1], unnamed), isTrue);
+    });
+  });
+
+  group('a real star', () {
+    test('is shown as it is', () {
+      expect(
+          osmTagText([
+            {'note': '*'},
+          ]),
+          'note=*');
+    });
+
+    test('is left as it is when its line is left alone', () {
+      final tags = {'note': '*', 'name': 'x'};
+      expect(identical(_edited([tags], (t) => t).single, tags), isTrue);
+    });
+
+    test('is not mistaken for a mix when every element has it', () {
+      const a = {'note': '*'};
+      const b = {'note': '*'};
+      final out = _edited([a, b], (t) => 'note=done');
+      expect(out, [
+        {'note': 'done'},
+        {'note': 'done'},
+      ]);
+    });
+
+    test('can be set on one element', () {
+      expect(
+          _edited([
+            {'name': 'x'}
+          ], (t) => 'name=*'),
+          [
+            {'name': '*'},
+          ]);
+    });
+  });
+
+  group('quoting', () {
+    /// [tags] shown and read back unchanged.
+    Map<String, String> roundTrip(Map<String, String> tags) => {
+          for (final (key, value) in osmParseTagText(osmTagText([tags])))
+            key: value,
+        };
+
+    test('leaves ordinary tags bare', () {
+      expect(
+          osmTagText([
+            {'name': 'Queen Street', 'name:mi': 'Kuini'},
+          ]),
+          'name=Queen Street\nname:mi=Kuini');
+    });
+
+    test('quotes a value holding an equals sign and reads it back', () {
+      const tags = {'note': 'a=b'};
+      expect(osmTagText([tags]), 'note="a=b"');
+      expect(roundTrip(tags), tags);
+    });
+
+    test('quotes a key holding an equals sign and reads it back', () {
+      // Read to its closing quote: split at the first equals sign it would
+      // come apart.
+      const tags = {'a=b': 'c'};
+      expect(osmTagText([tags]), '"a=b"=c');
+      expect(roundTrip(tags), tags);
+    });
+
+    test('keeps a line break inside a value', () {
+      const tags = {'description': 'first line\nsecond line'};
+      expect(osmTagText([tags]).split('\n'), hasLength(1));
+      expect(roundTrip(tags), tags);
+    });
+
+    test('keeps quotes, backslashes and space at the ends', () {
+      for (final value in ['"quoted"', r'back\slash', ' padded ', 'say "hi"']) {
+        expect(roundTrip({'note': value}), {'note': value}, reason: value);
+      }
+    });
+
+    test('keeps what was typed when its quotes do not read', () {
+      expect(osmParseTagText(r'note="\q"'), [('note', r'"\q"')]);
+    });
+
+    test('takes an edit made to a quoted value', () {
+      const tags = {'note': 'a=b'};
+      final out = _edited([tags], (t) => t.replaceFirst('a=b', 'a=c'));
+      expect(out, [
+        {'note': 'a=c'},
+      ]);
     });
   });
 }

@@ -98,6 +98,18 @@ class OsmSignInException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when a sign-in is given up on by whoever started it.
+///
+/// Not a failure, and nothing to tell anybody about: they know, they pressed
+/// the button.
+class OsmSignInCancelledException implements Exception {
+  /// Creates the exception.
+  const OsmSignInCancelledException();
+
+  @override
+  String toString() => 'Signing in was cancelled.';
+}
+
 /// Takes somebody through the browser and comes back with a token.
 ///
 /// The dance, in order: make a secret, put its fingerprint in a URL, open
@@ -155,19 +167,42 @@ class OsmSignIn {
   /// log in and read the consent screen, short enough that a sign-in
   /// somebody walked away from does not hold the port for the rest of the
   /// day.
+  ///
+  /// Completing [cancel] gives up at once, wherever it has got to, and throws
+  /// [OsmSignInCancelledException]. The port is let go of straight away, so a
+  /// sign-in started again a moment later can have it. A browser that comes
+  /// back afterwards finds nobody listening, which is the right answer: the
+  /// program stopped asking.
   Future<OsmToken> tokenFromBrowser({
     Duration timeout = const Duration(minutes: 5),
+    Future<void>? cancel,
   }) async {
     final verifier = _randomString(64);
     final challenge =
         base64Url.encode(sha256(ascii.encode(verifier))).replaceAll('=', '');
     final state = _randomString(16);
 
+    // Whichever of the steps below is under way when [cancel] completes loses
+    // the race to this, and the one that loses has its answer ignored.
+    final cancelled = Completer<Never>();
+    unawaited(
+      cancel?.then((_) {
+        if (!cancelled.isCompleted) {
+          cancelled.completeError(const OsmSignInCancelledException());
+        }
+      }),
+    );
+    Future<T> unlessCancelled<T>(Future<T> step) =>
+        Future.any([step, cancelled.future]);
+
+    // Not raced: a server that finished binding after losing would hold the
+    // port with nothing left to close it.
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       redirectPort,
     );
     try {
+      if (cancelled.isCompleted) throw const OsmSignInCancelledException();
       // Listening before the browser is opened, not after: the redirect can
       // arrive the moment the consent screen is agreed to, and a program
       // that opened the browser first would have a window in which the one
@@ -186,12 +221,15 @@ class OsmSignIn {
           },
         ),
       );
-      final code = await waiting.timeout(
-        timeout,
-        onTimeout: () =>
-            throw const OsmSignInException('Gave up waiting for the browser.'),
+      final code = await unlessCancelled(
+        waiting.timeout(
+          timeout,
+          onTimeout: () => throw const OsmSignInException(
+            'Gave up waiting for the browser.',
+          ),
+        ),
       );
-      return await _token(code: code, verifier: verifier);
+      return await unlessCancelled(_token(code: code, verifier: verifier));
     } finally {
       await server.close(force: true);
     }

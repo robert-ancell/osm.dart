@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -110,6 +111,24 @@ void main() {
       signIn.tokenFromBrowser(timeout: const Duration(milliseconds: 50)),
       throwsA(isA<OsmSignInException>()),
     );
+  });
+
+  test('gives up when asked to, and lets go of the port', () async {
+    final cancel = Completer<void>();
+    final signIn = OsmSignIn(
+      clientId: 'an-application',
+      base: osm.base,
+      redirectPort: 8648,
+      // A browser opened and then never heard from again.
+      launch: (_) async => cancel.complete(),
+    );
+    await expectLater(
+      signIn.tokenFromBrowser(cancel: cancel.future),
+      throwsA(isA<OsmSignInCancelledException>()),
+    );
+    // Signing in again straight away needs the same port.
+    final again = await HttpServer.bind(InternetAddress.loopbackIPv4, 8648);
+    await again.close();
   });
 
   test('takes a token as granted what it asked for', () async {

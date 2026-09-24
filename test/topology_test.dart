@@ -287,6 +287,24 @@ void main() {
       );
     });
 
+    test('will not make a line longer than a way can be', () {
+      final view = TestView(
+        nodes: _row(),
+        ways: [
+          testWay(10, [1, 2]),
+          testWay(11, [2, 3, 4])
+        ],
+      );
+      expect(
+        OsmMerge(
+          view,
+          [view.way(10)!, view.way(11)!],
+          maximumWayNodes: 3,
+        ).disabled,
+        'too_many_vertices',
+      );
+    });
+
     test('adds up what is counted along the lines', () {
       final view = TestView(
         nodes: _row(),

@@ -706,8 +706,12 @@ class OsmMerge {
   /// What is selected, as it now stands.
   final List<OsmElement> selected;
 
+  /// The most nodes a way can have, which the API says; see
+  /// [OsmCapabilities.maximumWayNodes]. Two thousand on OpenStreetMap.
+  final int maximumWayNodes;
+
   /// Creates the operation.
-  OsmMerge(this._view, this.selected);
+  OsmMerge(this._view, this.selected, {this.maximumWayNodes = 2000});
 
   /// Whether it can be done: two things or more are selected.
   bool get available => selected.length >= 2;
@@ -725,7 +729,14 @@ class OsmMerge {
   (int, String?) get _choice {
     final reasons = [_joinDisabled, _pointsDisabled, _polygonDisabled];
     for (var i = 0; i < reasons.length; i++) {
-      if (reasons[i] == null) return (i, null);
+      if (reasons[i] != null) continue;
+      if (i == 0) {
+        final ways = _of(OsmGeometry.line).cast<OsmWay>().toList();
+        if (_joinWays(ways).single.nodes.length > maximumWayNodes) {
+          return (0, 'too_many_vertices');
+        }
+      }
+      return (i, null);
     }
     final nodes = _nodesDisabled;
     if (nodes == null) return (3, null);

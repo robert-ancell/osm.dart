@@ -20,6 +20,7 @@ export 'src/pbf/tile_cache.dart';
 export 'src/pbf/writer.dart';
 export 'src/region.dart';
 export 'src/subset.dart';
+export 'src/tag_text.dart';
 export 'src/update/api.dart';
 export 'src/update/auth.dart';
 export 'src/update/change_filter.dart' show OsmUpdateEdges;

@@ -47,8 +47,8 @@ class OsmUpload {
   /// Nodes that were not on the map before.
   final List<OsmNode> createdNodes;
 
-  /// Nodes that were, and have been moved.
-  final List<OsmNode> movedNodes;
+  /// Nodes that were, and have been moved or given other tags.
+  final List<OsmNode> changedNodes;
 
   /// Nodes taken off the map, as they were.
   final List<OsmNode> deletedNodes;
@@ -56,12 +56,12 @@ class OsmUpload {
   /// Ways that were not on the map before.
   final List<OsmWay> createdWays;
 
-  /// Ways that were, and now run through other nodes.
+  /// Ways that were, and now run through other nodes or have other tags.
   final List<OsmWay> changedWays;
 
   /// Gathers what [edits] would send.
   factory OsmUpload.of(OsmEdits edits) {
-    final nodes = edits.movedNodes;
+    final nodes = edits.changedNodes;
     final ways = edits.changedWays;
     return OsmUpload._(
       // A negative id is something made here that OpenStreetMap has never
@@ -70,7 +70,7 @@ class OsmUpload {
         for (final node in nodes.values)
           if (node.id < 0) node,
       ],
-      movedNodes: [
+      changedNodes: [
         for (final node in nodes.values)
           if (node.id > 0) node,
       ],
@@ -88,7 +88,7 @@ class OsmUpload {
 
   const OsmUpload._({
     required this.createdNodes,
-    required this.movedNodes,
+    required this.changedNodes,
     required this.deletedNodes,
     required this.createdWays,
     required this.changedWays,
@@ -97,7 +97,7 @@ class OsmUpload {
   /// How many elements would be written.
   int get length =>
       createdNodes.length +
-      movedNodes.length +
+      changedNodes.length +
       deletedNodes.length +
       createdWays.length +
       changedWays.length;
@@ -117,12 +117,10 @@ class OsmUpload {
         for (final node in createdNodes) 'Create node ${_name(node.id)}',
         for (final way in createdWays)
           'Create way ${_name(way.id)} through ${way.nodeIds.length} node(s)',
-        for (final node in movedNodes)
-          'Move node/${node.id} to '
-              '${node.latitude.toStringAsFixed(7)}, '
-              '${node.longitude.toStringAsFixed(7)}',
-        for (final way in changedWays)
-          'Change way/${way.id} to run through ${way.nodeIds.length} node(s)',
+        // Changed rather than moved or retagged: what is sent is the element
+        // as it now stands, which says nothing of what it was.
+        for (final node in changedNodes) 'Change node/${node.id}',
+        for (final way in changedWays) 'Change way/${way.id}',
         for (final node in deletedNodes) 'Delete node/${node.id}',
       ];
 
@@ -156,9 +154,9 @@ class OsmUpload {
       out.writeln('  </create>');
     }
 
-    if (movedNodes.isNotEmpty || changedWays.isNotEmpty) {
+    if (changedNodes.isNotEmpty || changedWays.isNotEmpty) {
       out.writeln('  <modify>');
-      for (final node in movedNodes) {
+      for (final node in changedNodes) {
         _node(out, node, changeset: changeset);
       }
       for (final way in changedWays) {

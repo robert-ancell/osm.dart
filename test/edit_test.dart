@@ -14,7 +14,7 @@ void main() {
     final edits = OsmEdits();
     expect(edits.isEmpty, isTrue);
     expect(edits.changes, isEmpty);
-    expect(edits.movedNode(1), isNull);
+    expect(edits.changedNode(1), isNull);
     expect(edits.undo(), isFalse);
   });
 
@@ -22,8 +22,8 @@ void main() {
     final edits = OsmEdits();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
 
-    expect(edits.movedNode(1)!.latitude, -36.86);
-    expect(edits.movedNode(1)!.longitude, 174.77);
+    expect(edits.changedNode(1)!.latitude, -36.86);
+    expect(edits.changedNode(1)!.longitude, 174.77);
     // The element it was given is the same as it ever was.
     expect(_node.latitude, -36.85);
     expect(_node.longitude, 174.76);
@@ -32,8 +32,8 @@ void main() {
   test('keeps what a node was tagged with and where it came from', () {
     final edits = OsmEdits();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
-    expect(edits.movedNode(1)!.tags, _node.tags);
-    expect(edits.movedNode(1)!.info!.version, 3);
+    expect(edits.changedNode(1)!.tags, _node.tags);
+    expect(edits.changedNode(1)!.info!.version, 3);
   });
 
   test('writes down each change in the order it was made', () {
@@ -61,7 +61,7 @@ void main() {
     // And undoing it goes back to where the node started, not to the frame
     // before last.
     edits.undo();
-    expect(edits.movedNode(1), isNull);
+    expect(edits.changedNode(1), isNull);
   });
 
   test('undoes the last change and leaves the one before it', () {
@@ -71,11 +71,11 @@ void main() {
 
     expect(edits.undo(), isTrue);
     expect(edits.length, 1);
-    expect(edits.movedNode(1)!.latitude, -36.86);
+    expect(edits.changedNode(1)!.latitude, -36.86);
 
     expect(edits.undo(), isTrue);
     expect(edits.isEmpty, isTrue);
-    expect(edits.movedNode(1), isNull);
+    expect(edits.changedNode(1), isNull);
   });
 
   test('undoes changes to different nodes one at a time', () {
@@ -85,8 +85,9 @@ void main() {
     edits.moveNode(other, latitude: -36.88, longitude: 174.79);
 
     edits.undo();
-    expect(edits.movedNode(2), isNull);
-    expect(edits.movedNode(1), isNotNull, reason: 'the other one still moved');
+    expect(edits.changedNode(2), isNull);
+    expect(edits.changedNode(1), isNotNull,
+        reason: 'the other one still moved');
   });
 
   test('undoes everything at once', () {
@@ -95,7 +96,7 @@ void main() {
     edits.moveNode(_node, latitude: -36.87, longitude: 174.78);
     edits.undoAll();
     expect(edits.isEmpty, isTrue);
-    expect(edits.movedNodes, isEmpty);
+    expect(edits.changedNodes, isEmpty);
   });
 
   test('says when something has changed', () {
@@ -130,7 +131,7 @@ void main() {
     final edits = OsmEdits();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     expect(() => edits.changes.clear(), throwsUnsupportedError);
-    expect(() => edits.movedNodes.clear(), throwsUnsupportedError);
+    expect(() => edits.changedNodes.clear(), throwsUnsupportedError);
   });
 }
 
@@ -146,7 +147,7 @@ void _more() {
       final edits = OsmEdits();
       final made = edits.createNode(latitude: -36.85, longitude: 174.76);
       expect(made.id, lessThan(0), reason: 'not uploaded yet');
-      expect(edits.movedNode(made.id), made);
+      expect(edits.changedNode(made.id), made);
       expect(edits.changes.single, isA<OsmNodeCreated>());
     });
 
@@ -172,7 +173,7 @@ void _more() {
       final edits = OsmEdits();
       final made = edits.createNode(latitude: 0, longitude: 0);
       edits.undo();
-      expect(edits.movedNode(made.id), isNull);
+      expect(edits.changedNode(made.id), isNull);
       expect(edits.isEmpty, isTrue);
     });
 
@@ -210,7 +211,7 @@ void _more() {
       final edits = OsmEdits();
       edits.deleteNode(_node);
       expect(edits.isGone(OsmElementType.node, _node.id), isTrue);
-      expect(edits.movedNode(_node.id), isNull);
+      expect(edits.changedNode(_node.id), isNull);
     });
 
     test('takes a deleted node out of the ways through it', () {
@@ -234,10 +235,10 @@ void _more() {
       final edits = OsmEdits();
       edits.moveNode(_node, latitude: -36.9, longitude: 174.9);
       edits.deleteNode(_node);
-      expect(edits.movedNode(_node.id), isNull);
+      expect(edits.changedNode(_node.id), isNull);
 
       edits.undo();
-      expect(edits.movedNode(_node.id)!.latitude, -36.9);
+      expect(edits.changedNode(_node.id)!.latitude, -36.9);
     });
 
     test('says a deleted node has to be drawn again', () {
@@ -257,7 +258,7 @@ void _more() {
     edits.undoAll();
     expect(edits.isEmpty, isTrue);
     expect(edits.changedWays, isEmpty);
-    expect(edits.movedNodes, isEmpty);
+    expect(edits.changedNodes, isEmpty);
     expect(edits.isGone(OsmElementType.node, _node.id), isFalse);
   });
 }
@@ -288,8 +289,8 @@ void _groups() {
       expect(edits.undo(), isTrue);
       expect(edits.isEmpty, isTrue);
       expect(edits.changedWay(way.id), isNull);
-      expect(edits.movedNode(first.id), isNull);
-      expect(edits.movedNode(second.id), isNull);
+      expect(edits.changedNode(first.id), isNull);
+      expect(edits.changedNode(second.id), isNull);
     });
 
     test('leaves what was done before the mark alone', () {
@@ -302,7 +303,7 @@ void _groups() {
 
       edits.undo();
       expect(edits.length, 1);
-      expect(edits.movedNode(kept.id), isNotNull);
+      expect(edits.changedNode(kept.id), isNotNull);
     });
 
     test('gathers nothing when there is nothing to gather', () {
@@ -327,7 +328,122 @@ void _groups() {
       edits.combineSince(mark);
 
       edits.undo();
-      expect(edits.movedNode(1), isNull);
+      expect(edits.changedNode(1), isNull);
+    });
+  });
+
+  test('undoes a move of a node that was made as part of a group', () {
+    // A line drawn a point at a time is one change; moving one of its points
+    // afterwards and taking that back must leave the point where it was put,
+    // not take it away from under the line.
+    final edits = OsmEdits();
+    final mark = edits.length;
+    final a = edits.createNode(latitude: 1, longitude: 1);
+    final b = edits.createNode(latitude: 2, longitude: 2);
+    edits.createWay(nodeIds: [a.id, b.id]);
+    edits.combineSince(mark);
+
+    edits.moveNode(a, latitude: 5, longitude: 5);
+    edits.undo();
+    expect(edits.changedNode(a.id)?.latitude, 1);
+    expect(edits.changedNode(a.id)?.longitude, 1);
+  });
+
+  group('tags', () {
+    const way = OsmWay(
+      id: 9,
+      nodeIds: [1, 2],
+      tags: {'highway': 'residential'},
+      info: OsmInfo(version: 4),
+    );
+
+    test('gives a node other tags and keeps everything else', () {
+      final edits = OsmEdits();
+      expect(edits.setTags(_node, const {'amenity': 'bench'}), isTrue);
+      final now = edits.changedNode(1)!;
+      expect(now.tags, {'amenity': 'bench'});
+      expect(now.latitude, _node.latitude);
+      expect(now.info?.version, 3);
+    });
+
+    test('gives a way other tags and keeps its nodes', () {
+      final edits = OsmEdits();
+      edits.setTags(way, const {'highway': 'service'});
+      expect(edits.changedWay(9)!.tags, {'highway': 'service'});
+      expect(edits.changedWay(9)!.nodeIds, [1, 2]);
+    });
+
+    test('records nothing when the tags are already those', () {
+      final edits = OsmEdits();
+      expect(edits.setTags(_node, const {'highway': 'crossing'}), isFalse);
+      expect(edits.isEmpty, isTrue);
+      expect(edits.changedNode(1), isNull);
+    });
+
+    test('undoes back to what was read', () {
+      final edits = OsmEdits()..setTags(way, const {'highway': 'service'});
+      edits.undo();
+      expect(edits.changedWay(9), isNull);
+    });
+
+    test('keeps new tags through a move and its undoing', () {
+      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      final tagged = edits.changedNode(1)!;
+      edits.moveNode(tagged, latitude: 0, longitude: 0);
+      edits.undo();
+      expect(edits.changedNode(1)!.tags, {'amenity': 'bench'});
+      expect(edits.changedNode(1)!.latitude, _node.latitude);
+      edits.undo();
+      expect(edits.changedNode(1), isNull);
+    });
+
+    test('keeps a move through a change of tags and its undoing', () {
+      final edits = OsmEdits()
+        ..moveNode(_node, latitude: 0, longitude: 0)
+        ..setTags(_node, const {'amenity': 'bench'});
+      expect(edits.changedNode(1)!.latitude, 0);
+      edits.undo();
+      expect(edits.changedNode(1)!.latitude, 0);
+      expect(edits.changedNode(1)!.tags, _node.tags);
+    });
+
+    test('brings a retagged node back retagged when its deletion is undone',
+        () {
+      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      edits.deleteNode(edits.changedNode(1)!);
+      expect(edits.deletedNodes[1]!.tags, {'amenity': 'bench'});
+      edits.undo();
+      expect(edits.isGone(OsmElementType.node, 1), isFalse);
+      expect(edits.changedNode(1)!.tags, {'amenity': 'bench'});
+    });
+
+    test('changes several elements as one', () {
+      final edits = OsmEdits();
+      final mark = edits.length;
+      edits
+        ..setTags(_node, const {'name': 'Queen Street'})
+        ..setTags(way, const {'name': 'Queen Street'})
+        ..combineSince(mark);
+      expect(edits.length, 1);
+      edits.undo();
+      expect(edits.changedNode(1), isNull);
+      expect(edits.changedWay(9), isNull);
+    });
+
+    test('will not tag a relation', () {
+      const relation = OsmRelation(id: 3, members: [], tags: {});
+      expect(
+        () => OsmEdits().setTags(relation, const {'type': 'route'}),
+        throwsArgumentError,
+      );
+    });
+
+    test('sends a retagged node with its new tags', () {
+      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      expect(xml, contains('<tag k="amenity" v="bench"/>'));
+      expect(xml, isNot(contains('crossing')));
+      expect(OsmUpload.of(edits).describe(), ['Change node/1']);
     });
   });
 }

@@ -48,6 +48,44 @@ final osmWebsite = Uri.parse('https://www.openstreetmap.org/');
 /// What an editor has to ask for: change the map, and see who you are.
 const osmEditScopes = 'write_api read_prefs';
 
+/// Being allowed to change the map, which every upload needs.
+const osmWriteApiScope = 'write_api';
+
+/// A token, and what it is allowed to do.
+///
+/// The two belong together. An application's registration says what it may
+/// *ask* for; a token carries what it was actually *granted*, at the moment
+/// somebody agreed to it. Adding a permission to the registration later does
+/// not reach a token already issued, and OpenStreetMap's tokens do not
+/// expire on their own, so one granted before the change goes on being
+/// short of it indefinitely.
+///
+/// Holding the two apart is what turns that into a sentence somebody can act
+/// on — sign in again — rather than a refusal part way through an upload.
+class OsmToken {
+  /// The bearer token itself.
+  final String token;
+
+  /// What it was granted.
+  final Set<String> scopes;
+
+  /// Creates a token and what it may do.
+  OsmToken(this.token, Iterable<String> scopes)
+      : scopes = Set.unmodifiable(scopes);
+
+  /// Whether it is allowed to do [scope].
+  bool covers(String scope) => scopes.contains(scope);
+
+  /// Whether it is allowed to do all of [wanted].
+  bool coversAll(Iterable<String> wanted) => wanted.every(covers);
+
+  /// Whether it can be used to change the map.
+  bool get canWrite => covers(osmWriteApiScope);
+
+  @override
+  String toString() => 'OsmToken(${scopes.join(' ')})';
+}
+
 /// What went wrong signing in, in a sentence somebody can act on.
 class OsmSignInException implements Exception {
   /// What to say about it.
@@ -117,7 +155,7 @@ class OsmSignIn {
   /// log in and read the consent screen, short enough that a sign-in
   /// somebody walked away from does not hold the port for the rest of the
   /// day.
-  Future<String> tokenFromBrowser({
+  Future<OsmToken> tokenFromBrowser({
     Duration timeout = const Duration(minutes: 5),
   }) async {
     final verifier = _randomString(64);
@@ -196,7 +234,7 @@ class OsmSignIn {
     throw const OsmSignInException('The browser never came back.');
   }
 
-  Future<String> _token({
+  Future<OsmToken> _token({
     required String code,
     required String verifier,
   }) async {
@@ -225,14 +263,32 @@ class OsmSignIn {
       if (response.statusCode != HttpStatus.ok) {
         throw OsmSignInException(whyNoToken(body, response.statusCode));
       }
-      final token = (jsonDecode(body) as Map)['access_token'];
+      final answer = jsonDecode(body) as Map;
+      final token = answer['access_token'];
       if (token is! String) {
         throw const OsmSignInException('No token in what came back.');
       }
-      return token;
+      return OsmToken(token, _granted(answer['scope']));
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// What the token was granted, out of the answer that carried it.
+  ///
+  /// OAuth lets a server leave the field out when it granted exactly what
+  /// was asked for, so nothing said means everything asked for rather than
+  /// nothing at all. Reading it the other way would have the program telling
+  /// somebody to sign in again over a token that is perfectly good.
+  Iterable<String> _granted(Object? said) {
+    final granted = said is String
+        ? said.split(' ').where(
+              (scope) => scope.isNotEmpty,
+            )
+        : const <String>[];
+    return granted.isEmpty
+        ? scopes.split(' ').where((s) => s.isNotEmpty)
+        : granted;
   }
 
   /// What OpenStreetMap said when it would not hand over a token, in a

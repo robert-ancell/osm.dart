@@ -10,6 +10,10 @@ class _FakeOpenStreetMap {
   final HttpServer _server;
   final String token;
 
+  /// What the consent screen granted, where that is not simply what was
+  /// asked for. Null leaves the field out, as a server may.
+  String? granted;
+
   /// What the token request was asked for, so a test can check PKCE went.
   Map<String, String>? exchanged;
 
@@ -30,7 +34,10 @@ class _FakeOpenStreetMap {
       exchanged = Uri.splitQueryString(body);
       request.response
         ..headers.contentType = ContentType.json
-        ..write(jsonEncode({'access_token': token}));
+        ..write(jsonEncode({
+          'access_token': token,
+          if (granted != null) 'scope': granted,
+        }));
     } else {
       request.response
         ..statusCode = HttpStatus.badRequest
@@ -71,7 +78,7 @@ void main() {
       redirectPort: 8643,
       launch: agreeing(),
     );
-    expect(await signIn.tokenFromBrowser(), 'a-token');
+    expect((await signIn.tokenFromBrowser()).token, 'a-token');
     // The secret is only sent at the end, with the code, which is the whole
     // of what PKCE is.
     expect(osm.exchanged!['code'], 'a-code');
@@ -103,6 +110,36 @@ void main() {
       signIn.tokenFromBrowser(timeout: const Duration(milliseconds: 50)),
       throwsA(isA<OsmSignInException>()),
     );
+  });
+
+  test('takes a token as granted what it asked for', () async {
+    // OAuth lets the field be left out when the answer is exactly what was
+    // asked for, and reading that as nothing granted would have the editor
+    // asking somebody to sign in again over a perfectly good token.
+    final signIn = OsmSignIn(
+      clientId: 'an-application',
+      base: osm.base,
+      redirectPort: 8646,
+      launch: agreeing(),
+    );
+    final token = await signIn.tokenFromBrowser();
+    expect(token.canWrite, isTrue);
+    expect(token.coversAll(['write_api', 'read_prefs']), isTrue);
+  });
+
+  test('holds a token to what it was actually granted', () async {
+    // A token issued before a permission was added to the registration goes
+    // on being short of it, and OpenStreetMap's tokens do not expire.
+    osm.granted = 'read_prefs';
+    final signIn = OsmSignIn(
+      clientId: 'an-application',
+      base: osm.base,
+      redirectPort: 8647,
+      launch: agreeing(),
+    );
+    final token = await signIn.tokenFromBrowser();
+    expect(token.canWrite, isFalse);
+    expect(token.covers('read_prefs'), isTrue);
   });
 
   test('says what to go and change when the application is confidential', () {

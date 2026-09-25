@@ -134,4 +134,12 @@ void main() {
       expect(editor.canRedo, isFalse);
     });
   });
+
+  test('says a way with too few nodes left is no way at all', () {
+    expect(testWay(1, [1, 2]).isDegenerate, isFalse);
+    expect(testWay(1, [1, 1]).isDegenerate, isTrue);
+    expect(testWay(1, [1]).isDegenerate, isTrue);
+    expect(testWay(1, [1, 2, 3, 1]).isDegenerate, isFalse);
+    expect(testWay(1, [1, 2, 1]).isDegenerate, isTrue);
+  });
 }

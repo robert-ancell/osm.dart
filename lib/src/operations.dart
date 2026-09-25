@@ -43,10 +43,6 @@ bool osmHasInterestingTags(Map<String, String> tags) => tags.keys.any(
           !_uninterestingKeys.contains(key) && !_uninterestingKey.hasMatch(key),
     );
 
-/// Whether [way] has too few nodes left to be a way at all.
-bool osmIsDegenerate(OsmWay way) =>
-    way.nodeIds.toSet().length < (way.isClosed ? 3 : 2);
-
 /// Something done to what is selected, as iD offers it: deleting,
 /// reversing, extracting, splitting, merging or disconnecting.
 ///
@@ -149,7 +145,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
     _view.deleteNode(node, from: ways, relations: relations);
     for (final way in ways) {
       final now = _view.way(way.id);
-      if (now != null && osmIsDegenerate(now)) _deleteWay(now);
+      if (now != null && now.isDegenerate) _deleteWay(now);
     }
     _deleteEmpty(relations);
   }

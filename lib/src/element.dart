@@ -107,6 +107,11 @@ class OsmWay extends OsmElement {
   /// Whether the way starts and ends at the same node.
   bool get isClosed => nodeIds.length > 1 && nodeIds.first == nodeIds.last;
 
+  /// Whether the way has too few different nodes to be a way at all: fewer
+  /// than two, or than three for a closed one. What is left of a way whose
+  /// nodes have been taken away, which is deleted rather than kept.
+  bool get isDegenerate => nodeIds.toSet().length < (isClosed ? 3 : 2);
+
   @override
   OsmElementType get type => OsmElementType.way;
 

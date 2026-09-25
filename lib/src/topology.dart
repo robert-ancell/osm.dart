@@ -1260,7 +1260,7 @@ void osmConnect(OsmEditor view, List<int> ids) {
   }
   view.setTags(view.node(survivorId)!, tags);
   for (final way in view.waysUsing(survivorId)) {
-    if (osmIsDegenerate(way)) OsmDeleteOperation(view, [way]).apply();
+    if (way.isDegenerate) OsmDeleteOperation(view, [way]).apply();
   }
 }
 
@@ -1400,7 +1400,7 @@ String? osmConnectDisabled(OsmEditor view, List<int> ids) {
                 ],
         );
       }
-      if (osmIsDegenerate(way)) return 'restriction';
+      if (way.isDegenerate) return 'restriction';
     }
   }
   return null;

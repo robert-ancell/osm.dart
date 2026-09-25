@@ -141,14 +141,14 @@ class OsmCache {
   /// iD's tagging schema in [language], which says what kinds of thing there
   /// are.
   ///
-  /// Read the first time each language is asked for and kept. Null only when
-  /// there is no copy on disk and none could be fetched, in which case the
-  /// next ask tries again.
-  Future<OsmPresets?> presets({String language = 'en'}) async {
+  /// Read the first time each language is asked for and kept. Empty only
+  /// when there is no copy on disk and none could be fetched, in which case
+  /// the next ask tries again.
+  Future<OsmPresets> presets({String language = 'en'}) async {
     final held = _presets[language];
     if (held != null) return held;
     final read = await presetsCache.read(language: language);
-    if (read != null) _presets[language] = read;
+    if (read.byId.isNotEmpty) _presets[language] = read;
     return read;
   }
 

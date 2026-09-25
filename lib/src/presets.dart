@@ -321,6 +321,13 @@ class OsmPresets {
       : _byKey = _index(byId.values),
         _areaKeys = _findAreaKeys(byId.values);
 
+  /// No presets at all: what there is before the schema has been read.
+  ///
+  /// Everything matches only a [fallback], and no closed way is an area by
+  /// its tags, so a program that decides that some other way until the
+  /// schema is in should go on doing so while [byId] is empty.
+  OsmPresets.empty() : this._(const {}, const {}, const {});
+
   /// Presets read from the schema's own files.
   ///
   /// [presets] is `presets.json`; [translations] is the language's file,

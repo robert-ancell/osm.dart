@@ -46,12 +46,12 @@ void main() {
         return body == null ? null : Uint8List.fromList(utf8.encode(body));
       };
 
-  Future<OsmPresets?> read(Map<String, String>? files) =>
+  Future<OsmPresets> read(Map<String, String>? files) =>
       OsmPresetsCache(directory: directory, fetch: server(files)).read();
 
   test('fetches the schema and keeps it', () async {
     final presets = await read(_served);
-    expect(presets!.byId['amenity/cafe']!.name, 'Cafe');
+    expect(presets.byId['amenity/cafe']!.name, 'Cafe');
     expect(asked, hasLength(4));
     expect(asked.first.toString(), startsWith(osmPresetsUrl));
     for (final file in OsmPresetsCache.filesFor('en')) {
@@ -63,7 +63,7 @@ void main() {
   test('uses a recent copy without asking again', () async {
     await read(_served);
     asked.clear();
-    expect((await read(_served))!.byId, contains('amenity/cafe'));
+    expect((await read(_served)).byId, contains('amenity/cafe'));
     expect(asked, isEmpty);
   });
 
@@ -84,17 +84,17 @@ void main() {
       osmPresetsFreshness + const Duration(days: 1),
     );
     File('${directory.path}/presets.min.json').setLastModifiedSync(old);
-    expect((await read(null))!.byId, contains('amenity/cafe'));
+    expect((await read(null)).byId, contains('amenity/cafe'));
   });
 
   test('has nothing when there is no copy and no network', () async {
-    expect(await read(null), isNull);
+    expect((await read(null)).byId, isEmpty);
   });
 
   test('keeps nothing when a file is missing', () async {
     // Part of one version is not a schema, and would be kept as one.
     final partial = {..._served}..remove('preset_defaults.min.json');
-    expect(await read(partial), isNull);
+    expect((await read(partial)).byId, isEmpty);
     expect(directory.listSync(), isEmpty);
   });
 
@@ -102,7 +102,7 @@ void main() {
     final page = {
       for (final name in _served.keys) name: '<html>Log in</html>',
     };
-    expect(await read(page), isNull);
+    expect((await read(page)).byId, isEmpty);
     expect(directory.listSync(), isEmpty);
   });
 }

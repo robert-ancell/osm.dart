@@ -54,9 +54,11 @@ class OsmPresetsCache {
   /// from the network otherwise.
   ///
   /// Never throws. An old copy is used when the network cannot be reached,
-  /// because old names beat none, and null comes back only when there is no
-  /// copy of any age and nothing could be fetched.
-  Future<OsmPresets?> read({String language = 'en'}) => readCachedFiles(
+  /// because old names beat none, and when there is no copy of any age and
+  /// nothing could be fetched, the schema comes back empty,
+  /// [OsmPresets.empty].
+  Future<OsmPresets> read({String language = 'en'}) async =>
+      await readCachedFiles(
         directory: directory,
         files: filesFor(language),
         from: from,
@@ -71,5 +73,6 @@ class OsmPresetsCache {
           ),
         ),
         isEmpty: (presets) => presets.byId.isEmpty,
-      );
+      ) ??
+      OsmPresets.empty();
 }

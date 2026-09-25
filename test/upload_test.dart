@@ -19,7 +19,7 @@ OsmNode _node(int id, double lat, double lon, {int version = 2}) => OsmNode(
     );
 
 String _xml(OsmEditHistory edits) =>
-    OsmUpload.of(edits).toXml(changeset: 77, generator: _generator);
+    OsmUpload.of(edits).toXml(changeset: 77, createdBy: _generator);
 
 void main() {
   test('sends nothing when nothing has been changed', () {

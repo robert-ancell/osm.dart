@@ -67,7 +67,7 @@ void main() {
     await cache.write(_a, _bytes(64));
     expect(cache.entry(_a)!.isStale, isFalse);
 
-    final older = await _aged(osmImageryFreshness * 2);
+    final older = await _aged(OsmImageryCache.freshness * 2);
     expect(older.entry(_a)!.isStale, isTrue);
   });
 

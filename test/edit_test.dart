@@ -444,7 +444,7 @@ void _groups() {
     test('sends a retagged node with its new tags', () {
       final edits = OsmEditHistory()
         ..setTags(_node, const {'amenity': 'bench'});
-      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, createdBy: 'test');
       expect(xml, contains('<tag k="amenity" v="bench"/>'));
       expect(xml, isNot(contains('crossing')));
       expect(OsmUpload.of(edits).describe(), ['Change node/1']);
@@ -553,7 +553,7 @@ void _groups() {
         )
         // The way as the edits have it by now, without the node.
         ..deleteWay(way, relations: [route]);
-      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, createdBy: 'test');
       final relation = xml.indexOf('<relation id="30" version="7"');
       final deletedWay = xml.indexOf('<way id="9"', xml.indexOf('<delete>'));
       final deletedNode = xml.indexOf('<node id="2"', xml.indexOf('<delete>'));
@@ -614,7 +614,7 @@ void _groups() {
       final edits = OsmEditHistory()..deleteRelation(inner, relations: [outer]);
       expect(edits.isGone(OsmElementType.relation, 40), isTrue);
       expect(edits.changedRelation(41)!.members, isEmpty);
-      final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
+      final xml = OsmUpload.of(edits).toXml(changeset: 1, createdBy: 'test');
       expect(
         xml.indexOf('<relation id="41"'),
         lessThan(xml.indexOf('<relation id="40"')),

@@ -5,45 +5,12 @@ import 'country_coder_cache.dart';
 import 'imagery.dart';
 import 'imagery_cache.dart';
 import 'imagery_index_cache.dart';
-import 'tile_cache.dart';
+import 'data_cache.dart';
 import 'presets.dart';
 import 'presets_cache.dart';
 import 'update/http.dart';
 import 'update/replication.dart';
 import 'update/updater.dart';
-
-/// The directory every cache here is kept under unless it is given another.
-///
-/// The platform's own place for caches, which anything is entitled to empty:
-///
-/// - `$XDG_CACHE_HOME/osm.dart`, or `~/.cache/osm.dart`, on Linux and other
-///   Unix systems;
-/// - `~/Library/Caches/osm.dart` on macOS;
-/// - `%LOCALAPPDATA%\osm.dart\Cache` on Windows.
-///
-/// With [name], the directory of that name under it. Each cache has its own
-/// name, the `name` of its class, so that none of them writes over another.
-///
-/// Shared by every program using this package that does not choose its own,
-/// so that what one has fetched the next does not fetch again. A program
-/// that will be running at the same time as another should give its caches
-/// a directory of its own: a tile cache's index is written by one program at
-/// a time.
-Directory osmCacheDirectory([String? name]) {
-  final environment = Platform.environment;
-  final home = environment['HOME'] ?? environment['USERPROFILE'] ?? '.';
-  final String root;
-  if (Platform.isWindows) {
-    final local = environment['LOCALAPPDATA'] ?? '$home\\AppData\\Local';
-    root = '$local\\osm.dart\\Cache';
-  } else if (Platform.isMacOS) {
-    root = '$home/Library/Caches/osm.dart';
-  } else {
-    final xdg = environment['XDG_CACHE_HOME'];
-    root = '${xdg == null || xdg.isEmpty ? '$home/.cache' : xdg}/osm.dart';
-  }
-  return Directory(name == null ? root : '$root${Platform.pathSeparator}$name');
-}
 
 /// OpenStreetMap's resources, each fetched once and kept in one directory.
 ///
@@ -57,11 +24,45 @@ Directory osmCacheDirectory([String? name]) {
 /// on the disk one may take, somewhere else to fetch from — makes whichever
 /// caches it wants itself, each of which works on its own.
 class OsmCache {
+  /// The directory every cache here is kept under unless it is given another.
+  ///
+  /// The platform's own place for caches, which anything is entitled to empty:
+  ///
+  /// - `$XDG_CACHE_HOME/osm.dart`, or `~/.cache/osm.dart`, on Linux and other
+  ///   Unix systems;
+  /// - `~/Library/Caches/osm.dart` on macOS;
+  /// - `%LOCALAPPDATA%\osm.dart\Cache` on Windows.
+  ///
+  /// With [name], the directory of that name under it. Each cache has its own
+  /// name, the `name` of its class, so that none of them writes over another.
+  ///
+  /// Shared by every program using this package that does not choose its own,
+  /// so that what one has fetched the next does not fetch again. A program
+  /// that will be running at the same time as another should give its caches
+  /// a directory of its own: a data or imagery cache's index is written by one program at
+  /// a time.
+  static Directory defaultDirectory([String? name]) {
+    final environment = Platform.environment;
+    final home = environment['HOME'] ?? environment['USERPROFILE'] ?? '.';
+    final String root;
+    if (Platform.isWindows) {
+      final local = environment['LOCALAPPDATA'] ?? '$home\\AppData\\Local';
+      root = '$local\\osm.dart\\Cache';
+    } else if (Platform.isMacOS) {
+      root = '$home/Library/Caches/osm.dart';
+    } else {
+      final xdg = environment['XDG_CACHE_HOME'];
+      root = '${xdg == null || xdg.isEmpty ? '$home/.cache' : xdg}/osm.dart';
+    }
+    return Directory(
+        name == null ? root : '$root${Platform.pathSeparator}$name');
+  }
+
   /// The directory each cache is a directory of, by its `name`.
   final Directory directory;
 
   /// Boxes of OpenStreetMap data, as read from the API.
-  final OsmTileCache tileCache;
+  final OsmDataCache dataCache;
 
   /// Imagery tiles, as they arrived.
   final OsmImageryCache imageryCache;
@@ -85,7 +86,7 @@ class OsmCache {
 
   OsmCache._({
     required this.directory,
-    required this.tileCache,
+    required this.dataCache,
     required this.imageryCache,
     required this.imageryIndexCache,
     required this.presetsCache,
@@ -93,7 +94,7 @@ class OsmCache {
     required this.replicationDirectory,
   });
 
-  /// Opens every cache in [directory], by default [osmCacheDirectory].
+  /// Opens every cache in [directory], by default [OsmCache.defaultDirectory].
   ///
   /// Nothing is fetched until it is asked for.
   ///
@@ -105,13 +106,13 @@ class OsmCache {
     String? contact,
     OsmFetch? fetch,
   }) async {
-    final root = directory ?? osmCacheDirectory();
+    final root = directory ?? OsmCache.defaultDirectory();
     fetch ??= httpFetch(contact: contact);
     Directory under(String name) =>
         Directory('${root.path}${Platform.pathSeparator}$name');
     return OsmCache._(
       directory: root,
-      tileCache: await OsmTileCache.open(directory: under(OsmTileCache.name)),
+      dataCache: await OsmDataCache.open(directory: under(OsmDataCache.name)),
       imageryCache:
           await OsmImageryCache.open(directory: under(OsmImageryCache.name)),
       imageryIndexCache: OsmImageryIndexCache(

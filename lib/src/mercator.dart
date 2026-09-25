@@ -6,7 +6,7 @@ import 'dart:math' as math;
 ///
 /// The origin is the north-west corner, so y grows southwards, matching the
 /// tile numbering used by every OpenStreetMap tile service.
-abstract final class Mercator {
+abstract final class OsmMercator {
   /// The northern and southern limit of the projection, in degrees.
   ///
   /// Mercator sends the poles to infinity, so the world square is cut off at

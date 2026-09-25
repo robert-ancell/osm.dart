@@ -64,7 +64,7 @@ editor.setTags(cafe, {...cafe.tags, 'opening_hours': 'Mo-Fr 07:00-15:00'});
 
 final signedIn =
     await OsmAuthenticator(clientId: 'your-client-id').tokenFromBrowser();
-client.token = signedIn.token;
+client.token = signedIn.accessToken;
 print('Signed in as ${await client.displayName()}');
 
 final changeset = await client.upload(

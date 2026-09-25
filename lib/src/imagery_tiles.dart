@@ -51,7 +51,7 @@ class OsmImageryTiles {
 
   /// The tile as the server sends it, or null where the source has nothing.
   ///
-  /// A tile already held and still within [osmImageryFreshness] is given back
+  /// A tile already held and still within [OsmImageryCache.freshness] is given back
   /// without asking the server anything. An older one is given to [onHeld]
   /// straight away, so that something can be drawn at once, and fetched again
   /// behind it.

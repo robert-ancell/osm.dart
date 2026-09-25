@@ -79,7 +79,7 @@ void main() {
       redirectPort: 8643,
       launch: agreeing(),
     );
-    expect((await signIn.tokenFromBrowser()).token, 'a-token');
+    expect((await signIn.tokenFromBrowser()).accessToken, 'a-token');
     // The secret is only sent at the end, with the code, which is the whole
     // of what PKCE is.
     expect(osm.exchanged!['code'], 'a-code');
@@ -96,7 +96,7 @@ void main() {
     );
     await expectLater(
       signIn.tokenFromBrowser(),
-      throwsA(isA<OsmSignInException>()),
+      throwsA(isA<OsmAuthenticationException>()),
     );
   });
 
@@ -109,7 +109,7 @@ void main() {
     );
     await expectLater(
       signIn.tokenFromBrowser(timeout: const Duration(milliseconds: 50)),
-      throwsA(isA<OsmSignInException>()),
+      throwsA(isA<OsmAuthenticationException>()),
     );
   });
 
@@ -124,7 +124,7 @@ void main() {
     );
     await expectLater(
       signIn.tokenFromBrowser(cancel: cancel.future),
-      throwsA(isA<OsmSignInCancelledException>()),
+      throwsA(isA<OsmAuthenticationCancelledException>()),
     );
     // Signing in again straight away needs the same port.
     final again = await HttpServer.bind(InternetAddress.loopbackIPv4, 8648);

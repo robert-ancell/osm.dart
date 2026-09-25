@@ -35,7 +35,7 @@ class OsmTile {
 
   /// The tile holding ([latitude], [longitude]) at [zoom].
   factory OsmTile.at(int zoom, double latitude, double longitude) =>
-      OsmTile.of(zoom, Mercator.x(longitude), Mercator.y(latitude));
+      OsmTile.of(zoom, OsmMercator.x(longitude), OsmMercator.y(latitude));
 
   /// The side of the tile in world units.
   double get size => 1 / (1 << zoom);
@@ -48,10 +48,10 @@ class OsmTile {
 
   /// The ground the tile covers.
   OsmBounds get bounds => OsmBounds(
-        minLatitude: Mercator.latitude(worldY + size),
-        minLongitude: Mercator.longitude(worldX),
-        maxLatitude: Mercator.latitude(worldY),
-        maxLongitude: Mercator.longitude(worldX + size),
+        minLatitude: OsmMercator.latitude(worldY + size),
+        minLongitude: OsmMercator.longitude(worldX),
+        maxLatitude: OsmMercator.latitude(worldY),
+        maxLongitude: OsmMercator.longitude(worldX + size),
       );
 
   /// The tile one zoom level out that holds this one.

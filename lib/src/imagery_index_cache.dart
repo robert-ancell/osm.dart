@@ -6,22 +6,22 @@ import 'cached_files.dart';
 import 'imagery.dart';
 import 'update/http.dart';
 
-/// Where the editor layer index publishes itself.
-const osmImageryIndexUrl = 'https://osmlab.github.io/editor-layer-index/';
-
-/// How long a copy of the index is used before it is fetched again.
-///
-/// Layers are added and withdrawn over weeks, not hours, and a tool that
-/// cannot reach the index is better off with last week's list than none.
-const osmImageryIndexFreshness = Duration(days: 7);
-
 /// The editor layer index, kept on disk between runs.
 ///
 /// A megabyte of JSON describing every layer editors know about. It is parsed
 /// away from the calling isolate, because a tool with an interface should not
 /// be doing that where it draws.
 class OsmImageryIndexCache {
-  /// The directory under [osmCacheDirectory] it is kept in by default.
+  /// Where the editor layer index publishes itself.
+  static const defaultUrl = 'https://osmlab.github.io/editor-layer-index/';
+
+  /// How long a copy of the index is used before it is fetched again.
+  ///
+  /// Layers are added and withdrawn over weeks, not hours, and a tool that
+  /// cannot reach the index is better off with last week's list than none.
+  static const freshness = Duration(days: 7);
+
+  /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'imagery-index';
 
   /// The file the index is in.
@@ -33,11 +33,11 @@ class OsmImageryIndexCache {
   /// How it is fetched.
   final OsmFetch fetch;
 
-  /// Where it is fetched from, [osmImageryIndexUrl] unless said otherwise.
+  /// Where it is fetched from, [OsmImageryIndexCache.defaultUrl] unless said otherwise.
   final Uri from;
 
   /// Creates a cache in [directory], by default [name] under
-  /// [osmCacheDirectory].
+  /// [OsmCache.defaultDirectory].
   ///
   /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
   /// and a way to reach whoever runs the program. [fetch] replaces fetching
@@ -47,9 +47,9 @@ class OsmImageryIndexCache {
     String? contact,
     OsmFetch? fetch,
     Uri? from,
-  })  : directory = directory ?? osmCacheDirectory(name),
+  })  : directory = directory ?? OsmCache.defaultDirectory(name),
         fetch = fetch ?? httpFetch(contact: contact),
-        from = from ?? Uri.parse(osmImageryIndexUrl);
+        from = from ?? Uri.parse(OsmImageryIndexCache.defaultUrl);
 
   /// The index, from disk if a recent copy is held there and from the
   /// network otherwise.
@@ -65,7 +65,7 @@ class OsmImageryIndexCache {
         files: const [file],
         from: from,
         fetch: fetch,
-        freshness: osmImageryIndexFreshness,
+        freshness: OsmImageryIndexCache.freshness,
         parse: (files) => parse(files.single),
         isEmpty: (index) => index.layers.isEmpty,
       ) ??

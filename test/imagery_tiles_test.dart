@@ -114,7 +114,7 @@ void main() {
       // A fortnight on.
       final index = File('${_work.path}/index.json');
       final long = DateTime.now()
-          .subtract(osmImageryFreshness * 2)
+          .subtract(OsmImageryCache.freshness * 2)
           .millisecondsSinceEpoch;
       await index.writeAsString(
         (await index.readAsString())
@@ -156,7 +156,7 @@ void main() {
       expect(index.layers.single.id, 'A');
       expect(
         asked.single.toString(),
-        '$osmImageryIndexUrl${OsmImageryIndexCache.file}',
+        '${OsmImageryIndexCache.defaultUrl}${OsmImageryIndexCache.file}',
       );
       expect(file().existsSync(), isTrue);
     });
@@ -180,7 +180,7 @@ void main() {
           fetch: (uri, {abandon, onLate}) async =>
               Uint8List.fromList(utf8.encode(_index))).read();
       await file().setLastModified(
-        DateTime.now().subtract(osmImageryIndexFreshness * 2),
+        DateTime.now().subtract(OsmImageryIndexCache.freshness * 2),
       );
       final index = await OsmImageryIndexCache(
           directory: _work,

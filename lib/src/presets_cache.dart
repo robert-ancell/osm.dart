@@ -6,23 +6,23 @@ import 'cached_files.dart';
 import 'presets.dart';
 import 'update/http.dart';
 
-/// Where iD's tagging schema is published.
-///
-/// The major version is pinned: a new one can change the shape of the files,
-/// and within one they only gain presets and lose mistakes. It is where iD
-/// itself loads the schema from.
-const osmPresetsUrl =
-    'https://cdn.jsdelivr.net/npm/@openstreetmap/id-tagging-schema@6/dist/';
-
-/// How long a copy of the schema on disk is used before asking for it again.
-///
-/// A week, as for the imagery index: presets change a few times a month, and
-/// a week old list names things perfectly well.
-const osmPresetsFreshness = Duration(days: 7);
-
 /// iD's tagging schema, kept on disk between runs.
 class OsmPresetsCache {
-  /// The directory under [osmCacheDirectory] it is kept in by default.
+  /// Where iD's tagging schema is published.
+  ///
+  /// The major version is pinned: a new one can change the shape of the files,
+  /// and within one they only gain presets and lose mistakes. It is where iD
+  /// itself loads the schema from.
+  static const defaultUrl =
+      'https://cdn.jsdelivr.net/npm/@openstreetmap/id-tagging-schema@6/dist/';
+
+  /// How long a copy of the schema on disk is used before asking for it again.
+  ///
+  /// A week, as for the imagery index: presets change a few times a month, and
+  /// a week old list names things perfectly well.
+  static const freshness = Duration(days: 7);
+
+  /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'presets';
 
   /// Where the schema is kept.
@@ -31,11 +31,11 @@ class OsmPresetsCache {
   /// How it is fetched.
   final OsmFetch fetch;
 
-  /// Where it is fetched from, [osmPresetsUrl] unless said otherwise.
+  /// Where it is fetched from, [OsmPresetsCache.defaultUrl] unless said otherwise.
   final Uri from;
 
   /// Creates a cache in [directory], by default [name] under
-  /// [osmCacheDirectory].
+  /// [OsmCache.defaultDirectory].
   ///
   /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
   /// and a way to reach whoever runs the program. [fetch] replaces fetching
@@ -45,9 +45,9 @@ class OsmPresetsCache {
     String? contact,
     OsmFetch? fetch,
     Uri? from,
-  })  : directory = directory ?? osmCacheDirectory(name),
+  })  : directory = directory ?? OsmCache.defaultDirectory(name),
         fetch = fetch ?? httpFetch(contact: contact),
-        from = from ?? Uri.parse(osmPresetsUrl);
+        from = from ?? Uri.parse(OsmPresetsCache.defaultUrl);
 
   /// The files that make up the schema, for [language]. All four are asked
   /// for and kept together, so that a copy on disk is always one version of
@@ -72,7 +72,7 @@ class OsmPresetsCache {
         files: filesFor(language),
         from: from,
         fetch: fetch,
-        freshness: osmPresetsFreshness,
+        freshness: OsmPresetsCache.freshness,
         parse: (files) => Isolate.run(
           () => OsmPresets.parse(
             presets: files[0],

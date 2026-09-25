@@ -578,9 +578,9 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
       if (node == null) continue;
       // Each brought round beside the one before, so that a way across the
       // antimeridian is measured across it rather than round the world.
-      final x = Mercator.x(node.longitude);
-      xs.add(xs.isEmpty ? x : Mercator.nearest(x, xs.last));
-      ys.add(Mercator.y(node.latitude));
+      final x = OsmMercator.x(node.longitude);
+      xs.add(xs.isEmpty ? x : OsmMercator.nearest(x, xs.last));
+      ys.add(OsmMercator.y(node.latitude));
     }
     if (xs.isEmpty) return (0, 0);
 
@@ -621,7 +621,7 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
     }
     x ??= xs.reduce((a, b) => a + b) / xs.length;
     y ??= ys.reduce((a, b) => a + b) / ys.length;
-    return (Mercator.latitude(y), Mercator.wrappedLongitude(x));
+    return (OsmMercator.latitude(y), OsmMercator.wrappedLongitude(x));
   }
 }
 
@@ -683,10 +683,10 @@ class OsmCopied {
     double? first;
     for (final node in nodes.values) {
       // All on the same side of the antimeridian as the first.
-      final raw = Mercator.x(node.longitude);
-      final x = first == null ? raw : Mercator.nearest(raw, first);
+      final raw = OsmMercator.x(node.longitude);
+      final x = first == null ? raw : OsmMercator.nearest(raw, first);
       first ??= x;
-      final y = Mercator.y(node.latitude);
+      final y = OsmMercator.y(node.latitude);
       left = math.min(left, x);
       right = math.max(right, x);
       top = math.min(top, y);
@@ -753,11 +753,11 @@ List<OsmElement> osmPaste(
     OsmNode copyOf(int id) => newNodes[id] ??= () {
           final node = copied.nodes[id]!;
           return edits.createNode(
-            latitude: Mercator.latitude(
-              (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
+            latitude: OsmMercator.latitude(
+              (OsmMercator.y(node.latitude) + dy).clamp(0.0, 1.0),
             ),
-            longitude:
-                Mercator.wrappedLongitude(Mercator.x(node.longitude) + dx),
+            longitude: OsmMercator.wrappedLongitude(
+                OsmMercator.x(node.longitude) + dx),
             tags: node.tags,
           );
         }();
@@ -804,10 +804,11 @@ void osmMove(
       if (node == null) continue;
       view.moveNode(
         node,
-        latitude: Mercator.latitude(
-          (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
+        latitude: OsmMercator.latitude(
+          (OsmMercator.y(node.latitude) + dy).clamp(0.0, 1.0),
         ),
-        longitude: Mercator.wrappedLongitude(Mercator.x(node.longitude) + dx),
+        longitude:
+            OsmMercator.wrappedLongitude(OsmMercator.x(node.longitude) + dx),
       );
     }
   });

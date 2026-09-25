@@ -7,20 +7,8 @@ import 'pbf/file.dart';
 import 'pbf/writer.dart';
 import 'tile.dart';
 
-/// How much of the disk the cache is allowed.
-///
-/// A box of a few hundred metres comes to a few kilobytes written this way,
-/// so this holds a good deal of everywhere that has been looked at.
-const osmTileCacheBytes = 40 * 1024 * 1024;
-
-/// When a held box is old enough to be worth checking.
-///
-/// Nothing is thrown away at this age. It only decides which boxes are
-/// mentioned when asking the API what has been edited lately.
-const osmTileCacheFreshness = Duration(hours: 12);
-
 /// What is known about one box held on disk.
-class OsmCachedTile {
+class OsmCachedData {
   /// Which box it is.
   final OsmTile id;
 
@@ -31,11 +19,11 @@ class OsmCachedTile {
   final int bytes;
 
   /// Creates a record of a held box.
-  const OsmCachedTile(
+  const OsmCachedData(
       {required this.id, required this.at, required this.bytes});
 
   /// Whether it is old enough to be worth checking for edits.
-  bool get isStale => DateTime.now().difference(at) > osmTileCacheFreshness;
+  bool get isStale => DateTime.now().difference(at) > OsmDataCache.freshness;
 }
 
 /// Boxes of OpenStreetMap data held on disk between runs.
@@ -49,8 +37,20 @@ class OsmCachedTile {
 /// The API carries no entity tag and answers a conditional request with the
 /// whole body, so nothing here can be revalidated over HTTP. What is held is
 /// checked by asking the API what has been edited over the area instead.
-class OsmTileCache {
-  /// The directory under [osmCacheDirectory] it is kept in by default.
+class OsmDataCache {
+  /// How much of the disk the cache is allowed.
+  ///
+  /// A box of a few hundred metres comes to a few kilobytes written this way,
+  /// so this holds a good deal of everywhere that has been looked at.
+  static const defaultMaximumBytes = 40 * 1024 * 1024;
+
+  /// When a held box is old enough to be worth checking.
+  ///
+  /// Nothing is thrown away at this age. It only decides which boxes are
+  /// mentioned when asking the API what has been edited lately.
+  static const freshness = Duration(hours: 12);
+
+  /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'data';
 
   /// Where the files are.
@@ -59,21 +59,21 @@ class OsmTileCache {
   /// The most disk the cache may take.
   final int maximumBytes;
 
-  final _held = <OsmTile, OsmCachedTile>{};
+  final _held = <OsmTile, OsmCachedData>{};
 
-  OsmTileCache._(this.directory, this.maximumBytes);
+  OsmDataCache._(this.directory, this.maximumBytes);
 
   /// Opens the cache in [directory], by default [name] under
-  /// [osmCacheDirectory], reading what it already holds.
+  /// [OsmCache.defaultDirectory], reading what it already holds.
   ///
   /// A cache that cannot be read is started again rather than treated as an
   /// error. It holds nothing that cannot be read a second time.
-  static Future<OsmTileCache> open({
+  static Future<OsmDataCache> open({
     Directory? directory,
-    int maximumBytes = osmTileCacheBytes,
+    int maximumBytes = OsmDataCache.defaultMaximumBytes,
   }) async {
-    directory ??= osmCacheDirectory(name);
-    final cache = OsmTileCache._(directory, maximumBytes);
+    directory ??= OsmCache.defaultDirectory(name);
+    final cache = OsmDataCache._(directory, maximumBytes);
     try {
       await directory.create(recursive: true);
       await cache._readIndex();
@@ -86,7 +86,7 @@ class OsmTileCache {
   }
 
   /// Every box held, oldest read first.
-  List<OsmCachedTile> get tiles {
+  List<OsmCachedData> get tiles {
     final all = _held.values.toList()..sort((a, b) => a.at.compareTo(b.at));
     return all;
   }
@@ -95,7 +95,7 @@ class OsmTileCache {
   int get bytes => _held.values.fold(0, (total, tile) => total + tile.bytes);
 
   /// What is known about [tile], or null if it is not held.
-  OsmCachedTile? entry(OsmTile tile) => _held[tile];
+  OsmCachedData? entry(OsmTile tile) => _held[tile];
 
   /// Whether [tile] is held.
   bool holds(OsmTile tile) => _held.containsKey(tile);
@@ -128,7 +128,7 @@ class OsmTileCache {
         }
       }
       await writer.close();
-      _held[tile] = OsmCachedTile(
+      _held[tile] = OsmCachedData(
         id: tile,
         at: DateTime.now(),
         bytes: await File(path).length(),
@@ -148,7 +148,7 @@ class OsmTileCache {
     final held = _held[tile];
     if (held == null) return;
     _held[tile] =
-        OsmCachedTile(id: tile, at: DateTime.now(), bytes: held.bytes);
+        OsmCachedData(id: tile, at: DateTime.now(), bytes: held.bytes);
     await _writeIndex();
   }
 
@@ -206,7 +206,7 @@ class OsmTileCache {
       // A file that has gone, because something else cleared the directory
       // or a write never finished, is not held however the index reads.
       if (!File(_pathOf(id)).existsSync()) continue;
-      _held[id] = OsmCachedTile(
+      _held[id] = OsmCachedData(
         id: id,
         at: DateTime.fromMillisecondsSinceEpoch(read),
         bytes: size,

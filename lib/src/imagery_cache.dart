@@ -6,19 +6,6 @@ import 'dart:typed_data';
 
 import 'tile.dart';
 
-/// How much of the disk imagery is allowed.
-///
-/// A tile is about thirteen kilobytes, so this is something like fifteen
-/// thousand of them: a good deal of everywhere that has been looked at.
-const osmImageryCacheBytes = 200 * 1024 * 1024;
-
-/// How long a tile is used without asking whether it has changed.
-///
-/// Imagery servers commonly say `max-age=604800`, so a week is what they
-/// consider their own answers good for. Aerial imagery is reflown in years, not
-/// days.
-const osmImageryFreshness = Duration(days: 7);
-
 /// What is known about one tile held on disk.
 class OsmCachedImagery {
   /// Which tile it is.
@@ -42,7 +29,7 @@ class OsmCachedImagery {
   });
 
   /// Whether it is old enough to be worth fetching again.
-  bool get isStale => DateTime.now().difference(at) > osmImageryFreshness;
+  bool get isStale => DateTime.now().difference(at) > OsmImageryCache.freshness;
 }
 
 /// The imagery tiles fetched so far, held on disk between runs.
@@ -52,7 +39,20 @@ class OsmCachedImagery {
 /// source has nothing for is remembered too, so flying over the sea does not
 /// ask for the same empty tiles every time.
 class OsmImageryCache {
-  /// The directory under [osmCacheDirectory] it is kept in by default.
+  /// How much of the disk imagery is allowed.
+  ///
+  /// A tile is about thirteen kilobytes, so this is something like fifteen
+  /// thousand of them: a good deal of everywhere that has been looked at.
+  static const defaultMaximumBytes = 200 * 1024 * 1024;
+
+  /// How long a tile is used without asking whether it has changed.
+  ///
+  /// Imagery servers commonly say `max-age=604800`, so a week is what they
+  /// consider their own answers good for. Aerial imagery is reflown in years, not
+  /// days.
+  static const freshness = Duration(days: 7);
+
+  /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'imagery';
 
   /// Where the files are.
@@ -66,12 +66,12 @@ class OsmImageryCache {
   OsmImageryCache._(this.directory, this.maximumBytes);
 
   /// Opens the cache in [directory], by default [name] under
-  /// [osmCacheDirectory], reading what it already holds.
+  /// [OsmCache.defaultDirectory], reading what it already holds.
   static Future<OsmImageryCache> open({
     Directory? directory,
-    int maximumBytes = osmImageryCacheBytes,
+    int maximumBytes = OsmImageryCache.defaultMaximumBytes,
   }) async {
-    directory ??= osmCacheDirectory(name);
+    directory ??= OsmCache.defaultDirectory(name);
     final cache = OsmImageryCache._(directory, maximumBytes);
     try {
       await directory.create(recursive: true);

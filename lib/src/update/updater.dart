@@ -74,7 +74,7 @@ class OsmPbfUpdater {
 
   /// Where the diffs are kept, as [OsmReplication.download] keeps them, so
   /// an update that stops part way does not fetch them again; by default
-  /// under [osmCacheDirectory].
+  /// under [OsmCache.defaultDirectory].
   final Directory? cache;
 
   /// What looks up what the changes cannot settle, if anything.

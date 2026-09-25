@@ -40,18 +40,6 @@ import 'dart:math';
 import '../exception.dart';
 import 'sha256.dart';
 
-/// Where OpenStreetMap's own web site is, which is where sign-in happens.
-///
-/// Not the API: the authorisation and token endpoints are on the web site,
-/// and only the calls that follow go to `api.openstreetmap.org`.
-final osmWebsite = Uri.parse('https://www.openstreetmap.org/');
-
-/// What an editor has to ask for: change the map, and see who you are.
-const osmEditScopes = 'write_api read_prefs';
-
-/// Being allowed to change the map, which every upload needs.
-const osmWriteApiScope = 'write_api';
-
 /// A token, and what it is allowed to do.
 ///
 /// The two belong together. An application's registration says what it may
@@ -64,14 +52,17 @@ const osmWriteApiScope = 'write_api';
 /// Holding the two apart is what turns that into a sentence somebody can act
 /// on — sign in again — rather than a refusal part way through an upload.
 class OsmToken {
-  /// The bearer token itself.
-  final String token;
+  /// Being allowed to change the map, which every upload needs.
+  static const writeApiScope = 'write_api';
+
+  /// The bearer token itself, which [OsmApiClient.token] is set to.
+  final String accessToken;
 
   /// What it was granted.
   final Set<String> scopes;
 
   /// Creates a token and what it may do.
-  OsmToken(this.token, Iterable<String> scopes)
+  OsmToken(this.accessToken, Iterable<String> scopes)
       : scopes = Set.unmodifiable(scopes);
 
   /// Whether it is allowed to do [scope].
@@ -81,7 +72,7 @@ class OsmToken {
   bool coversAll(Iterable<String> wanted) => wanted.every(covers);
 
   /// Whether it can be used to change the map.
-  bool get canWrite => covers(osmWriteApiScope);
+  bool get canWrite => covers(OsmToken.writeApiScope);
 
   @override
   String toString() => 'OsmToken(${scopes.join(' ')})';
@@ -90,13 +81,13 @@ class OsmToken {
 /// Thrown when signing in to OpenStreetMap fails: the browser could not be
 /// opened or never came back, OpenStreetMap refused, or it did not hand over
 /// a token.
-class OsmSignInException implements OsmException {
+class OsmAuthenticationException implements OsmException {
   /// What went wrong, in a sentence somebody can act on.
   @override
   final String message;
 
   /// Creates the exception.
-  const OsmSignInException(this.message);
+  const OsmAuthenticationException(this.message);
 
   @override
   String toString() => message;
@@ -106,9 +97,9 @@ class OsmSignInException implements OsmException {
 ///
 /// Not a failure, and nothing to tell anybody about: they know, they pressed
 /// the button.
-class OsmSignInCancelledException implements OsmException {
+class OsmAuthenticationCancelledException implements OsmException {
   /// Creates the exception.
-  const OsmSignInCancelledException();
+  const OsmAuthenticationCancelledException();
 
   @override
   String get message => 'Signing in was cancelled.';
@@ -124,6 +115,15 @@ class OsmSignInCancelledException implements OsmException {
 /// that in the browser, listen on 127.0.0.1 for OpenStreetMap to send the
 /// browser back with a code, then swap the code and the secret for a token.
 class OsmAuthenticator {
+  /// Where OpenStreetMap's own web site is, which is where sign-in happens.
+  ///
+  /// Not the API: the authorisation and token endpoints are on the web site,
+  /// and only the calls that follow go to `api.openstreetmap.org`.
+  static final openStreetMap = Uri.parse('https://www.openstreetmap.org/');
+
+  /// What an editor has to ask for: change the map, and see who you are.
+  static const editScopes = 'write_api read_prefs';
+
   /// The application asking, as registered with OpenStreetMap.
   final String clientId;
 
@@ -144,11 +144,11 @@ class OsmAuthenticator {
   /// Creates an authenticator for an application.
   OsmAuthenticator({
     required this.clientId,
-    this.scopes = osmEditScopes,
+    this.scopes = OsmAuthenticator.editScopes,
     Uri? base,
     this.redirectPort = 8642,
     Future<void> Function(Uri url)? launch,
-  })  : base = base ?? osmWebsite,
+  })  : base = base ?? OsmAuthenticator.openStreetMap,
         launch = launch ?? openInBrowser;
 
   /// Where OpenStreetMap sends the browser back to.
@@ -165,7 +165,8 @@ class OsmAuthenticator {
     // Windows' explorer answers with a non-zero status even when it worked,
     // so only the others are worth believing.
     if (result.exitCode != 0 && !Platform.isWindows) {
-      throw OsmSignInException('Could not open a browser: ${result.stderr}');
+      throw OsmAuthenticationException(
+          'Could not open a browser: ${result.stderr}');
     }
   }
 
@@ -177,7 +178,7 @@ class OsmAuthenticator {
   /// day.
   ///
   /// Completing [cancel] gives up at once, wherever it has got to, and throws
-  /// [OsmSignInCancelledException]. The port is let go of straight away, so a
+  /// [OsmAuthenticationCancelledException]. The port is let go of straight away, so a
   /// sign-in started again a moment later can have it. A browser that comes
   /// back afterwards finds nobody listening, which is the right answer: the
   /// program stopped asking.
@@ -196,7 +197,7 @@ class OsmAuthenticator {
     unawaited(
       cancel?.then((_) {
         if (!cancelled.isCompleted) {
-          cancelled.completeError(const OsmSignInCancelledException());
+          cancelled.completeError(const OsmAuthenticationCancelledException());
         }
       }),
     );
@@ -210,7 +211,9 @@ class OsmAuthenticator {
       redirectPort,
     );
     try {
-      if (cancelled.isCompleted) throw const OsmSignInCancelledException();
+      if (cancelled.isCompleted) {
+        throw const OsmAuthenticationCancelledException();
+      }
       // Listening before the browser is opened, not after: the redirect can
       // arrive the moment the consent screen is agreed to, and a program
       // that opened the browser first would have a window in which the one
@@ -232,7 +235,7 @@ class OsmAuthenticator {
       final code = await unlessCancelled(
         waiting.timeout(
           timeout,
-          onTimeout: () => throw const OsmSignInException(
+          onTimeout: () => throw const OsmAuthenticationException(
             'Gave up waiting for the browser.',
           ),
         ),
@@ -267,17 +270,17 @@ class OsmAuthenticator {
       await request.response.close();
 
       if (error != null) {
-        throw OsmSignInException('OpenStreetMap said: $error');
+        throw OsmAuthenticationException('OpenStreetMap said: $error');
       }
       if (code == null) continue;
       // A code that came back with the wrong state is not the sign-in this
       // program started, and is the one thing this check exists for.
       if (query['state'] != state) {
-        throw const OsmSignInException('The sign-in came back wrong.');
+        throw const OsmAuthenticationException('The sign-in came back wrong.');
       }
       return code;
     }
-    throw const OsmSignInException('The browser never came back.');
+    throw const OsmAuthenticationException('The browser never came back.');
   }
 
   Future<OsmToken> _token({
@@ -309,7 +312,7 @@ class OsmAuthenticator {
           .transform(const Utf8Decoder(allowMalformed: true))
           .join();
       if (response.statusCode != HttpStatus.ok) {
-        throw OsmSignInException(whyNoToken(body, response.statusCode));
+        throw OsmAuthenticationException(whyNoToken(body, response.statusCode));
       }
       Object? answer;
       try {
@@ -318,11 +321,11 @@ class OsmAuthenticator {
         answer = null;
       }
       if (answer is! Map) {
-        throw const OsmSignInException('No token in what came back.');
+        throw const OsmAuthenticationException('No token in what came back.');
       }
       final token = answer['access_token'];
       if (token is! String) {
-        throw const OsmSignInException('No token in what came back.');
+        throw const OsmAuthenticationException('No token in what came back.');
       }
       return OsmToken(token, _granted(answer['scope']));
     } finally {

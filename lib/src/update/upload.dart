@@ -176,10 +176,10 @@ class OsmUpload {
   /// Order matters. Everything is created before anything refers to it, and
   /// nothing is deleted until every way that ran through it has been written
   /// without it.
-  String toXml({required int changeset, required String generator}) {
+  String toXml({required int changeset, required String createdBy}) {
     final out = StringBuffer()
       ..writeln(
-        '<osmChange version="0.6" generator="${_escaped(generator)}">',
+        '<osmChange version="0.6" generator="${_escaped(createdBy)}">',
       );
 
     if (createdNodes.isNotEmpty ||

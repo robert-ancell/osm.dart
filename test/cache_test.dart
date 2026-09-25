@@ -19,7 +19,7 @@ void main() {
 
     final cache = await OsmCache.open(directory: root, fetch: _offline);
     final directories = [
-      cache.tileCache.directory,
+      cache.dataCache.directory,
       cache.imageryCache.directory,
       cache.imageryIndexCache.directory,
       cache.presetsCache.directory,
@@ -31,7 +31,7 @@ void main() {
   });
 
   test('keeps each cache under the shared directory by default', () {
-    final root = osmCacheDirectory().path;
+    final root = OsmCache.defaultDirectory().path;
     for (final (name, directory) in [
       (
         OsmPresetsCache.name,
@@ -46,12 +46,12 @@ void main() {
         OsmImageryIndexCache(fetch: _offline).directory,
       ),
     ]) {
-      expect(directory.path, osmCacheDirectory(name).path);
+      expect(directory.path, OsmCache.defaultDirectory(name).path);
       expect(directory.parent.path, root);
     }
     expect(
       {
-        OsmTileCache.name,
+        OsmDataCache.name,
         OsmImageryCache.name,
         OsmImageryIndexCache.name,
         OsmPresetsCache.name,

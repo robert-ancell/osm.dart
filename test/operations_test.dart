@@ -396,8 +396,8 @@ void main() {
       // What the node said comes too.
       expect(start.tags, {'highway': 'crossing'});
       expect(
-        Mercator.x(start.longitude),
-        closeTo(Mercator.x(view.node(2)!.longitude) + 0.001, 1e-12),
+        OsmMercator.x(start.longitude),
+        closeTo(OsmMercator.x(view.node(2)!.longitude) + 0.001, 1e-12),
       );
       expect(view.history.length, 1);
     });
@@ -424,10 +424,10 @@ void main() {
   group('moving', () {
     test('moves a way and its nodes, once each, as one change', () {
       final view = _roads();
-      final before = Mercator.x(view.node(2)!.longitude);
+      final before = OsmMercator.x(view.node(2)!.longitude);
       view.move([view.way(10)!, view.node(2)!], dx: 0.0001, dy: 0);
       expect(
-        Mercator.x(view.node(2)!.longitude),
+        OsmMercator.x(view.node(2)!.longitude),
         closeTo(before + 0.0001, 1e-12),
       );
       expect(view.history.length, 1);

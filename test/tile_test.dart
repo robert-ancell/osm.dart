@@ -3,24 +3,24 @@ import 'package:test/test.dart';
 
 void main() {
   test('puts the origin at the north west corner', () {
-    expect(Mercator.x(-180), closeTo(0, 1e-12));
-    expect(Mercator.y(Mercator.latitudeLimit), closeTo(0, 1e-9));
+    expect(OsmMercator.x(-180), closeTo(0, 1e-12));
+    expect(OsmMercator.y(OsmMercator.latitudeLimit), closeTo(0, 1e-9));
   });
 
   test('puts null island in the middle', () {
-    expect(Mercator.x(0), closeTo(0.5, 1e-12));
-    expect(Mercator.y(0), closeTo(0.5, 1e-12));
+    expect(OsmMercator.x(0), closeTo(0.5, 1e-12));
+    expect(OsmMercator.y(0), closeTo(0.5, 1e-12));
   });
 
   test('round trips a location', () {
     for (final latitude in [-84.0, -36.85, 0.0, 51.5, 84.0]) {
       for (final longitude in [-179.0, -1.0, 0.0, 174.76, 179.0]) {
         expect(
-          Mercator.latitude(Mercator.y(latitude)),
+          OsmMercator.latitude(OsmMercator.y(latitude)),
           closeTo(latitude, 1e-9),
         );
         expect(
-          Mercator.longitude(Mercator.x(longitude)),
+          OsmMercator.longitude(OsmMercator.x(longitude)),
           closeTo(longitude, 1e-9),
         );
       }
@@ -28,15 +28,16 @@ void main() {
   });
 
   test('clamps beyond the limit rather than running to infinity', () {
-    expect(Mercator.y(90), closeTo(0, 1e-9));
-    expect(Mercator.y(-90), closeTo(1, 1e-9));
+    expect(OsmMercator.y(90), closeTo(0, 1e-9));
+    expect(OsmMercator.y(-90), closeTo(1, 1e-9));
   });
 
   test('stretches distances away from the equator', () {
-    expect(Mercator.metresPerUnit(0), greaterThan(Mercator.metresPerUnit(60)));
+    expect(OsmMercator.metresPerUnit(0),
+        greaterThan(OsmMercator.metresPerUnit(60)));
     expect(
-      Mercator.metresPerUnit(60),
-      closeTo(Mercator.metresPerUnit(0) / 2, 1),
+      OsmMercator.metresPerUnit(60),
+      closeTo(OsmMercator.metresPerUnit(0) / 2, 1),
     );
   });
 
@@ -93,17 +94,17 @@ void main() {
 
   group('Mercator', () {
     test('wraps round the world', () {
-      expect(Mercator.wrap(1.25), closeTo(0.25, 1e-12));
-      expect(Mercator.wrap(-0.25), closeTo(0.75, 1e-12));
-      expect(Mercator.wrap(1), 0);
-      expect(Mercator.wrappedLongitude(Mercator.x(179) + 2 / 360),
+      expect(OsmMercator.wrap(1.25), closeTo(0.25, 1e-12));
+      expect(OsmMercator.wrap(-0.25), closeTo(0.75, 1e-12));
+      expect(OsmMercator.wrap(1), 0);
+      expect(OsmMercator.wrappedLongitude(OsmMercator.x(179) + 2 / 360),
           closeTo(-179, 1e-9));
     });
 
     test('brings a place round beside another', () {
-      expect(Mercator.nearest(0.01, 0.99), closeTo(1.01, 1e-12));
-      expect(Mercator.nearest(0.99, 0.01), closeTo(-0.01, 1e-12));
-      expect(Mercator.nearest(0.4, 0.6), closeTo(0.4, 1e-12));
+      expect(OsmMercator.nearest(0.01, 0.99), closeTo(1.01, 1e-12));
+      expect(OsmMercator.nearest(0.99, 0.01), closeTo(-0.01, 1e-12));
+      expect(OsmMercator.nearest(0.4, 0.6), closeTo(0.4, 1e-12));
     });
   });
 }

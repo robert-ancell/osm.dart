@@ -53,7 +53,7 @@ void main() {
     final presets = await read(_served);
     expect(presets.byId['amenity/cafe']!.name, 'Cafe');
     expect(asked, hasLength(4));
-    expect(asked.first.toString(), startsWith(osmPresetsUrl));
+    expect(asked.first.toString(), startsWith(OsmPresetsCache.defaultUrl));
     for (final file in OsmPresetsCache.filesFor('en')) {
       expect(File('${directory.path}/$file').existsSync(), isTrue,
           reason: file);
@@ -70,7 +70,7 @@ void main() {
   test('asks again once the copy is old', () async {
     await read(_served);
     final old = DateTime.now().subtract(
-      osmPresetsFreshness + const Duration(days: 1),
+      OsmPresetsCache.freshness + const Duration(days: 1),
     );
     File('${directory.path}/presets.min.json').setLastModifiedSync(old);
     asked.clear();
@@ -81,7 +81,7 @@ void main() {
   test('uses an old copy when the network cannot be reached', () async {
     await read(_served);
     final old = DateTime.now().subtract(
-      osmPresetsFreshness + const Duration(days: 1),
+      OsmPresetsCache.freshness + const Duration(days: 1),
     );
     File('${directory.path}/presets.min.json').setLastModifiedSync(old);
     expect((await read(null)).byId, contains('amenity/cafe'));

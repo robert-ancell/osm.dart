@@ -76,7 +76,7 @@ class OsmCountry {
   }
 
   /// Whether its land takes in the point at ([latitude], [longitude]).
-  bool holds(double latitude, double longitude) {
+  bool contains(double latitude, double longitude) {
     // Outside the box around it is outside it, which rules out nearly every
     // country before any of their edges are looked at.
     if (!(latitude >= _south &&
@@ -148,7 +148,7 @@ class OsmCountryCoder {
   ///
   /// The file is at
   /// <https://github.com/rapideditor/country-coder/blob/main/src/data/borders.json>
-  /// and is published for fetching at [osmCountryCoderUrl]. It is a GeoJSON
+  /// and is published for fetching at [OsmCountryCoderCache.defaultUrl]. It is a GeoJSON
   /// `FeatureCollection` with one feature per country, territory or region.
   /// Each feature's `properties` are read for its codes (`iso1A2`, `iso1A3`,
   /// `iso1N3`, `wikidata`, `m49` and `aliases`), `nameEn`, `country` (what
@@ -177,7 +177,7 @@ class OsmCountryCoder {
   /// [longitude]): usually one, and none out at sea.
   List<OsmCountry> landAt(double latitude, double longitude) => [
         for (final country in _withLand)
-          if (country.holds(latitude, longitude)) country,
+          if (country.contains(latitude, longitude)) country,
       ];
 
   /// The country the point at ([latitude], [longitude]) is in, if it is in

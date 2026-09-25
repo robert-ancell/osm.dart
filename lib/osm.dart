@@ -5,7 +5,7 @@
 /// `package:osm/pbf.dart`.
 library;
 
-export 'src/area.dart';
+export 'src/area.dart' hide assembleArea;
 export 'src/bounds.dart';
 export 'src/cache.dart';
 export 'src/country_coder.dart';
@@ -35,7 +35,7 @@ export 'src/presets.dart';
 export 'src/presets_cache.dart';
 export 'src/subset.dart';
 export 'src/tag_text.dart';
-export 'src/tile_cache.dart';
+export 'src/data_cache.dart';
 export 'src/update/api.dart';
 export 'src/update/auth.dart';
 export 'src/update/http.dart' hide httpFetch;

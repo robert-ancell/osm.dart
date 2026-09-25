@@ -6,21 +6,21 @@ import 'cached_files.dart';
 import 'country_coder.dart';
 import 'update/http.dart';
 
-/// Where country-coder's borders are published.
-///
-/// The major version is pinned, as for iD's tagging schema: a new one can
-/// change the shape of the file, and within one borders only get better.
-const osmCountryCoderUrl =
-    'https://cdn.jsdelivr.net/gh/rapideditor/country-coder@5/src/data/';
-
-/// How long a copy of the borders on disk is used before asking for them
-/// again. Countries change rarely, but the codes and groups they are given
-/// are corrected now and then.
-const osmCountryCoderFreshness = Duration(days: 30);
-
 /// country-coder's borders, kept on disk between runs.
 class OsmCountryCoderCache {
-  /// The directory under [osmCacheDirectory] it is kept in by default.
+  /// Where country-coder's borders are published.
+  ///
+  /// The major version is pinned, as for iD's tagging schema: a new one can
+  /// change the shape of the file, and within one borders only get better.
+  static const defaultUrl =
+      'https://cdn.jsdelivr.net/gh/rapideditor/country-coder@5/src/data/';
+
+  /// How long a copy of the borders on disk is used before asking for them
+  /// again. Countries change rarely, but the codes and groups they are given
+  /// are corrected now and then.
+  static const freshness = Duration(days: 30);
+
+  /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'country-coder';
 
   /// The file the borders are in.
@@ -32,12 +32,12 @@ class OsmCountryCoderCache {
   /// How they are fetched.
   final OsmFetch fetch;
 
-  /// Where they are fetched from, [osmCountryCoderUrl] unless said
+  /// Where they are fetched from, [OsmCountryCoderCache.defaultUrl] unless said
   /// otherwise.
   final Uri from;
 
   /// Creates a cache in [directory], by default [name] under
-  /// [osmCacheDirectory].
+  /// [OsmCache.defaultDirectory].
   ///
   /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
   /// and a way to reach whoever runs the program. [fetch] replaces fetching
@@ -47,9 +47,9 @@ class OsmCountryCoderCache {
     String? contact,
     OsmFetch? fetch,
     Uri? from,
-  })  : directory = directory ?? osmCacheDirectory(name),
+  })  : directory = directory ?? OsmCache.defaultDirectory(name),
         fetch = fetch ?? httpFetch(contact: contact),
-        from = from ?? Uri.parse(osmCountryCoderUrl);
+        from = from ?? Uri.parse(OsmCountryCoderCache.defaultUrl);
 
   /// The borders, from disk if a recent copy is held there and from the
   /// network otherwise.
@@ -64,7 +64,7 @@ class OsmCountryCoderCache {
         files: const [file],
         from: from,
         fetch: fetch,
-        freshness: osmCountryCoderFreshness,
+        freshness: OsmCountryCoderCache.freshness,
         parse: (files) =>
             Isolate.run(() => OsmCountryCoder.parse(files.single)),
         isEmpty: (countries) => countries.all.isEmpty,

@@ -96,7 +96,7 @@ class OsmImagery {
   });
 
   /// Whether the layer has tiles over ([latitude], [longitude]).
-  bool covers(double latitude, double longitude) =>
+  bool contains(double latitude, double longitude) =>
       coverage?.contains(latitude, longitude) ?? true;
 
   /// Where the tile at [zoom], [x] and [y] is.
@@ -236,7 +236,7 @@ class OsmImageryIndex {
       for (final layer in layers)
         if (layer.overlay == overlays &&
             (category == null || layer.category == category) &&
-            layer.covers(latitude, longitude))
+            layer.contains(latitude, longitude))
           layer,
     ];
     found.sort((a, b) {

@@ -224,7 +224,7 @@ class OsmApiClient {
       await _write(
         token,
         base.resolve('changeset/$changeset/upload'),
-        upload.toXml(changeset: changeset, generator: createdBy),
+        upload.toXml(changeset: changeset, createdBy: createdBy),
         method: 'POST',
       );
     } finally {

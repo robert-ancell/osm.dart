@@ -144,8 +144,8 @@ void main() {
   test('takes a layer with no shape as covering the world', () {
     final everywhere =
         index.layers.firstWhere((layer) => layer.id == 'Everywhere');
-    expect(everywhere.covers(-36.85, 174.76), isTrue);
-    expect(everywhere.covers(64, -21), isTrue);
+    expect(everywhere.contains(-36.85, 174.76), isTrue);
+    expect(everywhere.contains(64, -21), isTrue);
   });
 
   test('fills a tile into the address', () {
@@ -174,9 +174,9 @@ void main() {
           [[0,0],[10,0],[10,10],[0,10],[0,0]],
           [[4,4],[6,4],[6,6],[4,6],[4,4]]]}}]}
     ''').layers.single;
-    expect(holed.covers(1, 1), isTrue);
-    expect(holed.covers(5, 5), isFalse);
-    expect(holed.covers(20, 20), isFalse);
+    expect(holed.contains(1, 1), isTrue);
+    expect(holed.contains(5, 5), isFalse);
+    expect(holed.contains(20, 20), isFalse);
   });
 
   test('reads a layer covering several separate places', () {
@@ -188,9 +188,9 @@ void main() {
           [[[0,0],[2,0],[2,2],[0,2],[0,0]]],
           [[[8,8],[10,8],[10,10],[8,10],[8,8]]]]}}]}
     ''').layers.single;
-    expect(islands.covers(1, 1), isTrue);
-    expect(islands.covers(9, 9), isTrue);
-    expect(islands.covers(5, 5), isFalse);
+    expect(islands.contains(1, 1), isTrue);
+    expect(islands.contains(9, 9), isTrue);
+    expect(islands.contains(5, 5), isFalse);
   });
 
   test('reads nothing from something that is not an index', () {

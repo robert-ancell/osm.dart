@@ -17,6 +17,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'country_coder_file.dart';
+
 /// One country, territory or larger region.
 class OsmCountry {
   /// Every code it goes by, lower case: its ISO 3166-1 codes, its Wikidata
@@ -106,8 +108,20 @@ class OsmCountry {
   String toString() => 'OsmCountry($name)';
 }
 
-/// The world's countries and regions, and a way to ask which a place is in.
-class OsmCountries {
+/// Finds which country and regions a place is in, from the borders of
+/// [country-coder](https://github.com/rapideditor/country-coder).
+///
+/// Not a general list of the world's countries: it holds exactly what
+/// country-coder publishes — its countries, territories, and the larger
+/// regions such as continents and the EU that it groups them into, each with
+/// the codes it goes by and coarse land borders — and answers the questions
+/// iD asks of it: what goes by this code ([byCode]), what land is here
+/// ([landAt]), what country is this ([countryAt]) and which regions a
+/// preset's location set may name here ([codesAt]).
+///
+/// Made with [OsmCountryCoder.parse], usually from what
+/// [OsmCountryCoderFile.read] fetches and keeps on disk.
+class OsmCountryCoder {
   /// Every country, territory and region, whether or not it has land of its
   /// own. A country made of several pieces has its land in the pieces.
   final List<OsmCountry> all;
@@ -115,7 +129,7 @@ class OsmCountries {
   final Map<String, OsmCountry> _byCode;
   final List<OsmCountry> _withLand;
 
-  OsmCountries._(this.all)
+  OsmCountryCoder._(this.all)
       : _byCode = {
           for (final country in all)
             for (final code in country.codes) code: country,
@@ -125,10 +139,25 @@ class OsmCountries {
             if (country.polygons.isNotEmpty) country,
         ];
 
-  /// The countries and regions in country-coder's `borders.json`.
-  factory OsmCountries.parse(String json) {
+  /// The countries and regions in [json], the text of country-coder's
+  /// `borders.json`.
+  ///
+  /// The file is at
+  /// <https://github.com/rapideditor/country-coder/blob/main/src/data/borders.json>
+  /// and is published for fetching at [osmCountryCoderUrl]. It is a GeoJSON
+  /// `FeatureCollection` with one feature per country, territory or region.
+  /// Each feature's `properties` are read for its codes (`iso1A2`, `iso1A3`,
+  /// `iso1N3`, `wikidata`, `m49` and `aliases`), `nameEn`, `country` (what
+  /// it is part of), `groups` and `driveSide`, and its `Polygon` or
+  /// `MultiPolygon` geometry, if it has one, for its land. Their meaning is
+  /// set out in country-coder's README,
+  /// <https://github.com/rapideditor/country-coder#readme>.
+  ///
+  /// Features with no code at all are left out, and anything not in that
+  /// shape is passed over rather than thrown at.
+  factory OsmCountryCoder.parse(String json) {
     final features = _list(_map(jsonDecode(json))['features']);
-    return OsmCountries._([
+    return OsmCountryCoder._([
       for (final feature in features)
         if (_country(_map(feature)) case final country?) country,
     ]);

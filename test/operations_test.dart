@@ -444,7 +444,7 @@ void main() {
     test('puts what is extracted on the antimeridian, not half a world off',
         () {
       final view = across();
-      final point = OsmExtract(view, [view.way(10)!]).apply().single as OsmNode;
+      final point = OsmExtract(view, [view.way(10)!]).apply().single;
       expect(point.longitude.abs(), closeTo(180, 1e-6));
       expect(point.latitude, closeTo(0.001, 1e-6));
     });

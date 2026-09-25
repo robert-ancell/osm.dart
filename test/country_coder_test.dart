@@ -82,7 +82,7 @@ final _borders = jsonEncode({
   ],
 });
 
-final _world = OsmCountries.parse(_borders);
+final _world = OsmCountryCoder.parse(_borders);
 
 void main() {
   test('finds the land a place stands on', () {
@@ -157,12 +157,12 @@ void main() {
     }
 
     final read =
-        await OsmCountriesFile.read(directory: directory, fetch: fetch);
+        await OsmCountryCoderFile.read(directory: directory, fetch: fetch);
     expect(read!.countryAt(1, 1)!.name, 'Examplia');
-    expect(asked.single.toString(), '${osmCountriesUrl}borders.json');
+    expect(asked.single.toString(), '${osmCountryCoderUrl}borders.json');
 
     asked.clear();
-    await OsmCountriesFile.read(directory: directory, fetch: fetch);
+    await OsmCountryCoderFile.read(directory: directory, fetch: fetch);
     expect(asked, isEmpty);
   });
 }

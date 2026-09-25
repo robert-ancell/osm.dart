@@ -3,8 +3,8 @@ library;
 
 export 'src/area.dart';
 export 'src/bounds.dart';
-export 'src/countries.dart';
-export 'src/countries_file.dart';
+export 'src/country_coder.dart';
+export 'src/country_coder_file.dart';
 export 'src/edit.dart';
 export 'src/element.dart';
 export 'src/exception.dart';

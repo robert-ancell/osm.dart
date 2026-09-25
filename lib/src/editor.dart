@@ -1,31 +1,5 @@
 part of 'edit.dart';
 
-/// The data an [OsmEditor] edits, as it was read.
-///
-/// Whatever a program holds what it has read in implements this: a store of
-/// tiles fetched from the API, a file read from disk, or a list of elements
-/// ([OsmEditorData.of]). The editor never changes it; what has been changed
-/// is kept in its [OsmEditHistory] and laid over the top.
-abstract interface class OsmEditorData {
-  /// Data holding [elements] and nothing else.
-  factory OsmEditorData.of(Iterable<OsmElement> elements) = _ElementData;
-
-  /// The node with [id] as it was read, or null if it is not held.
-  OsmNode? node(int id);
-
-  /// The way with [id] as it was read, or null if it is not held.
-  OsmWay? way(int id);
-
-  /// The relation with [id] as it was read, or null if it is not held.
-  OsmRelation? relation(int id);
-
-  /// The ids of the ways read that run through the node with [nodeId].
-  Iterable<int> waysUsing(int nodeId);
-
-  /// The ids of the relations read that list the element.
-  Iterable<int> relationsUsing(OsmElementType type, int id);
-}
-
 /// Edits OpenStreetMap data: what a program making changes holds.
 ///
 /// It is the data as it now stands — what was read, from [data], with every
@@ -49,14 +23,22 @@ class OsmEditor {
   /// given others, such as [OsmStandardTagRules].
   final OsmTagRules rules;
 
-  /// Creates an editor over [data], keeping its changes in [history], or in
-  /// a new history if none is given, and deciding what tags mean by
-  /// [rules].
+  /// Creates an editor over [data], deciding what tags mean by [rules].
+  ///
+  /// Its changes are kept in [history] if it is given one, which is how an
+  /// editor carries on from changes made before; otherwise in a history of
+  /// its own, which calls [onChanged] whenever what has been changed
+  /// changes.
   OsmEditor(
     this.data, {
     OsmEditHistory? history,
     this.rules = const OsmPlainTagRules(),
-  }) : history = history ?? OsmEditHistory();
+    void Function()? onChanged,
+  })  : assert(
+          history == null || onChanged == null,
+          'Give the history its onChanged instead.',
+        ),
+        history = history ?? OsmEditHistory(onChanged: onChanged);
 
   // The data as it now stands.
 
@@ -309,47 +291,4 @@ class OsmEditor {
   /// [osmReversedTags] for [oneway].
   void reverseWay(OsmWay way, {bool oneway = false}) =>
       osmReverseWay(this, way, oneway: oneway);
-}
-
-class _ElementData implements OsmEditorData {
-  final _nodes = <int, OsmNode>{};
-  final _ways = <int, OsmWay>{};
-  final _relations = <int, OsmRelation>{};
-  final _waysUsing = <int, List<int>>{};
-  final _relationsUsing = <(OsmElementType, int), List<int>>{};
-
-  _ElementData(Iterable<OsmElement> elements) {
-    for (final element in elements) {
-      switch (element) {
-        case OsmNode():
-          _nodes[element.id] = element;
-        case OsmWay():
-          _ways[element.id] = element;
-          for (final node in element.nodeIds.toSet()) {
-            (_waysUsing[node] ??= []).add(element.id);
-          }
-        case OsmRelation():
-          _relations[element.id] = element;
-          for (final member in element.members) {
-            (_relationsUsing[(member.type, member.ref)] ??= []).add(element.id);
-          }
-      }
-    }
-  }
-
-  @override
-  OsmNode? node(int id) => _nodes[id];
-
-  @override
-  OsmWay? way(int id) => _ways[id];
-
-  @override
-  OsmRelation? relation(int id) => _relations[id];
-
-  @override
-  Iterable<int> waysUsing(int nodeId) => _waysUsing[nodeId] ?? const [];
-
-  @override
-  Iterable<int> relationsUsing(OsmElementType type, int id) =>
-      _relationsUsing[(type, id)] ?? const [];
 }

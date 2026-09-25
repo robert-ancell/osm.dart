@@ -1,24 +1,20 @@
 import 'dart:io';
 
-import 'country_coder.dart';
-import 'country_coder_cache.dart';
 import 'imagery.dart';
 import 'imagery_cache.dart';
 import 'imagery_index_cache.dart';
 import 'data_cache.dart';
-import 'presets.dart';
-import 'presets_cache.dart';
 import 'update/http.dart';
 import 'update/replication.dart';
-import 'update/updater.dart';
 
 /// OpenStreetMap's resources, each fetched once and kept in one directory.
 ///
 /// For a program that wants them and does not mind where they are kept:
-/// open one of these and ask it for [countryCoder], [presets] or
-/// [imageryIndex], each read from disk when a recent copy is there and from
-/// the network otherwise. The caches behind them are there too, by the name
-/// of what they hold and `Cache`, for anything that needs more than reading.
+/// open one of these and ask it for [imageryIndex], read from disk when a
+/// recent copy is there and from the network otherwise, or use the caches it
+/// holds, named for what they hold and `Cache`. `package:osm/editor.dart`
+/// adds the tagging schema to it, as `presets()`, and
+/// `package:osm/country_coder.dart` adds `countryCoder`.
 ///
 /// A program with other needs — a different place for each cache, a limit
 /// on the disk one may take, somewhere else to fetch from — makes whichever
@@ -70,29 +66,30 @@ class OsmCache {
   /// Where [imageryIndex] is kept.
   final OsmImageryIndexCache imageryIndexCache;
 
-  /// Where [presets] are kept.
-  final OsmPresetsCache presetsCache;
-
-  /// Where [countryCoder] is kept.
-  final OsmCountryCoderCache countryCoderCache;
-
-  /// Where replication diffs go, for [OsmReplication.download] and
-  /// [OsmPbfUpdater]. Each feed's are kept apart inside it.
+  /// Where replication diffs go, for [OsmReplication.download]. Each
+  /// feed's are kept apart inside it.
   final Directory replicationDirectory;
 
-  OsmCountryCoder? _countryCoder;
+  /// How what is not held is fetched.
+  final OsmFetch fetch;
+
   OsmImageryIndex? _imageryIndex;
-  final _presets = <String, OsmPresets>{};
 
   OsmCache._({
     required this.directory,
     required this.dataCache,
     required this.imageryCache,
     required this.imageryIndexCache,
-    required this.presetsCache,
-    required this.countryCoderCache,
     required this.replicationDirectory,
+    required this.fetch,
   });
+
+  /// The directory of the cache called [name] under [directory].
+  ///
+  /// For caches that libraries add to this one, such as the tagging schema
+  /// and the country coder, each by the `name` of its class.
+  Directory directoryFor(String name) =>
+      Directory('${directory.path}${Platform.pathSeparator}$name');
 
   /// Opens every cache in [directory], by default [OsmCache.defaultDirectory].
   ///
@@ -119,43 +116,9 @@ class OsmCache {
         directory: under(OsmImageryIndexCache.name),
         fetch: fetch,
       ),
-      presetsCache: OsmPresetsCache(
-        directory: under(OsmPresetsCache.name),
-        fetch: fetch,
-      ),
-      countryCoderCache: OsmCountryCoderCache(
-        directory: under(OsmCountryCoderCache.name),
-        fetch: fetch,
-      ),
       replicationDirectory: under(OsmReplication.cacheName),
+      fetch: fetch,
     );
-  }
-
-  /// country-coder's borders, which say which country a place is in.
-  ///
-  /// Read the first time they are asked for and kept. Empty only when there
-  /// is no copy on disk and none could be fetched, in which case the next
-  /// ask tries again.
-  Future<OsmCountryCoder> get countryCoder async {
-    final held = _countryCoder;
-    if (held != null) return held;
-    final read = await countryCoderCache.read();
-    if (read.all.isNotEmpty) _countryCoder = read;
-    return read;
-  }
-
-  /// The tagging schema in [language], which says what kinds of thing there
-  /// are.
-  ///
-  /// Read the first time each language is asked for and kept. Empty only
-  /// when there is no copy on disk and none could be fetched, in which case
-  /// the next ask tries again.
-  Future<OsmPresets> presets({String language = 'en'}) async {
-    final held = _presets[language];
-    if (held != null) return held;
-    final read = await presetsCache.read(language: language);
-    if (read.byId.isNotEmpty) _presets[language] = read;
-    return read;
   }
 
   /// The editor layer index, which says what imagery there is.

@@ -18,6 +18,13 @@ import 'tag_rules.dart';
 /// that only exist in some places are chosen by where the element is, which
 /// [countryCoder] says once it is known.
 class OsmStandardTagRules extends OsmPlainTagRules {
+  /// A way that is part of a route or a boundary, or the outside of a
+  /// multipolygon, which deleting would leave a hole in.
+  static const partOfRelation = OsmDisabledReason('part_of_relation');
+
+  /// Something linked from Wikidata, which is not deleted by accident.
+  static const hasWikidataTag = OsmDisabledReason('has_wikidata_tag');
+
   /// The tagging schema, if it is known yet.
   OsmPresets? presets;
 
@@ -77,7 +84,7 @@ class OsmStandardTagRules extends OsmPlainTagRules {
   /// taken out of it first. Something with a Wikidata tag is somebody's
   /// careful work, linked from elsewhere, and is not deleted by accident.
   @override
-  OsmDisabledReason? protects(OsmElement element, OsmEditor editor) {
+  OsmDisabledReason? whyProtected(OsmElement element, OsmEditor editor) {
     if (element is OsmWay) {
       for (final relation
           in editor.relationsUsing(OsmElementType.way, element.id)) {
@@ -90,13 +97,13 @@ class OsmStandardTagRules extends OsmPlainTagRules {
           if (kind == OsmRelationKind.route ||
               kind == OsmRelationKind.boundary ||
               (kind == OsmRelationKind.multipolygon && role == 'outer')) {
-            return OsmDisabledReason.partOfRelation;
+            return partOfRelation;
           }
         }
       }
     }
     if ((element.tags['wikidata'] ?? '').trim().isNotEmpty) {
-      return OsmDisabledReason.hasWikidataTag;
+      return hasWikidataTag;
     }
     return null;
   }

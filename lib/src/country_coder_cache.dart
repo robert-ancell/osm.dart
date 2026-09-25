@@ -71,3 +71,30 @@ class OsmCountryCoderCache {
       ) ??
       OsmCountryCoder.empty();
 }
+
+/// country-coder's borders, kept in an [OsmCache] alongside everything else.
+extension OsmCacheCountryCoder on OsmCache {
+  /// Where the borders are kept: [OsmCountryCoderCache.name] in the cache's
+  /// directory.
+  OsmCountryCoderCache get countryCoderCache =>
+      _countryCoderCaches[this] ??= OsmCountryCoderCache(
+        directory: directoryFor(OsmCountryCoderCache.name),
+        fetch: fetch,
+      );
+
+  /// country-coder's borders, which say which country a place is in.
+  ///
+  /// Read the first time they are asked for and kept. Empty only when there
+  /// is no copy on disk and none could be fetched, in which case the next
+  /// ask tries again.
+  Future<OsmCountryCoder> get countryCoder async {
+    final held = _countryCoders[this];
+    if (held != null) return held;
+    final read = await countryCoderCache.read();
+    if (read.all.isNotEmpty) _countryCoders[this] = read;
+    return read;
+  }
+}
+
+final _countryCoderCaches = Expando<OsmCountryCoderCache>();
+final _countryCoders = Expando<OsmCountryCoder>();

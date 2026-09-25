@@ -11,25 +11,8 @@
 /// The schema is © its contributors, under the ISC licence.
 library;
 
+import 'element.dart';
 import 'json_exception.dart';
-
-/// The shape an element takes, as far as what it can be is concerned.
-enum OsmGeometry {
-  /// A node on its own.
-  point,
-
-  /// A node that is part of a way.
-  vertex,
-
-  /// A way that is a line, open or closed.
-  line,
-
-  /// A way, or a multipolygon, that encloses an area.
-  area,
-
-  /// A relation other than a multipolygon.
-  relation,
-}
 
 /// Where a preset applies, by the codes of the places it is meant for.
 ///

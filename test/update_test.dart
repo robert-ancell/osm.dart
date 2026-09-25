@@ -182,13 +182,13 @@ void main() {
       final first = await replication.download(
         OsmReplicationPeriod.minute,
         1,
-        _work,
+        directory: _work,
       );
       final asked = feed.asked.length;
       final second = await replication.download(
         OsmReplicationPeriod.minute,
         1,
-        _work,
+        directory: _work,
       );
       expect(second.path, first.path);
       expect(feed.asked.length, asked);
@@ -252,7 +252,7 @@ void main() {
     });
 
     test('and downloads it', () async {
-      final file = await replication.download(day, 4906, _work);
+      final file = await replication.download(day, 4906, directory: _work);
       expect(await OsmChangeFile.read(file.path), isEmpty);
     });
 
@@ -395,7 +395,7 @@ void main() {
           );
         },
       );
-      final ways = await client.waysOf(5);
+      final ways = await client.waysUsing(5);
       expect(ways.single.nodeIds, [5, 6]);
     });
   });

@@ -426,11 +426,10 @@ void _groups() {
 
     test('sends a retagged node with its new tags', () {
       final edits = editorOf()..setTags(_node, const {'amenity': 'bench'});
-      final xml =
-          OsmUpload.of(edits.history).toXml(changeset: 1, createdBy: 'test');
+      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
       expect(xml, contains('<tag k="amenity" v="bench"/>'));
       expect(xml, isNot(contains('crossing')));
-      expect(OsmUpload.of(edits.history).describe(), ['Change node/1']);
+      expect(edits.history.upload.describe(), ['Change node/1']);
     });
   });
 
@@ -527,8 +526,7 @@ void _groups() {
         )
         // The way as the edits have it by now, without the node.
         ..deleteWay(way);
-      final xml =
-          OsmUpload.of(edits.history).toXml(changeset: 1, createdBy: 'test');
+      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
       final relation = xml.indexOf('<relation id="30" version="7"');
       final deletedWay = xml.indexOf('<way id="9"', xml.indexOf('<delete>'));
       final deletedNode = xml.indexOf('<node id="2"', xml.indexOf('<delete>'));
@@ -537,7 +535,7 @@ void _groups() {
       expect(deletedWay, lessThan(deletedNode));
       expect(xml, contains('<member type="way" ref="8" role=""/>'));
       expect(xml, isNot(contains('ref="9" role')));
-      expect(OsmUpload.of(edits.history).describe(), [
+      expect(edits.history.upload.describe(), [
         'Change relation/30',
         'Delete way/9',
         'Delete node/2',
@@ -588,8 +586,7 @@ void _groups() {
       final edits = editorOf([outer])..deleteRelation(inner);
       expect(edits.history.isGone(OsmElementType.relation, 40), isTrue);
       expect(edits.history.changedRelation(41)!.members, isEmpty);
-      final xml =
-          OsmUpload.of(edits.history).toXml(changeset: 1, createdBy: 'test');
+      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
       expect(
         xml.indexOf('<relation id="41"'),
         lessThan(xml.indexOf('<relation id="40"')),

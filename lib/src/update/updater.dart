@@ -135,7 +135,8 @@ class OsmPbfUpdater {
       say('Reading ${newest.sequence - first + 1} ${period.name} diff(s), '
           '$first to ${newest.sequence}...');
       for (var sequence = first; sequence <= newest.sequence; sequence++) {
-        final diff = await replication.download(period, sequence, cache);
+        final diff =
+            await replication.download(period, sequence, directory: cache);
         await _decide(filter, diff.path);
         diffs.add((period, sequence));
       }
@@ -152,7 +153,7 @@ class OsmPbfUpdater {
       // were not themselves changed.
       final wanted = {...edges.missingNodes};
       for (final node in edges.movedInNodes) {
-        for (final way in await client.waysOf(node)) {
+        for (final way in await client.waysUsing(node)) {
           if (index.ways.contains(way.id)) continue;
           lookedUp.add(_create(way));
           lookedUpWays++;

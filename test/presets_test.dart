@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:osm/editor.dart';
+import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
 /// A few presets in the schema's own form, enough to show each rule.

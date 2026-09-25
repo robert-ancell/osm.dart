@@ -97,7 +97,7 @@ void main() {
         ]);
         expect(
           OsmDeleteOperation(view, [view.way(10)!]).disabled,
-          OsmDisabledReason.partOfRelation,
+          OsmStandardTagRules.partOfRelation,
           reason: type,
         );
       }
@@ -111,11 +111,11 @@ void main() {
           );
       final outer = _roads(relations: [multipolygon('outer')]);
       expect(OsmDeleteOperation(outer, [outer.way(10)!]).disabled,
-          OsmDisabledReason.partOfRelation);
+          OsmStandardTagRules.partOfRelation);
       final unroled = _roads(relations: [multipolygon('')]);
       expect(
         OsmDeleteOperation(unroled, [unroled.way(10)!]).disabled,
-        OsmDisabledReason.partOfRelation,
+        OsmStandardTagRules.partOfRelation,
       );
       final inner = _roads(relations: [multipolygon('inner')]);
       expect(OsmDeleteOperation(inner, [inner.way(10)!]).disabled, isNull);
@@ -126,7 +126,7 @@ void main() {
         testNode(1, 0, 0, {'wikidata': 'Q1'})
       ]);
       expect(OsmDeleteOperation(view, [view.node(1)!]).disabled,
-          OsmDisabledReason.hasWikidataTag);
+          OsmStandardTagRules.hasWikidataTag);
     });
 
     test('undoes a deletion as one change', () {
@@ -240,10 +240,12 @@ void main() {
           testWay(10, [1, 2], {'highway': 'residential'}),
         ],
       );
-      expect(OsmReverseOperation(view, [view.way(10)!]).kind, 'line');
-      expect(OsmReverseOperation(view, [view.node(3)!]).kind, 'point');
-      expect(OsmReverseOperation(view, [view.way(10)!, view.node(3)!]).kind,
-          'features');
+      expect(view.reverse([view.way(10)!]).reversible, [view.way(10)]);
+      expect(view.reverse([view.node(3)!]).reversible, [view.node(3)]);
+      expect(
+        view.reverse([view.way(10)!, view.node(3)!]).reversible,
+        hasLength(2),
+      );
     });
   });
 

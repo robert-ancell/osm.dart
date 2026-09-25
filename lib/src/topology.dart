@@ -10,7 +10,6 @@ import 'dart:math' as math;
 import 'edit.dart';
 import 'element.dart';
 import 'operations.dart';
-import 'presets.dart';
 import 'tag_rules.dart';
 
 /// Which of two ids belongs to the older element: anything already on the
@@ -270,14 +269,6 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
       if (lines.isNotEmpty) return lines;
     }
     return found;
-  }
-
-  /// What is split, for choosing how to describe it: `line`, `area`, or
-  /// `feature` for both.
-  String get kind {
-    final shapes = {for (final way in ways) _view.geometryOf(way)};
-    if (shapes.length != 1) return 'feature';
-    return shapes.single == OsmGeometry.area ? 'area' : 'line';
   }
 
   /// Why it cannot be done, or null if it can.
@@ -1337,31 +1328,19 @@ class OsmDisconnectOperation extends OsmOperation<void> {
     return true;
   }
 
-  /// What is disconnected, for choosing how to describe it:
-  /// `single_point.no_ways`, `no_points.multiple_ways. conjoined` and so on.
-  String get kind {
-    final buffer = StringBuffer();
-    if (_vertices.isNotEmpty) {
-      buffer.write(_actions.length == 1 ? 'single_point.' : 'multiple_points.');
-      if (_ways.length == 1) {
-        buffer.write('single_way.${_shape(_ways.single)}');
-      } else {
-        buffer.write(_ways.isEmpty ? 'no_ways' : 'multiple_ways');
-      }
-    } else {
-      buffer.write('no_points.');
-      buffer.write(_ways.length == 1 ? 'single_way.' : 'multiple_ways.');
-      if (_conjoined) {
-        buffer.write('conjoined');
-      } else {
-        buffer.write(_ways.length == 1 ? _shape(_ways.single) : 'separate');
-      }
-    }
-    return buffer.toString();
-  }
+  /// How many nodes are disconnected at, when nodes were selected; none
+  /// when ways were.
+  int get points => _vertices.isEmpty ? 0 : _actions.length;
 
-  String _shape(OsmWay way) =>
-      _view.geometryOf(way) == OsmGeometry.area ? 'area' : 'line';
+  /// The ways selected, which are disconnected from what they touch.
+  List<OsmWay> get ways => List.unmodifiable(_ways);
+
+  /// Whether the selected ways are disconnected from each other, rather
+  /// than from everything else they touch.
+  bool get conjoined {
+    _actions;
+    return _conjoined;
+  }
 
   /// The nodes it disconnects at, for judging how much of it is in view.
   List<int> get nodes => [for (final (id, _) in _actions) id];

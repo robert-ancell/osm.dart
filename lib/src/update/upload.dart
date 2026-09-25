@@ -12,7 +12,6 @@
 /// change and asked for it to go.
 library;
 
-import '../edit.dart';
 import '../exception.dart';
 import '../element.dart';
 
@@ -37,7 +36,10 @@ class OsmUploadException implements OsmException {
   String toString() => status == null ? message : '$message (HTTP $status)';
 }
 
-/// What an upload would send, gathered out of a set of edits.
+/// What an upload would send: elements made, changed and taken off the map.
+///
+/// An editor's history gathers one of these out of its edits,
+/// `OsmEditHistory.upload`.
 ///
 /// Made once and shown before it is sent: the list somebody reads and the
 /// document that goes are built from the same thing, so what was agreed to
@@ -70,55 +72,17 @@ class OsmUpload {
   /// Relations taken off the map, as they were.
   final List<OsmRelation> deletedRelations;
 
-  /// Gathers what [edits] would send.
-  factory OsmUpload.of(OsmEditHistory edits) {
-    final nodes = edits.changedNodes;
-    final ways = edits.changedWays;
-    return OsmUpload._(
-      // A negative id is something made here that OpenStreetMap has never
-      // seen; anything else is an element that was read and changed.
-      createdNodes: [
-        for (final node in nodes.values)
-          if (node.id < 0) node,
-      ],
-      changedNodes: [
-        for (final node in nodes.values)
-          if (node.id > 0) node,
-      ],
-      deletedNodes: edits.deletedNodes.values.toList(),
-      createdWays: [
-        for (final way in ways.values)
-          if (way.id < 0) way,
-      ],
-      changedWays: [
-        for (final way in ways.values)
-          if (way.id > 0) way,
-      ],
-      deletedWays: edits.deletedWays.values.toList(),
-      createdRelations: [
-        for (final relation in edits.changedRelations.values)
-          if (relation.id < 0) relation,
-      ],
-      changedRelations: [
-        for (final relation in edits.changedRelations.values)
-          if (relation.id > 0 &&
-              !edits.isGone(OsmElementType.relation, relation.id))
-            relation,
-      ],
-      deletedRelations: edits.deletedRelations.values.toList(),
-    );
-  }
-
-  const OsmUpload._({
-    required this.createdNodes,
-    required this.changedNodes,
-    required this.deletedNodes,
-    required this.createdWays,
-    required this.changedWays,
-    required this.deletedWays,
-    required this.createdRelations,
-    required this.changedRelations,
-    required this.deletedRelations,
+  /// Creates an upload of these changes. Each defaults to none.
+  const OsmUpload({
+    this.createdNodes = const [],
+    this.changedNodes = const [],
+    this.deletedNodes = const [],
+    this.createdWays = const [],
+    this.changedWays = const [],
+    this.deletedWays = const [],
+    this.createdRelations = const [],
+    this.changedRelations = const [],
+    this.deletedRelations = const [],
   });
 
   /// How many elements would be written.

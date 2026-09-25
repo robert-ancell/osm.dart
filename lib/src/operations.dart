@@ -12,7 +12,6 @@ import 'dart:math' as math;
 import 'edit.dart';
 import 'element.dart';
 import 'mercator.dart';
-import 'presets.dart';
 import 'tag_rules.dart';
 
 /// Something done to what is selected: deleting,
@@ -23,6 +22,9 @@ import 'tag_rules.dart';
 /// does, why it cannot be done ([disabled]), and then does it ([apply]) as
 /// one change that one undo takes back. [T] is what it gives back: what it
 /// made, for selecting afterwards, or nothing.
+///
+/// Made by the editor that it is done to — [OsmEditor.delete],
+/// [OsmEditor.split] and the rest — which is how a program asks for one.
 abstract class OsmOperation<T> {
   /// What it is to be done to, as it now stands.
   List<OsmElement> get selected;
@@ -66,7 +68,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
   @override
   OsmDisabledReason? get disabled {
     for (final element in selected) {
-      final reason = _view.rules.protects(element, _view);
+      final reason = _view.rules.whyProtected(element, _view);
       if (reason != null) return reason;
     }
     return null;
@@ -144,7 +146,7 @@ class OsmReverseOperation extends OsmOperation<void> {
 
   /// What of the selection reverses: its lines, and the nodes that say
   /// which way they face. Areas have no direction.
-  List<OsmElement> get _reversible => [
+  List<OsmElement> get reversible => [
         for (final element in selected)
           if (element is OsmWay &&
               _view.geometryOf(element) == OsmGeometry.line)
@@ -155,18 +157,7 @@ class OsmReverseOperation extends OsmOperation<void> {
 
   /// Whether it can be done.
   @override
-  bool get available => _reversible.isNotEmpty;
-
-  /// What kind of thing is reversed, for choosing how to describe it: a
-  /// `line` or `lines`, a `point` or `points`, or `features` for both.
-  String get kind {
-    final reversible = _reversible;
-    final nodes = reversible.whereType<OsmNode>().length;
-    final many = reversible.length > 1;
-    if (nodes == 0) return many ? 'lines' : 'line';
-    if (nodes == reversible.length) return many ? 'points' : 'point';
-    return 'features';
-  }
+  bool get available => reversible.isNotEmpty;
 
   /// Reverses it all, as one change.
   ///
@@ -179,7 +170,7 @@ class OsmReverseOperation extends OsmOperation<void> {
   /// direction turned round.
   @override
   void apply() => _view.group(() {
-        for (final element in _reversible) {
+        for (final element in reversible) {
           switch (element) {
             case OsmWay():
               osmReverseWay(_view, element);

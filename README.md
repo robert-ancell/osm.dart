@@ -49,9 +49,9 @@ and the relations over any of it, so each box can be drawn on its own. The API
 only answers for small boxes; a larger one throws `OsmTooMuchDataException`,
 and `capabilities` says how large a box it will take.
 
-`nodes` and `waysOf` look elements up by id, `changesetsIn` lists what has been
-edited over an area since a moment, and `changesetsBy` and `changesetChanges`
-follow one mapper's edits.
+`nodes` looks nodes up by id, `waysUsing` finds the ways through a node,
+`changesetsIn` lists what has been edited over an area since a moment, and
+`changesetsBy` and `changesetChanges` follow one mapper's edits.
 
 OpenStreetMap asks to be told who is calling it, so give a `contact` that
 reaches whoever runs the program. No more than a couple of requests are made at
@@ -78,7 +78,7 @@ client.token = signedIn.accessToken;
 print('Signed in as ${await client.displayName()}');
 
 final changeset = await client.upload(
-  OsmUpload.of(editor.history),
+  editor.history.upload,
   comment: 'Add opening hours',
 );
 print('Uploaded as changeset $changeset');
@@ -284,7 +284,7 @@ final first = await feed.firstAfter(day, file.header.replicationTimestamp!);
 final latest = await feed.latest(day);
 final changes = [
   for (var s = first; s <= latest.sequence; s++)
-    ...await OsmChangeFile.read((await feed.download(day, s, cache)).path),
+    ...await OsmChangeFile.read((await feed.download(day, s)).path),
 ];
 ```
 

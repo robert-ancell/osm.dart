@@ -187,6 +187,17 @@ void main() {
     editor.deleteNode(editor.node(2)!);
     expect(editor.way(10)!.nodeIds, [1, 3]);
   });
+
+  test('tells whoever asked when something changes', () {
+    var told = 0;
+    final editor = OsmEditor(
+      OsmEditorData.of(const []),
+      onChanged: () => told++,
+    );
+    editor.createNode(latitude: 0, longitude: 0);
+    editor.undo();
+    expect(told, 2);
+  });
 }
 
 const _borders = '{"type":"FeatureCollection","features":[{"type":"Feature",'

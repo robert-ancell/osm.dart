@@ -1,5 +1,5 @@
 import 'area.dart';
-import 'edit.dart';
+import 'editor_data.dart';
 import 'element.dart';
 
 /// The elements taken out of a file, and everything they refer to.
@@ -81,8 +81,8 @@ class OsmSubset implements OsmEditorData {
   /// The area [element] covers, or null if it does not cover one.
   ///
   /// A closed way, or a relation whose member ways make up rings. Everything
-  /// it needs is looked up here, so a relation whose members were not read comes back
-  /// as null rather than as a torn outline.
+  /// it needs is looked up here, so a relation whose members were not read
+  /// comes back as null rather than as a torn outline.
   OsmArea? areaOf(OsmElement element) => assembleArea(
         element,
         node: (id) => nodes[id],

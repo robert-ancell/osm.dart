@@ -177,3 +177,21 @@ class OsmRelation extends OsmElement {
   @override
   String toString() => 'OsmRelation($id, ${members.length} members)';
 }
+
+/// The shape an element takes, as far as what it can be is concerned.
+enum OsmGeometry {
+  /// A node on its own.
+  point,
+
+  /// A node that is part of a way.
+  vertex,
+
+  /// A way that is a line, open or closed.
+  line,
+
+  /// A way, or a multipolygon, that encloses an area.
+  area,
+
+  /// A relation other than a multipolygon.
+  relation,
+}

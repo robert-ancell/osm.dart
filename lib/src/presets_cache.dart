@@ -85,3 +85,31 @@ class OsmPresetsCache {
       ) ??
       OsmPresets.empty();
 }
+
+/// The tagging schema, kept in an [OsmCache] alongside everything else.
+extension OsmCachePresets on OsmCache {
+  /// Where the schema is kept: [OsmPresetsCache.name] in the cache's
+  /// directory.
+  OsmPresetsCache get presetsCache => _presetsCaches[this] ??= OsmPresetsCache(
+        directory: directoryFor(OsmPresetsCache.name),
+        fetch: fetch,
+      );
+
+  /// The tagging schema in [language], which says what kinds of thing there
+  /// are.
+  ///
+  /// Read the first time each language is asked for and kept. Empty only
+  /// when there is no copy on disk and none could be fetched, in which case
+  /// the next ask tries again.
+  Future<OsmPresets> presets({String language = 'en'}) async {
+    final held = _presetsRead[this] ??= {};
+    final kept = held[language];
+    if (kept != null) return kept;
+    final read = await presetsCache.read(language: language);
+    if (read.byId.isNotEmpty) held[language] = read;
+    return read;
+  }
+}
+
+final _presetsCaches = Expando<OsmPresetsCache>();
+final _presetsRead = Expando<Map<String, OsmPresets>>();

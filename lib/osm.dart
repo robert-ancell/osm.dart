@@ -17,6 +17,7 @@ export 'src/bounds.dart';
 export 'src/cache.dart';
 export 'src/change.dart';
 export 'src/data_cache.dart';
+export 'src/editor_data.dart';
 export 'src/element.dart';
 export 'src/exception.dart';
 export 'src/imagery.dart';

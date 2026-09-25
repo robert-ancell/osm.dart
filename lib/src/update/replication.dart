@@ -270,7 +270,8 @@ class OsmReplication {
     return kept;
   }
 
-  /// The directory under [OsmCache.defaultDirectory] diffs are kept in by default.
+  /// The directory under [OsmCache.defaultDirectory] diffs are kept in by
+  /// default.
   static const cacheName = 'replication';
 
   /// Where under a cache directory this feed's diffs go: the server and the
@@ -282,21 +283,21 @@ class OsmReplication {
           if (segment.isNotEmpty) segment,
       ].join('/');
 
-  /// Fetches diff [sequence] of [period] into [cache], unless it is already
-  /// there, and gives back where it is.
+  /// Fetches diff [sequence] of [period] into [directory], unless it is
+  /// already there, and gives back where it is.
   ///
-  /// The diff goes under [cachePath] in [cache], by default [cacheName] under
-  /// [OsmCache.defaultDirectory], so that one directory can hold the diffs of any
-  /// number of feeds.
+  /// The diff goes under [cachePath] in [directory], by default [cacheName]
+  /// under [OsmCache.defaultDirectory], so that one directory can hold the
+  /// diffs of any number of feeds.
   ///
   /// Written to a side file and renamed, so an interrupted fetch never leaves
   /// something that looks like a whole diff.
   Future<File> download(
     OsmReplicationPeriod period,
-    int sequence, [
-    Directory? cache,
-  ]) async {
-    final root = cache ?? OsmCache.defaultDirectory(cacheName);
+    int sequence, {
+    Directory? directory,
+  }) async {
+    final root = directory ?? OsmCache.defaultDirectory(cacheName);
     final file = File(
       '${root.path}/$cachePath/${period.name}/'
       '${sequencePath(sequence)}.osc.gz',

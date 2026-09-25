@@ -151,7 +151,10 @@ void main() {
         ],
       );
       final split = OsmSplitOperation(view, [view.node(1)!, view.node(3)!]);
-      expect(split.kind, 'area');
+      expect(
+        split.ways.map(view.geometryOf).toSet(),
+        {OsmGeometry.area},
+      );
       split.apply();
       final relation = view.history.changedRelations.values.single;
       expect(relation.tags, {
@@ -441,7 +444,8 @@ void main() {
       final view = crossroads();
       final disconnect = OsmDisconnectOperation(view, [view.node(2)!]);
       expect(disconnect.available, isTrue);
-      expect(disconnect.kind, 'single_point.no_ways');
+      expect(disconnect.points, 1);
+      expect(disconnect.ways, isEmpty);
       disconnect.apply();
       final road = view.way(10)!.nodeIds;
       final side = view.way(11)!.nodeIds;
@@ -453,7 +457,9 @@ void main() {
     test('disconnects a selected line from what it touches', () {
       final view = crossroads();
       final disconnect = OsmDisconnectOperation(view, [view.way(11)!]);
-      expect(disconnect.kind, 'no_points.single_way.line');
+      expect(disconnect.points, 0);
+      expect(disconnect.ways.single.id, 11);
+      expect(disconnect.conjoined, isFalse);
       disconnect.apply();
       expect(view.way(10)!.nodeIds, [1, 2, 3, 4]);
       expect(view.way(11)!.nodeIds.first, isNegative);

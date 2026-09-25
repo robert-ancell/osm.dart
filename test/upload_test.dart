@@ -22,11 +22,11 @@ OsmNode _node(int id, double lat, double lon, {int version = 2}) => OsmNode(
     );
 
 String _xml(OsmEditor edits) =>
-    OsmUpload.of(edits.history).toXml(changeset: 77, createdBy: _generator);
+    edits.history.upload.toXml(changeset: 77, createdBy: _generator);
 
 void main() {
   test('sends nothing when nothing has been changed', () {
-    expect(OsmUpload.of(editorOf().history).isEmpty, isTrue);
+    expect(editorOf().history.upload.isEmpty, isTrue);
   });
 
   test('writes a moved node with the version it was read at', () {
@@ -71,14 +71,14 @@ void main() {
     final edits = editorOf();
     final node = edits.createNode(latitude: 1, longitude: 2);
     edits.deleteNode(node);
-    expect(OsmUpload.of(edits.history).isEmpty, isTrue);
+    expect(edits.history.upload.isEmpty, isTrue);
   });
 
   test('forgets a deletion that was undone', () {
     final edits = editorOf()..deleteNode(_node(4, 1, 2));
-    expect(OsmUpload.of(edits.history).deletedNodes, hasLength(1));
+    expect(edits.history.upload.deletedNodes, hasLength(1));
     edits.undo();
-    expect(OsmUpload.of(edits.history).isEmpty, isTrue);
+    expect(edits.history.upload.isEmpty, isTrue);
   });
 
   test('refuses to write back an element read without a version', () {
@@ -99,7 +99,7 @@ void main() {
     final edits = editorOf();
     final node = edits.createNode(latitude: 1, longitude: 2);
     edits.createWay(nodeIds: [node.id]);
-    expect(OsmUpload.of(edits.history).describe(), [
+    expect(edits.history.upload.describe(), [
       'Create node new (-1)',
       'Create way new (-2) through 1 node(s)',
     ]);

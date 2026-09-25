@@ -619,10 +619,10 @@ class OsmApiClient {
     return OsmChangeFile.parse(utf8.decode(body, allowMalformed: true));
   }
 
-  /// The ways that use node [id].
-  Future<List<OsmWay>> waysOf(int id) async {
+  /// The ways that run through the node with [nodeId].
+  Future<List<OsmWay>> waysUsing(int nodeId) async {
     requests++;
-    final body = await _fetch(base.resolve('node/$id/ways'));
+    final body = await _fetch(base.resolve('node/$nodeId/ways'));
     if (body == null) return const [];
     return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true))
         .whereType<OsmWay>()

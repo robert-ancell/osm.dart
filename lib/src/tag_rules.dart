@@ -59,7 +59,7 @@ abstract interface class OsmTagRules {
   ///
   /// Asked of each element selected for deleting, with [editor] to look up
   /// what uses it.
-  OsmDisabledReason? protects(OsmElement element, OsmEditor editor);
+  OsmDisabledReason? whyProtected(OsmElement element, OsmEditor editor);
 
   /// [tags] for something that now faces the other way.
   ///
@@ -140,7 +140,7 @@ class OsmPlainTagRules implements OsmTagRules {
   bool isDescriptive(Map<String, String> tags) => tags.isNotEmpty;
 
   @override
-  OsmDisabledReason? protects(OsmElement element, OsmEditor editor) => null;
+  OsmDisabledReason? whyProtected(OsmElement element, OsmEditor editor) => null;
 
   @override
   Map<String, String> reversed(
@@ -220,9 +220,8 @@ class OsmPlainTagRules implements OsmTagRules {
 
 /// Why an [OsmOperation] cannot be done.
 ///
-/// The ones here are those the editor itself gives, and those
-/// [OsmStandardTagRules] gives; [OsmTagRules] can give reasons of their own
-/// by making more.
+/// The ones here are those the editor itself gives. [OsmTagRules] give
+/// reasons of their own by making more, as [OsmStandardTagRules] does.
 class OsmDisabledReason {
   /// A name for the reason, which messages saying it can be looked up by.
   final String id;
@@ -232,13 +231,6 @@ class OsmDisabledReason {
 
   /// Nothing selected is something it can be done to, or not all of it is.
   static const notEligible = OsmDisabledReason('not_eligible');
-
-  /// A way that is part of a route or a boundary, or the outside of a
-  /// multipolygon, which deleting would leave a hole in.
-  static const partOfRelation = OsmDisabledReason('part_of_relation');
-
-  /// Something linked from Wikidata, which is not deleted by accident.
-  static const hasWikidataTag = OsmDisabledReason('has_wikidata_tag');
 
   /// A relation it is part of has not been read in full, so what the change
   /// does to it cannot be worked out.

@@ -1,8 +1,9 @@
+import 'editor_data.dart';
 import 'element.dart';
 import 'operations.dart';
-import 'presets.dart';
 import 'tag_rules.dart';
 import 'topology.dart';
+import 'update/upload.dart';
 
 part 'editor.dart';
 
@@ -719,6 +720,44 @@ class OsmEditHistory {
   void _changed() {
     _undone.clear();
     onChanged?.call();
+  }
+
+  /// What uploading these changes would send.
+  OsmUpload get upload {
+    final nodes = changedNodes;
+    final ways = changedWays;
+    return OsmUpload(
+      // A negative id is something made here that OpenStreetMap has never
+      // seen; anything else is an element that was read and changed.
+      createdNodes: [
+        for (final node in nodes.values)
+          if (node.id < 0) node,
+      ],
+      changedNodes: [
+        for (final node in nodes.values)
+          if (node.id > 0) node,
+      ],
+      deletedNodes: deletedNodes.values.toList(),
+      createdWays: [
+        for (final way in ways.values)
+          if (way.id < 0) way,
+      ],
+      changedWays: [
+        for (final way in ways.values)
+          if (way.id > 0) way,
+      ],
+      deletedWays: deletedWays.values.toList(),
+      createdRelations: [
+        for (final relation in changedRelations.values)
+          if (relation.id < 0) relation,
+      ],
+      changedRelations: [
+        for (final relation in changedRelations.values)
+          if (relation.id > 0 && !isGone(OsmElementType.relation, relation.id))
+            relation,
+      ],
+      deletedRelations: deletedRelations.values.toList(),
+    );
   }
 
   /// Whether there is a change undone that can be made again.

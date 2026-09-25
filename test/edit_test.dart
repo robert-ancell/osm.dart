@@ -11,7 +11,7 @@ const _node = OsmNode(
 
 void main() {
   test('holds nothing to begin with', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     expect(edits.isEmpty, isTrue);
     expect(edits.changes, isEmpty);
     expect(edits.changedNode(1), isNull);
@@ -19,7 +19,7 @@ void main() {
   });
 
   test('moves a node without touching what was read', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
 
     expect(edits.changedNode(1)!.latitude, -36.86);
@@ -30,14 +30,14 @@ void main() {
   });
 
   test('keeps what a node was tagged with and where it came from', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     expect(edits.changedNode(1)!.tags, _node.tags);
     expect(edits.changedNode(1)!.info!.version, 3);
   });
 
   test('writes down each change in the order it was made', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     edits.moveNode(_node, latitude: -36.87, longitude: 174.78);
     expect(edits.length, 2);
@@ -47,7 +47,7 @@ void main() {
   });
 
   test('counts a drag as one change rather than one a frame', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     for (var i = 0; i < 20; i++) {
       edits.moveNode(
@@ -65,7 +65,7 @@ void main() {
   });
 
   test('undoes the last change and leaves the one before it', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     edits.moveNode(_node, latitude: -36.87, longitude: 174.78);
 
@@ -80,7 +80,7 @@ void main() {
 
   test('undoes changes to different nodes one at a time', () {
     const other = OsmNode(id: 2, latitude: -36.85, longitude: 174.76);
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     edits.moveNode(other, latitude: -36.88, longitude: 174.79);
 
@@ -91,7 +91,7 @@ void main() {
   });
 
   test('undoes everything at once', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     edits.moveNode(_node, latitude: -36.87, longitude: 174.78);
     edits.undoAll();
@@ -101,7 +101,7 @@ void main() {
 
   test('says when something has changed', () {
     var told = 0;
-    final edits = OsmEdits(onChanged: () => told++);
+    final edits = OsmEditHistory(onChanged: () => told++);
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     expect(told, 1);
     edits.undo();
@@ -111,7 +111,7 @@ void main() {
   });
 
   test('says what has to be drawn again', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     final touched = edits.touching((id) => id == 1 ? [10, 11] : const []);
     expect(touched, contains((OsmElementType.node, 1)));
@@ -121,14 +121,14 @@ void main() {
   });
 
   test('says nothing has to be drawn again when nothing has changed', () {
-    expect(OsmEdits().touching((_) => [1, 2]), isEmpty);
+    expect(OsmEditHistory().touching((_) => [1, 2]), isEmpty);
   });
 
   _more();
   _groups();
 
   test('hands out a list of changes that cannot be written to', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     expect(() => edits.changes.clear(), throwsUnsupportedError);
     expect(() => edits.changedNodes.clear(), throwsUnsupportedError);
@@ -144,7 +144,7 @@ const _way = OsmWay(
 void _more() {
   group('making things', () {
     test('makes a node with an id of its own', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final made = edits.createNode(latitude: -36.85, longitude: 174.76);
       expect(made.id, lessThan(0), reason: 'not uploaded yet');
       expect(edits.changedNode(made.id), made);
@@ -152,7 +152,7 @@ void _more() {
     });
 
     test('gives every new thing a different id', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final first = edits.createNode(latitude: 0, longitude: 0);
       final second = edits.createNode(latitude: 0, longitude: 0);
       final way = edits.createWay(nodeIds: [first.id, second.id]);
@@ -160,7 +160,7 @@ void _more() {
     });
 
     test('makes a way through the nodes it is given', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final way = edits.createWay(
         nodeIds: [1, 2],
         tags: const {'highway': 'footway'},
@@ -170,7 +170,7 @@ void _more() {
     });
 
     test('undoes making a node', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final made = edits.createNode(latitude: 0, longitude: 0);
       edits.undo();
       expect(edits.changedNode(made.id), isNull);
@@ -178,7 +178,7 @@ void _more() {
     });
 
     test('undoes making a way', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final way = edits.createWay(nodeIds: [1, 2]);
       edits.undo();
       expect(edits.changedWay(way.id), isNull);
@@ -187,14 +187,14 @@ void _more() {
 
   group('changing what a way runs through', () {
     test('puts a way through other nodes', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.setWayNodes(_way, [1, 4, 2, 3]);
       expect(edits.changedWay(10)!.nodeIds, [1, 4, 2, 3]);
       expect(edits.changedWay(10)!.tags, _way.tags);
     });
 
     test('undoes back to what it ran through before', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.setWayNodes(_way, [1, 4, 2, 3]);
       edits.setWayNodes(edits.changedWay(10)!, [1, 4, 5, 2, 3]);
       expect(edits.changedWay(10)!.nodeIds.length, 5);
@@ -208,21 +208,21 @@ void _more() {
 
   group('taking things off the map', () {
     test('deletes a node', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.deleteNode(_node);
       expect(edits.isGone(OsmElementType.node, _node.id), isTrue);
       expect(edits.changedNode(_node.id), isNull);
     });
 
     test('takes a deleted node out of the ways through it', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       const node = OsmNode(id: 2, latitude: 0, longitude: 0);
       edits.deleteNode(node, from: [_way]);
       expect(edits.changedWay(10)!.nodeIds, [1, 3]);
     });
 
     test('undoes a deletion, ways and all', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       const node = OsmNode(id: 2, latitude: 0, longitude: 0);
       edits.deleteNode(node, from: [_way]);
 
@@ -232,7 +232,7 @@ void _more() {
     });
 
     test('keeps a node that had been moved where it was moved to', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.moveNode(_node, latitude: -36.9, longitude: 174.9);
       edits.deleteNode(_node);
       expect(edits.changedNode(_node.id), isNull);
@@ -242,7 +242,7 @@ void _more() {
     });
 
     test('says a deleted node has to be drawn again', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.deleteNode(_node, from: [_way]);
       final touched = edits.touching((id) => id == _node.id ? [10] : const []);
       expect(touched, contains((OsmElementType.node, _node.id)));
@@ -251,7 +251,7 @@ void _more() {
   });
 
   test('undoes everything at once whatever was done', () {
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     final made = edits.createNode(latitude: 0, longitude: 0);
     edits.createWay(nodeIds: [made.id]);
     edits.deleteNode(_node);
@@ -266,7 +266,7 @@ void _more() {
 void _groups() {
   group('changes made as one', () {
     test('gathers what was done since a mark', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final mark = edits.length;
       final first = edits.createNode(latitude: 0, longitude: 0);
       final second = edits.createNode(latitude: 1, longitude: 1);
@@ -279,7 +279,7 @@ void _groups() {
     });
 
     test('undoes the whole of it at once', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final mark = edits.length;
       final first = edits.createNode(latitude: 0, longitude: 0);
       final second = edits.createNode(latitude: 1, longitude: 1);
@@ -294,7 +294,7 @@ void _groups() {
     });
 
     test('leaves what was done before the mark alone', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final kept = edits.createNode(latitude: 5, longitude: 5);
       final mark = edits.length;
       final first = edits.createNode(latitude: 0, longitude: 0);
@@ -307,7 +307,7 @@ void _groups() {
     });
 
     test('gathers nothing when there is nothing to gather', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.createNode(latitude: 0, longitude: 0);
       final mark = edits.length;
       edits.combineSince(mark);
@@ -321,7 +321,7 @@ void _groups() {
 
     test('undoes a group of moves back to where things started', () {
       const node = OsmNode(id: 1, latitude: 0, longitude: 0);
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final mark = edits.length;
       edits.moveNode(node, latitude: 1, longitude: 1);
       edits.moveNode(node, latitude: 2, longitude: 2);
@@ -336,7 +336,7 @@ void _groups() {
     // A line drawn a point at a time is one change; moving one of its points
     // afterwards and taking that back must leave the point where it was put,
     // not take it away from under the line.
-    final edits = OsmEdits();
+    final edits = OsmEditHistory();
     final mark = edits.length;
     final a = edits.createNode(latitude: 1, longitude: 1);
     final b = edits.createNode(latitude: 2, longitude: 2);
@@ -358,7 +358,7 @@ void _groups() {
     );
 
     test('gives a node other tags and keeps everything else', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       expect(edits.setTags(_node, const {'amenity': 'bench'}), isTrue);
       final now = edits.changedNode(1)!;
       expect(now.tags, {'amenity': 'bench'});
@@ -367,27 +367,29 @@ void _groups() {
     });
 
     test('gives a way other tags and keeps its nodes', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       edits.setTags(way, const {'highway': 'service'});
       expect(edits.changedWay(9)!.tags, {'highway': 'service'});
       expect(edits.changedWay(9)!.nodeIds, [1, 2]);
     });
 
     test('records nothing when the tags are already those', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       expect(edits.setTags(_node, const {'highway': 'crossing'}), isFalse);
       expect(edits.isEmpty, isTrue);
       expect(edits.changedNode(1), isNull);
     });
 
     test('undoes back to what was read', () {
-      final edits = OsmEdits()..setTags(way, const {'highway': 'service'});
+      final edits = OsmEditHistory()
+        ..setTags(way, const {'highway': 'service'});
       edits.undo();
       expect(edits.changedWay(9), isNull);
     });
 
     test('keeps new tags through a move and its undoing', () {
-      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      final edits = OsmEditHistory()
+        ..setTags(_node, const {'amenity': 'bench'});
       final tagged = edits.changedNode(1)!;
       edits.moveNode(tagged, latitude: 0, longitude: 0);
       edits.undo();
@@ -398,7 +400,7 @@ void _groups() {
     });
 
     test('keeps a move through a change of tags and its undoing', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..moveNode(_node, latitude: 0, longitude: 0)
         ..setTags(_node, const {'amenity': 'bench'});
       expect(edits.changedNode(1)!.latitude, 0);
@@ -409,7 +411,8 @@ void _groups() {
 
     test('brings a retagged node back retagged when its deletion is undone',
         () {
-      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      final edits = OsmEditHistory()
+        ..setTags(_node, const {'amenity': 'bench'});
       edits.deleteNode(edits.changedNode(1)!);
       expect(edits.deletedNodes[1]!.tags, {'amenity': 'bench'});
       edits.undo();
@@ -418,7 +421,7 @@ void _groups() {
     });
 
     test('changes several elements as one', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final mark = edits.length;
       edits
         ..setTags(_node, const {'name': 'Queen Street'})
@@ -433,13 +436,14 @@ void _groups() {
     test('will not tag a relation', () {
       const relation = OsmRelation(id: 3, members: [], tags: {});
       expect(
-        () => OsmEdits().setTags(relation, const {'type': 'route'}),
+        () => OsmEditHistory().setTags(relation, const {'type': 'route'}),
         throwsArgumentError,
       );
     });
 
     test('sends a retagged node with its new tags', () {
-      final edits = OsmEdits()..setTags(_node, const {'amenity': 'bench'});
+      final edits = OsmEditHistory()
+        ..setTags(_node, const {'amenity': 'bench'});
       final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
       expect(xml, contains('<tag k="amenity" v="bench"/>'));
       expect(xml, isNot(contains('crossing')));
@@ -466,13 +470,13 @@ void _groups() {
     );
 
     test('deletes a way', () {
-      final edits = OsmEdits()..deleteWay(way);
+      final edits = OsmEditHistory()..deleteWay(way);
       expect(edits.isGone(OsmElementType.way, 9), isTrue);
       expect(edits.deletedWays[9], way);
     });
 
     test('takes a deleted way out of the relations it was in', () {
-      final edits = OsmEdits()..deleteWay(way, relations: [route]);
+      final edits = OsmEditHistory()..deleteWay(way, relations: [route]);
       final now = edits.changedRelation(30)!;
       expect(now.members.map((m) => (m.type, m.ref)), [
         (OsmElementType.node, 1),
@@ -482,7 +486,7 @@ void _groups() {
     });
 
     test('undoes a way deletion, relations and all', () {
-      final edits = OsmEdits()..deleteWay(way, relations: [route]);
+      final edits = OsmEditHistory()..deleteWay(way, relations: [route]);
       edits.undo();
       expect(edits.isGone(OsmElementType.way, 9), isFalse);
       expect(edits.deletedWays, isEmpty);
@@ -490,7 +494,7 @@ void _groups() {
     });
 
     test('says nothing about a way made and then deleted again', () {
-      final edits = OsmEdits();
+      final edits = OsmEditHistory();
       final made = edits.createWay(nodeIds: [1, 2]);
       edits.deleteWay(made);
       expect(edits.deletedWays, isEmpty);
@@ -500,7 +504,7 @@ void _groups() {
     });
 
     test('takes a deleted node out of the relations it was in', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..deleteNode(_node, from: [way], relations: [route]);
       expect(
         edits.changedRelation(30)!.members.map((m) => m.ref),
@@ -512,7 +516,7 @@ void _groups() {
     });
 
     test('changes the members of a relation, and undoes it', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..setRelationMembers(route, [route.members.first]);
       expect(edits.changedRelation(30)!.members, hasLength(1));
       edits.undo();
@@ -520,7 +524,7 @@ void _groups() {
     });
 
     test('keeps changes to one relation from different deletions', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..deleteWay(way, relations: [route])
         ..deleteNode(_node, relations: [route]);
       expect(edits.changedRelation(30)!.members.map((m) => m.ref), [8]);
@@ -529,7 +533,7 @@ void _groups() {
     });
 
     test('says a relation that has changed has to be drawn again', () {
-      final edits = OsmEdits()..setRelationMembers(route, const []);
+      final edits = OsmEditHistory()..setRelationMembers(route, const []);
       expect(
         edits.touching((_) => const []),
         contains((OsmElementType.relation, 30)),
@@ -537,7 +541,7 @@ void _groups() {
     });
 
     test('uploads a relation before the way it no longer lists goes', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..deleteNode(
           const OsmNode(
             id: 2,
@@ -570,20 +574,20 @@ void _groups() {
     const ring = OsmWay(id: 5, nodeIds: [1, 2, 3, 4, 1]);
 
     test('closes a ring again when the node it was drawn from goes', () {
-      expect(OsmEdits.withoutNode(ring, 1), [2, 3, 4, 2]);
+      expect(OsmEditHistory.withoutNode(ring, 1), [2, 3, 4, 2]);
     });
 
     test('leaves a ring closed when any other node goes', () {
-      expect(OsmEdits.withoutNode(ring, 3), [1, 2, 4, 1]);
+      expect(OsmEditHistory.withoutNode(ring, 3), [1, 2, 4, 1]);
     });
 
     test('leaves no repeat where a node went', () {
       const line = OsmWay(id: 6, nodeIds: [1, 2, 3, 2, 4]);
-      expect(OsmEdits.withoutNode(line, 3), [1, 2, 4]);
+      expect(OsmEditHistory.withoutNode(line, 3), [1, 2, 4]);
     });
 
     test('keeps a building closed when a corner of it is deleted', () {
-      final edits = OsmEdits()
+      final edits = OsmEditHistory()
         ..deleteNode(
           const OsmNode(id: 1, latitude: 0, longitude: 0),
           from: [ring],
@@ -607,7 +611,7 @@ void _groups() {
     );
 
     test('deletes a relation and takes it out of those it was in', () {
-      final edits = OsmEdits()..deleteRelation(inner, relations: [outer]);
+      final edits = OsmEditHistory()..deleteRelation(inner, relations: [outer]);
       expect(edits.isGone(OsmElementType.relation, 40), isTrue);
       expect(edits.changedRelation(41)!.members, isEmpty);
       final xml = OsmUpload.of(edits).toXml(changeset: 1, generator: 'test');
@@ -618,11 +622,22 @@ void _groups() {
     });
 
     test('undoes deleting a relation', () {
-      final edits = OsmEdits()..deleteRelation(inner, relations: [outer]);
+      final edits = OsmEditHistory()..deleteRelation(inner, relations: [outer]);
       edits.undo();
       expect(edits.isGone(OsmElementType.relation, 40), isFalse);
       expect(edits.deletedRelations, isEmpty);
       expect(edits.changedRelation(41), isNull);
     });
+  });
+
+  test('undoes everything since a mark, and nothing before it', () {
+    final edits = OsmEditHistory();
+    final kept = edits.createNode(latitude: 0, longitude: 0);
+    final mark = edits.length;
+    edits.createNode(latitude: 1, longitude: 1);
+    edits.createNode(latitude: 2, longitude: 2);
+    edits.undoSince(mark);
+    expect(edits.length, mark);
+    expect(edits.changedNodes.keys, [kept.id]);
   });
 }

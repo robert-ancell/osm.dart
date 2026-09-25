@@ -1,10 +1,10 @@
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
-import 'test_view.dart';
+import 'test_editor.dart';
 
 /// A road of three nodes, west to east, with a side road off its middle.
-TestView _roads() => TestView(
+OsmEditor _roads({List<OsmRelation> relations = const []}) => testEditor(
       nodes: [
         testNode(1, 0, 0),
         testNode(2, 0, 0.001, {'highway': 'crossing'}),
@@ -15,6 +15,7 @@ TestView _roads() => TestView(
         testWay(10, [1, 2, 3], {'highway': 'residential'}),
         testWay(11, [2, 4], {'highway': 'service'}),
       ],
+      relations: relations,
     );
 
 void main() {
@@ -26,11 +27,11 @@ void main() {
       // Its far end goes; the node it shares with the road stays.
       expect(view.node(4), isNull);
       expect(view.node(2), isNotNull);
-      expect(view.edits.length, 1);
+      expect(view.history.length, 1);
     });
 
     test('keeps a node of a deleted way that says something', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0),
           testNode(2, 0, 0.001, {'barrier': 'gate'}),
@@ -45,7 +46,7 @@ void main() {
     });
 
     test('keeps a node of a deleted way that only says where it came from', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0, {'source': 'survey'}),
           testNode(2, 0, 0.001),
@@ -67,7 +68,7 @@ void main() {
     });
 
     test('deletes a relation left with no members', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [testNode(1, 0, 0)],
         relations: [
           const OsmRelation(
@@ -79,19 +80,20 @@ void main() {
       );
       OsmDeleteOperation(view, [view.node(1)!]).apply();
       expect(view.relation(20), isNull);
-      expect(view.edits.deletedRelations, contains(20));
+      expect(view.history.deletedRelations, contains(20));
     });
 
     test('will not delete part of a route or a boundary', () {
       for (final type in ['route', 'boundary']) {
-        final view = _roads();
-        view.relations[30] = OsmRelation(
-          id: 30,
-          members: const [
-            OsmMember(type: OsmElementType.way, ref: 10, role: ''),
-          ],
-          tags: {'type': type},
-        );
+        final view = _roads(relations: [
+          OsmRelation(
+            id: 30,
+            members: const [
+              OsmMember(type: OsmElementType.way, ref: 10, role: ''),
+            ],
+            tags: {'type': type},
+          ),
+        ]);
         expect(
           OsmDeleteOperation(view, [view.way(10)!]).disabled,
           'part_of_relation',
@@ -106,20 +108,20 @@ void main() {
             members: [OsmMember(type: OsmElementType.way, ref: 10, role: role)],
             tags: const {'type': 'multipolygon'},
           );
-      final outer = _roads()..relations[30] = multipolygon('outer');
+      final outer = _roads(relations: [multipolygon('outer')]);
       expect(OsmDeleteOperation(outer, [outer.way(10)!]).disabled,
           'part_of_relation');
-      final unroled = _roads()..relations[30] = multipolygon('');
+      final unroled = _roads(relations: [multipolygon('')]);
       expect(
         OsmDeleteOperation(unroled, [unroled.way(10)!]).disabled,
         'part_of_relation',
       );
-      final inner = _roads()..relations[30] = multipolygon('inner');
+      final inner = _roads(relations: [multipolygon('inner')]);
       expect(OsmDeleteOperation(inner, [inner.way(10)!]).disabled, isNull);
     });
 
     test('will not delete something with a Wikidata tag', () {
-      final view = TestView(nodes: [
+      final view = testEditor(nodes: [
         testNode(1, 0, 0, {'wikidata': 'Q1'})
       ]);
       expect(OsmDeleteOperation(view, [view.node(1)!]).disabled,
@@ -129,8 +131,8 @@ void main() {
     test('undoes a deletion as one change', () {
       final view = _roads();
       OsmDeleteOperation(view, [view.way(11)!, view.node(1)!]).apply();
-      view.edits.undo();
-      expect(view.edits.isEmpty, isTrue);
+      view.history.undo();
+      expect(view.history.isEmpty, isTrue);
       expect(view.way(11), isNotNull);
       expect(view.node(4), isNotNull);
     });
@@ -138,7 +140,7 @@ void main() {
 
   group('reversing', () {
     test('turns a line round, and its tags with it', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [testNode(1, 0, 0), testNode(2, 0, 0.001)],
         ways: [
           testWay(10, [
@@ -166,11 +168,11 @@ void main() {
         'name': 'Left Street',
         'turn:lanes:backward': 'left|through',
       });
-      expect(view.edits.length, 1);
+      expect(view.history.length, 1);
     });
 
     test('turns round the nodes along a line, but not their bearings', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0, {'direction': 'forward', 'highway': 'stop'}),
           testNode(2, 0, 0.001, {'direction': 'N'}),
@@ -185,7 +187,7 @@ void main() {
     });
 
     test('turns a node on its own right round', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0, {'direction': '90'}),
           testNode(2, 0, 0, {'direction': 'NE;190'}),
@@ -197,20 +199,21 @@ void main() {
     });
 
     test('turns round a line going forward or backward in a route', () {
-      final view = _roads()
-        ..relations[30] = const OsmRelation(
+      final view = _roads(relations: const [
+        OsmRelation(
           id: 30,
           members: [
             OsmMember(type: OsmElementType.way, ref: 10, role: 'forward'),
           ],
           tags: {'type': 'route'},
-        );
+        ),
+      ]);
       OsmReverseOperation(view, [view.way(10)!]).apply();
       expect(view.relation(30)!.members.single.role, 'backward');
     });
 
     test('has nothing to reverse in an area or a node with no direction', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0),
           testNode(2, 0, 1),
@@ -226,7 +229,7 @@ void main() {
     });
 
     test('says what it reverses', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [
           testNode(1, 0, 0),
           testNode(2, 0, 0.001),
@@ -256,13 +259,13 @@ void main() {
       expect(replacement.latitude, view.node(2)!.latitude);
       // The side road is on the replacement too, still joined to the road.
       expect(view.way(11)!.nodeIds.first, replacement.id);
-      expect(view.edits.length, 1);
+      expect(view.history.length, 1);
     });
 
     test('has nothing to take out of an untagged node or one on its own', () {
       final view = _roads();
       expect(OsmExtractOperation(view, [view.node(1)!]).available, isFalse);
-      final alone = TestView(nodes: [
+      final alone = testEditor(nodes: [
         testNode(1, 0, 0, {'amenity': 'bench'})
       ]);
       expect(OsmExtractOperation(alone, [alone.node(1)!]).available, isFalse);
@@ -277,7 +280,7 @@ void main() {
         translations: '{"en": {"presets": {"presets": {}}}}',
       );
 
-      TestView shop(Map<String, String> tags) => TestView(
+      OsmEditor shop(Map<String, String> tags) => testEditor(
             nodes: [
               testNode(1, 0, 0),
               testNode(2, 0, 0.002),
@@ -341,50 +344,50 @@ void main() {
     test('finds the line a selected end continues', () {
       final view = _roads();
       expect(
-        osmContinuable(view, [view.node(3)!])!.map((w) => w.id),
+        view.continuable([view.node(3)!])!.map((w) => w.id),
         [10],
       );
     });
 
     test('finds nothing to continue from the middle of a line', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [testNode(1, 0, 0), testNode(2, 0, 1), testNode(3, 0, 2)],
         ways: [
           testWay(10, [1, 2, 3])
         ],
       );
-      expect(osmContinuable(view, [view.node(2)!]), isEmpty);
+      expect(view.continuable([view.node(2)!]), isEmpty);
     });
 
     test('finds every line that ends there, and one when one is chosen', () {
-      final view = TestView(
+      final view = testEditor(
         nodes: [testNode(1, 0, 0), testNode(2, 0, 1), testNode(3, 1, 1)],
         ways: [
           testWay(10, [1, 2]),
           testWay(11, [2, 3])
         ],
       );
-      expect(osmContinuable(view, [view.node(2)!]), hasLength(2));
+      expect(view.continuable([view.node(2)!]), hasLength(2));
       expect(
-        osmContinuable(view, [view.node(2)!, view.way(11)!])!.map((w) => w.id),
+        view.continuable([view.node(2)!, view.way(11)!])!.map((w) => w.id),
         [11],
       );
     });
 
     test('is not something to ask of anything but one vertex', () {
       final view = _roads();
-      expect(osmContinuable(view, [view.way(10)!]), isNull);
-      expect(osmContinuable(view, [view.node(1)!, view.node(3)!]), isNull);
+      expect(view.continuable([view.way(10)!]), isNull);
+      expect(view.continuable([view.node(1)!, view.node(3)!]), isNull);
     });
   });
 
   group('copying and pasting', () {
     test('copies a way with its nodes, and pastes it somewhere else', () {
       final view = _roads();
-      final copied = osmCopy(view, [view.way(11)!], anchor: (0.5, 0.5))!;
+      final copied = view.copy([view.way(11)!], anchor: (0.5, 0.5))!;
       expect(copied.length, 1);
       expect(copied.nodes.keys, containsAll([2, 4]));
-      final pasted = osmPaste(view.edits, copied, dx: 0.001, dy: 0);
+      final pasted = view.paste(copied, dx: 0.001, dy: 0);
       final way = pasted.single as OsmWay;
       expect(way.id, isNegative);
       expect(way.tags, {'highway': 'service'});
@@ -396,26 +399,25 @@ void main() {
         Mercator.x(start.longitude),
         closeTo(Mercator.x(view.node(2)!.longitude) + 0.001, 1e-12),
       );
-      expect(view.edits.length, 1);
+      expect(view.history.length, 1);
     });
 
     test('leaves out an untagged node of a way copied with it', () {
       final view = _roads();
-      final copied = osmCopy(view, [view.way(10)!, view.node(1)!])!;
+      final copied = view.copy([view.way(10)!, view.node(1)!])!;
       expect(copied.elements.map((e) => e.id), [10]);
     });
 
     test('anchors a single node by itself', () {
-      final view = TestView(nodes: [
+      final view = testEditor(nodes: [
         testNode(1, 0, 0, {'amenity': 'bench'})
       ]);
-      expect(
-          osmCopy(view, [view.node(1)!], anchor: (0.5, 0.5))!.anchor, isNull);
+      expect(view.copy([view.node(1)!], anchor: (0.5, 0.5))!.anchor, isNull);
     });
 
     test('has nothing to copy in a lone untagged vertex', () {
       final view = _roads();
-      expect(osmCopy(view, [view.node(1)!]), isNull);
+      expect(view.copy([view.node(1)!]), isNull);
     });
   });
 
@@ -423,19 +425,19 @@ void main() {
     test('moves a way and its nodes, once each, as one change', () {
       final view = _roads();
       final before = Mercator.x(view.node(2)!.longitude);
-      osmMove(view, [view.way(10)!, view.node(2)!], dx: 0.0001, dy: 0);
+      view.move([view.way(10)!, view.node(2)!], dx: 0.0001, dy: 0);
       expect(
         Mercator.x(view.node(2)!.longitude),
         closeTo(before + 0.0001, 1e-12),
       );
-      expect(view.edits.length, 1);
-      view.edits.undo();
-      expect(view.edits.changedNodes, isEmpty);
+      expect(view.history.length, 1);
+      view.history.undo();
+      expect(view.history.changedNodes, isEmpty);
     });
   });
 
   group('across the antimeridian', () {
-    TestView across() => TestView(
+    OsmEditor across() => testEditor(
           nodes: [
             testNode(1, 0, 179.999),
             testNode(2, 0, -179.999),
@@ -457,12 +459,12 @@ void main() {
 
     test('moves and pastes across it onto real longitudes', () {
       final view = across();
-      osmMove(view, [view.node(1)!], dx: 0.002 / 360, dy: 0);
+      view.move([view.node(1)!], dx: 0.002 / 360, dy: 0);
       expect(view.node(1)!.longitude, closeTo(-179.999, 1e-6));
 
-      final copied = osmCopy(view, [view.way(10)!])!;
+      final copied = view.copy([view.way(10)!])!;
       expect(copied.middle.$1, anyOf(closeTo(1, 1e-5), closeTo(0, 1e-5)));
-      final pasted = osmPaste(view.edits, copied, dx: 0.01, dy: 0);
+      final pasted = view.paste(copied, dx: 0.01, dy: 0);
       for (final id in (pasted.single as OsmWay).nodeIds) {
         final longitude = view.node(id)!.longitude;
         expect(longitude, inInclusiveRange(-180, 180));

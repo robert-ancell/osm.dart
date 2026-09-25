@@ -3,45 +3,17 @@
 /// continue, copying and pasting it, and moving it.
 ///
 /// As iD does them, rule for rule, so that an edit made here is the edit
-/// someone who knows iD expects. Each works on an [OsmEditView] — what was
+/// someone who knows iD expects. Each works on an [OsmEditor] — what was
 /// read with what has been changed laid over it — and records what it does
-/// in its [OsmEditView.edits], gathered into one change to undo.
+/// in its [OsmEditor.history], gathered into one change to undo.
 library;
 
 import 'dart:math' as math;
 
-import 'edit.dart';
+import 'editor.dart';
 import 'element.dart';
 import 'mercator.dart';
 import 'presets.dart';
-
-/// The data being edited, as it now stands.
-///
-/// What was read, with what has been changed laid over it and what has been
-/// taken off the map left out.
-abstract interface class OsmEditView {
-  /// Where changes are recorded.
-  OsmEdits get edits;
-
-  /// The node with [id] as it now stands, or null if it is not held or has
-  /// been taken off the map.
-  OsmNode? node(int id);
-
-  /// The way with [id] as it now stands, or null.
-  OsmWay? way(int id);
-
-  /// The relation with [id] as it now stands, or null.
-  OsmRelation? relation(int id);
-
-  /// The ways that now run through the node with [id].
-  List<OsmWay> waysUsing(int nodeId);
-
-  /// The relations that now list the element.
-  List<OsmRelation> relationsUsing(OsmElementType type, int id);
-
-  /// The shape [element] now takes.
-  OsmGeometry geometryOf(OsmElement element);
-}
 
 /// Keys that say nothing about what a thing is: where the data came from,
 /// and ids in other databases.
@@ -75,13 +47,6 @@ bool osmHasInterestingTags(Map<String, String> tags) => tags.keys.any(
 bool osmIsDegenerate(OsmWay way) =>
     way.nodeIds.toSet().length < (way.isClosed ? 3 : 2);
 
-/// Records whatever [change] does as one change to undo.
-void _asOne(OsmEdits edits, void Function() change) {
-  final mark = edits.length;
-  change();
-  edits.combineSince(mark);
-}
-
 /// Something done to what is selected, as iD offers it: deleting,
 /// reversing, extracting, splitting, merging or disconnecting.
 ///
@@ -111,7 +76,7 @@ abstract class OsmOperation<T> {
 
 /// Deleting what is selected.
 class OsmDeleteOperation extends OsmOperation<void> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What is to be deleted, as it now stands.
   @override
@@ -165,7 +130,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
   /// relation left with no members. A way takes with it those of its nodes
   /// that nothing else uses and that say nothing of their own.
   @override
-  void apply() => _asOne(_view.edits, () {
+  void apply() => _view.group(() {
         for (final element in selected) {
           switch (element) {
             case OsmNode():
@@ -181,7 +146,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
   void _deleteNode(OsmNode node) {
     final ways = _view.waysUsing(node.id);
     final relations = _view.relationsUsing(OsmElementType.node, node.id);
-    _view.edits.deleteNode(node, from: ways, relations: relations);
+    _view.deleteNode(node, from: ways, relations: relations);
     for (final way in ways) {
       final now = _view.way(way.id);
       if (now != null && osmIsDegenerate(now)) _deleteWay(now);
@@ -191,7 +156,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
 
   void _deleteWay(OsmWay way) {
     final relations = _view.relationsUsing(OsmElementType.way, way.id);
-    _view.edits.deleteWay(way, relations: relations);
+    _view.deleteWay(way, relations: relations);
     _deleteEmpty(relations);
     for (final id in way.nodeIds.toSet()) {
       final node = _view.node(id);
@@ -199,13 +164,13 @@ class OsmDeleteOperation extends OsmOperation<void> {
       if (_view.waysUsing(id).isNotEmpty) continue;
       if (_view.relationsUsing(OsmElementType.node, id).isNotEmpty) continue;
       if (osmHasInterestingTags(node.tags)) continue;
-      _view.edits.deleteNode(node);
+      _view.deleteNode(node);
     }
   }
 
   void _deleteRelation(OsmRelation relation) {
     final parents = _view.relationsUsing(OsmElementType.relation, relation.id);
-    _view.edits.deleteRelation(relation, relations: parents);
+    _view.deleteRelation(relation, relations: parents);
     _deleteEmpty(parents);
   }
 
@@ -220,7 +185,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
 /// Reversing what is selected: the direction of a line, and of anything
 /// tagged with a direction.
 class OsmReverseOperation extends OsmOperation<void> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What is to be reversed, as it now stands.
   @override
@@ -265,7 +230,7 @@ class OsmReverseOperation extends OsmOperation<void> {
   /// reversing is usually for. A node on its own also has its compass
   /// direction turned round.
   @override
-  void apply() => _asOne(_view.edits, () {
+  void apply() => _view.group(() {
         for (final element in _reversible) {
           switch (element) {
             case OsmWay():
@@ -281,7 +246,7 @@ class OsmReverseOperation extends OsmOperation<void> {
   void _reverseNode(int id, {required bool absolute}) {
     final node = _view.node(id);
     if (node == null || node.tags.isEmpty) return;
-    _view.edits.setTags(node, osmReversedTags(node.tags, absolute: absolute));
+    _view.setTags(node, osmReversedTags(node.tags, absolute: absolute));
   }
 
   static bool _hasDirection(Map<String, String> tags) {
@@ -299,7 +264,7 @@ class OsmReverseOperation extends OsmOperation<void> {
 /// is usually done to put right a oneway drawn backwards, and turning the
 /// tag round too would undo the point of it; reversing one to join it to
 /// another has to keep traffic going the way it went.
-void osmReverseWay(OsmEditView view, OsmWay way, {bool oneway = false}) {
+void osmReverseWay(OsmEditor view, OsmWay way, {bool oneway = false}) {
   for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
     var changed = false;
     final members = [
@@ -315,16 +280,16 @@ void osmReverseWay(OsmEditView view, OsmWay way, {bool oneway = false}) {
     for (var i = 0; i < members.length; i++) {
       if (!identical(members[i], relation.members[i])) changed = true;
     }
-    if (changed) view.edits.setRelationMembers(relation, members);
+    if (changed) view.setRelationMembers(relation, members);
   }
   final nodes = way.nodeIds.reversed.toList();
   for (final id in nodes.toSet()) {
     final node = view.node(id);
     if (node == null || node.tags.isEmpty) continue;
-    view.edits.setTags(node, osmReversedTags(node.tags, absolute: false));
+    view.setTags(node, osmReversedTags(node.tags, absolute: false));
   }
-  view.edits.setWayNodes(way, nodes);
-  view.edits.setTags(
+  view.setWayNodes(way, nodes);
+  view.setTags(
     view.way(way.id) ?? way,
     osmReversedTags(way.tags, absolute: false, oneway: oneway),
   );
@@ -477,7 +442,7 @@ String _number(num value) =>
 
 /// Pulling a point out of what is selected.
 class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What points are to be pulled out of, as it now stands.
   @override
@@ -524,7 +489,7 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
   @override
   List<OsmNode> apply() {
     final points = <OsmNode>[];
-    _asOne(_view.edits, () {
+    _view.group(() {
       for (final element in selected) {
         switch (element) {
           case OsmNode():
@@ -540,7 +505,7 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
   }
 
   OsmNode _fromNode(OsmNode node) {
-    final edits = _view.edits;
+    final edits = _view;
     final replacement = edits.createNode(
       latitude: node.latitude,
       longitude: node.longitude,
@@ -580,12 +545,12 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
       tags['area'] = 'yes';
     }
     final (latitude, longitude) = _middleOf(way, geometry);
-    final extracted = _view.edits.createNode(
+    final extracted = _view.createNode(
       latitude: latitude,
       longitude: longitude,
       tags: point,
     );
-    _view.edits.setTags(way, tags);
+    _view.setTags(way, tags);
     return extracted;
   }
 
@@ -668,7 +633,7 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
 /// are those not yet closed that start or stop at the vertex, and if a line
 /// is selected, only that one: there has to be exactly one to continue, and
 /// selecting the line is how one is chosen from several.
-List<OsmWay>? osmContinuable(OsmEditView view, List<OsmElement> selected) {
+List<OsmWay>? osmContinuable(OsmEditor view, List<OsmElement> selected) {
   final vertices = [
     for (final element in selected)
       if (element is OsmNode && view.geometryOf(element) == OsmGeometry.vertex)
@@ -740,7 +705,7 @@ class OsmCopied {
 /// is where on the map, in world coordinates, the pointer was; a single
 /// node needs none, being its own anchor.
 OsmCopied? osmCopy(
-  OsmEditView view,
+  OsmEditor view,
   List<OsmElement> selected, {
   (double, double)? anchor,
 }) {
@@ -778,13 +743,13 @@ OsmCopied? osmCopy(
 ///
 /// Everything is new: new nodes, new ways through them, and the same tags.
 List<OsmElement> osmPaste(
-  OsmEdits edits,
+  OsmEditor edits,
   OsmCopied copied, {
   required double dx,
   required double dy,
 }) {
   final made = <OsmElement>[];
-  _asOne(edits, () {
+  edits.group(() {
     final newNodes = <int, OsmNode>{};
     OsmNode copyOf(int id) => newNodes[id] ??= () {
           final node = copied.nodes[id]!;
@@ -821,7 +786,7 @@ List<OsmElement> osmPaste(
 ///
 /// Ways joined to them but not selected stretch to follow.
 void osmMove(
-  OsmEditView view,
+  OsmEditor view,
   List<OsmElement> selected, {
   required double dx,
   required double dy,
@@ -834,11 +799,11 @@ void osmMove(
         OsmRelation() => const <int>[],
       },
   };
-  _asOne(view.edits, () {
+  view.group(() {
     for (final id in ids) {
       final node = view.node(id);
       if (node == null) continue;
-      view.edits.moveNode(
+      view.moveNode(
         node,
         latitude: Mercator.latitude(
           (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),

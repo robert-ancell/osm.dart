@@ -1,22 +1,17 @@
 /// Splitting, merging and disconnecting: the operations that change what is
 /// joined to what, and so what every relation over it holds.
 ///
-/// As iD does them, rule for rule. Each works on an [OsmEditView] and
+/// As iD does them, rule for rule. Each works on an [OsmEditor] and
 /// records what it does in its edits as one change to undo.
 library;
 
 import 'dart:math' as math;
 
 import 'edit.dart';
+import 'editor.dart';
 import 'element.dart';
 import 'operations.dart';
 import 'presets.dart';
-
-void _asOne(OsmEdits edits, void Function() change) {
-  final mark = edits.length;
-  change();
-  edits.combineSince(mark);
-}
 
 /// Which of two ids belongs to the older element: anything already on the
 /// map is older than anything made here, a lower id is older on the map,
@@ -160,14 +155,14 @@ List<OsmMember> _replaceMember(
 }
 
 void _giveMembership(
-  OsmEditView view,
+  OsmEditor view,
   OsmElementType fromType,
   int fromId,
   OsmElementType toType,
   int toId,
 ) {
   for (final relation in view.relationsUsing(fromType, fromId)) {
-    view.edits.setRelationMembers(
+    view.setRelationMembers(
       relation,
       _replaceMember(relation, fromType, fromId, toType, toId),
     );
@@ -187,7 +182,7 @@ double _distance(OsmNode a, OsmNode b) {
   return 2 * earth * math.asin(math.min(1, math.sqrt(h)));
 }
 
-double _length(OsmEditView view, List<int> ids) {
+double _length(OsmEditor view, List<int> ids) {
   var total = 0.0;
   for (var i = 0; i + 1 < ids.length; i++) {
     final a = view.node(ids[i]), b = view.node(ids[i + 1]);
@@ -259,7 +254,7 @@ List<_Sequence> _joinWays(List<OsmWay> ways) {
 }
 
 /// Whether two paths cross anywhere but at a node they share.
-bool _pathsCross(OsmEditView view, List<int> a, List<int> b) {
+bool _pathsCross(OsmEditor view, List<int> a, List<int> b) {
   // All brought round to the same side of the antimeridian: segments either
   // side of it are next to each other, not a world apart, and a segment
   // across it is short, not round the world.
@@ -301,7 +296,7 @@ bool _segmentsCross(
 
 /// Splitting lines where the selected nodes are.
 class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What is selected, as it now stands.
   @override
@@ -421,7 +416,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
   @override
   List<OsmWay> apply() {
     final results = <int>{};
-    _asOne(_view.edits, () {
+    _view.group(() {
       final ids = [for (final vertex in _vertices) vertex.id];
       for (final candidate in ways) {
         final made = <int>[];
@@ -504,10 +499,10 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
       tagsB[key] = '${count.round() - countA}';
     }
 
-    view.edits.setWayNodes(way, nodesA);
-    view.edits.setTags(view.way(way.id)!, tagsA);
+    view.setWayNodes(way, nodesA);
+    view.setTags(view.way(way.id)!, tagsA);
     final wayA = view.way(way.id)!;
-    final wayB = view.edits.createWay(nodeIds: nodesB, tags: tagsB);
+    final wayB = view.createWay(nodeIds: nodesB, tags: tagsB);
 
     for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
       if (_hasFromViaTo(relation)) {
@@ -527,7 +522,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
           areaTags.remove(key);
         }
       }
-      final multipolygon = view.edits.createRelation(
+      final multipolygon = view.createRelation(
         members: [
           OsmMember(type: OsmElementType.way, ref: wayA.id, role: 'outer'),
           OsmMember(type: OsmElementType.way, ref: wayB.id, role: 'outer'),
@@ -536,7 +531,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
       );
       for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
         if (relation.id == multipolygon.id) continue;
-        view.edits.setRelationMembers(
+        view.setRelationMembers(
           relation,
           _replaceMember(
             relation,
@@ -547,8 +542,8 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
           ),
         );
       }
-      view.edits.setTags(view.way(wayA.id)!, lineTags);
-      view.edits.setTags(view.way(wayB.id)!, lineTags);
+      view.setTags(view.way(wayA.id)!, lineTags);
+      view.setTags(view.way(wayB.id)!, lineTags);
     }
     return wayB.id;
   }
@@ -613,7 +608,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
         }
       }
       if (keepB) {
-        _view.edits.setRelationMembers(
+        _view.setRelationMembers(
           relation,
           _replaceMember(
             relation,
@@ -704,7 +699,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
         OsmMember(type: OsmElementType.way, ref: wayB.id, role: role),
       );
     }
-    _view.edits.setRelationMembers(relation, updated);
+    _view.setRelationMembers(relation, updated);
   }
 }
 
@@ -712,7 +707,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
 /// line or area they describe, areas into a multipolygon, or nodes into one
 /// node — whichever of those the selection is, tried in that order.
 class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What is selected, as it now stands.
   @override
@@ -769,14 +764,12 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
   List<OsmElement> apply() {
     final (way, reason) = _choice;
     if (reason != null) return const [];
-    _asOne(
-        _view.edits,
-        switch (way) {
-          0 => _join,
-          1 => _mergePoints,
-          2 => _mergePolygons,
-          _ => _mergeNodes,
-        });
+    _view.group(switch (way) {
+      0 => _join,
+      1 => _mergePoints,
+      2 => _mergePolygons,
+      _ => _mergeNodes,
+    });
     final left = [
       for (final element in selected)
         if (_now(element) case final now?) now,
@@ -883,7 +876,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     for (final (way, reversed) in sequence.ways) {
       if (reversed) osmReverseWay(view, view.way(way.id)!, oneway: true);
     }
-    view.edits.setWayNodes(view.way(survivorId)!, sequence.nodes);
+    view.setWayNodes(view.way(survivorId)!, sequence.nodes);
 
     for (final (way, _) in sequence.ways) {
       if (way.id == survivorId) continue;
@@ -902,11 +895,11 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
             key:
                 '${num.parse(gone.tags[key]!) + num.parse(survivor.tags[key]!)}',
       };
-      view.edits.setTags(
+      view.setTags(
         survivor,
         _mergeTags(survivor.tags, gone.tags, set: summed),
       );
-      view.edits.deleteWay(
+      view.deleteWay(
         gone,
         relations: view.relationsUsing(OsmElementType.way, gone.id),
       );
@@ -938,7 +931,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       OsmElementType.way,
       survivorId,
     );
-    view.edits.deleteRelation(
+    view.deleteRelation(
       view.relation(multipolygon.id)!,
       relations: view.relationsUsing(OsmElementType.relation, multipolygon.id),
     );
@@ -947,7 +940,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       OsmWay(id: survivorId, nodeIds: survivor.nodeIds, tags: tags),
     );
     if (area != OsmGeometry.area) tags['area'] = 'yes';
-    view.edits.setTags(view.way(survivorId)!, tags);
+    view.setTags(view.way(survivorId)!, tags);
   }
 
   // Points into a line or an area.
@@ -970,7 +963,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     for (final element in _of(OsmGeometry.point)) {
       final point = view.node(element.id)!;
       var target = view.way(targetId)!;
-      view.edits.setTags(target, _mergeTags(target.tags, point.tags));
+      view.setTags(target, _mergeTags(target.tags, point.tags));
       _giveMembership(
         view,
         OsmElementType.node,
@@ -1006,19 +999,19 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
                   .firstOrNull;
         }
         if (replacing != null) {
-          view.edits.moveNode(
+          view.moveNode(
             view.node(point.id)!,
             latitude: replacing.latitude,
             longitude: replacing.longitude,
           );
-          view.edits.setTags(view.node(point.id)!, replacing.tags);
-          view.edits.setWayNodes(target, [
+          view.setTags(view.node(point.id)!, replacing.tags);
+          view.setWayNodes(target, [
             for (final id in target.nodeIds) id == replacing.id ? point.id : id,
           ]);
           remove = replacing;
         }
       }
-      view.edits.deleteNode(
+      view.deleteNode(
         view.node(remove.id)!,
         from: view.waysUsing(remove.id),
         relations: view.relationsUsing(OsmElementType.node, remove.id),
@@ -1031,7 +1024,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       final without =
           OsmWay(id: target.id, nodeIds: target.nodeIds, tags: tags);
       if (target.isClosed && view.geometryOf(without) == OsmGeometry.area) {
-        view.edits.setTags(target, tags);
+        view.setTags(target, tags);
       }
     }
   }
@@ -1147,7 +1140,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     for (final m in multipolygons) {
       if (m.id == keep?.id) continue;
       tags = _mergeTags(tags, m.tags);
-      view.edits.deleteRelation(
+      view.deleteRelation(
         view.relation(m.id)!,
         relations: view.relationsUsing(OsmElementType.relation, m.id),
       );
@@ -1163,14 +1156,14 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
         }
       }
       tags = _mergeTags(tags, areaTags);
-      view.edits.setTags(view.way(way.id)!, lineTags);
+      view.setTags(view.way(way.id)!, lineTags);
     }
     tags.remove('area');
     if (keep != null) {
-      view.edits.setRelationMembers(view.relation(keep.id)!, members);
-      view.edits.setTags(view.relation(keep.id)!, tags);
+      view.setRelationMembers(view.relation(keep.id)!, members);
+      view.setTags(view.relation(keep.id)!, tags);
     } else {
-      view.edits.createRelation(members: members, tags: tags);
+      view.createRelation(members: members, tags: tags);
     }
   }
 
@@ -1223,7 +1216,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     }
     for (final node in nodes) {
       if (node.latitude == latitude && node.longitude == longitude) continue;
-      view.edits.moveNode(
+      view.moveNode(
         view.node(node.id)!,
         latitude: latitude,
         longitude: longitude,
@@ -1240,7 +1233,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
 /// something, or failing that the oldest; the others' tags and memberships
 /// go to it. A way left with too few nodes by two of its nodes becoming one
 /// goes.
-void osmConnect(OsmEditView view, List<int> ids) {
+void osmConnect(OsmEditor view, List<int> ids) {
   final order = ids.reversed.toList();
   final interesting = [
     for (final id in order)
@@ -1253,7 +1246,7 @@ void osmConnect(OsmEditView view, List<int> ids) {
     final node = view.node(id);
     if (node == null) continue;
     for (final way in view.waysUsing(id)) {
-      view.edits.setWayNodes(way, _replaceNode(way.nodeIds, id, survivorId));
+      view.setWayNodes(way, _replaceNode(way.nodeIds, id, survivorId));
     }
     _giveMembership(
       view,
@@ -1263,9 +1256,9 @@ void osmConnect(OsmEditView view, List<int> ids) {
       survivorId,
     );
     tags = _mergeTags(tags, node.tags);
-    view.edits.deleteNode(view.node(id)!);
+    view.deleteNode(view.node(id)!);
   }
-  view.edits.setTags(view.node(survivorId)!, tags);
+  view.setTags(view.node(survivorId)!, tags);
   for (final way in view.waysUsing(survivorId)) {
     if (osmIsDegenerate(way)) OsmDeleteOperation(view, [way]).apply();
   }
@@ -1278,7 +1271,7 @@ void osmConnect(OsmEditView view, List<int> ids) {
 /// would spoil a turn restriction: joining the way turned from to the way
 /// turned to, a junction to a node that is not next to it, or anything
 /// that would leave one of its ways too short to be one.
-String? osmConnectDisabled(OsmEditView view, List<int> ids) {
+String? osmConnectDisabled(OsmEditor view, List<int> ids) {
   final survivorId = _oldest(ids);
   final seen = <int, String>{};
   final restrictions = <int>{};
@@ -1401,7 +1394,7 @@ String? osmConnectDisabled(OsmEditView view, List<int> ids) {
         way = OsmWay(
           id: way.id,
           nodeIds: adjacent
-              ? OsmEdits.withoutNode(way, id)
+              ? OsmEditHistory.withoutNode(way, id)
               : [
                   for (final n in way.nodeIds) n == id ? survivorId : n,
                 ],
@@ -1415,7 +1408,7 @@ String? osmConnectDisabled(OsmEditView view, List<int> ids) {
 
 /// Disconnecting what is selected from what it is joined to.
 class OsmDisconnectOperation extends OsmOperation<void> {
-  final OsmEditView _view;
+  final OsmEditor _view;
 
   /// What is selected, as it now stands.
   @override
@@ -1584,13 +1577,13 @@ class OsmDisconnectOperation extends OsmOperation<void> {
   /// Every way but one at each node — or those selected — is given a node
   /// of its own in the same place, with the same tags.
   @override
-  void apply() => _asOne(_view.edits, () {
+  void apply() => _view.group(() {
         for (final (id, limit) in _actions) {
           final node = _view.node(id);
           if (node == null) continue;
           for (final (wayId, index) in _connections(id, limit)) {
             final way = _view.way(wayId)!;
-            final copy = _view.edits.createNode(
+            final copy = _view.createNode(
               latitude: node.latitude,
               longitude: node.longitude,
               tags: node.tags,
@@ -1604,7 +1597,7 @@ class OsmDisconnectOperation extends OsmOperation<void> {
             } else {
               nodes = [...way.nodeIds]..[index] = copy.id;
             }
-            _view.edits.setWayNodes(way, nodes);
+            _view.setWayNodes(way, nodes);
           }
         }
       });

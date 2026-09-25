@@ -322,7 +322,7 @@ class OsmTagsChanged extends OsmEdit {
 /// has to be worked out from what came before it, which is what keeps undo
 /// right however moves, tag changes and deletions of the same element are
 /// interleaved, and however they are grouped.
-class OsmEdits {
+class OsmEditHistory {
   final _done = <OsmEdit>[];
   final _nodes = <int, OsmNode>{};
   final _ways = <int, OsmWay>{};
@@ -348,7 +348,7 @@ class OsmEdits {
   final void Function()? onChanged;
 
   /// Creates a set of changes.
-  OsmEdits({this.onChanged});
+  OsmEditHistory({this.onChanged});
 
   /// The changes made, oldest first.
   List<OsmEdit> get changes => List.unmodifiable(_done);
@@ -820,6 +820,17 @@ class OsmEdits {
     } else {
       _ways[change.id] = change.from;
     }
+  }
+
+  /// Undoes everything done since [mark], a [length] taken before it
+  /// started: for giving up on something made a change at a time, such as a
+  /// line being drawn.
+  void undoSince(int mark) {
+    if (_done.length <= mark) return;
+    while (_done.length > mark) {
+      _undoOne(_done.removeLast());
+    }
+    onChanged?.call();
   }
 
   /// Undoes everything.

@@ -76,7 +76,7 @@ class OsmUpload {
   final List<OsmRelation> deletedRelations;
 
   /// Gathers what [edits] would send.
-  factory OsmUpload.of(OsmEdits edits) {
+  factory OsmUpload.of(OsmEditHistory edits) {
     final nodes = edits.changedNodes;
     final ways = edits.changedWays;
     return OsmUpload._(

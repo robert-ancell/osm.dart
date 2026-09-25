@@ -19,6 +19,70 @@ larger than memory can be processed by streaming through it. Each one is an
 [OsmNode], [OsmWay] or [OsmRelation], with its tags and, if the file carries
 metadata, the version, timestamp, changeset and user of the edit that made it.
 
+## Reading from the OpenStreetMap API
+
+```dart
+final client = OsmApiClient(contact: 'Your Name <you@example.com>');
+
+final elements = await client.map(const OsmBounds(
+  minLatitude: 48.853,
+  minLongitude: 2.348,
+  maxLatitude: 48.855,
+  maxLongitude: 2.351,
+));
+```
+
+`map` gives everything in a box, as an editor wants it: the nodes inside it,
+every way through any of them with the rest of its nodes wherever they are,
+and the relations over any of it, so each box can be drawn on its own. The API
+only answers for small boxes; a larger one throws `OsmTooMuchDataException`,
+and `capabilities` says how large a box it will take.
+
+`nodes` and `waysOf` look elements up by id, `changesetsIn` lists what has been
+edited over an area since a moment, and `changesetsBy` and `changesetChanges`
+follow one mapper's edits.
+
+OpenStreetMap asks to be told who is calling it, so give a `contact` that
+reaches whoever runs the program. No more than a couple of requests are made at
+once, and a server asking to be left alone is: a reply of too many requests
+holds every request back until the moment it names.
+
+## Editing and uploading changes
+
+```dart
+final editor = OsmEditor(OsmEditorData.of(elements));
+
+final cafe = editor.node(4061287113)!;
+editor.setTags(cafe, {...cafe.tags, 'opening_hours': 'Mo-Fr 07:00-15:00'});
+
+final token = await OsmSignIn(clientId: 'your-client-id').tokenFromBrowser();
+final uploader = OsmUploader(token: token.token, generator: 'my-editor/1.0');
+try {
+  final changeset = await uploader.send(
+    OsmUpload.of(editor.history),
+    comment: 'Add opening hours',
+  );
+  print('Uploaded as changeset $changeset');
+} finally {
+  uploader.close();
+}
+```
+
+An `OsmEditor` lays every change over the data it was given, which it never
+touches, and keeps them in its history, from which an upload is made. Each
+change can be undone and redone. As well as creating, moving, retagging and
+deleting single elements, it offers what iD does to a selection — delete,
+reverse, extract, split, merge, disconnect, move, copy and paste — by iD's
+rules, each saying first whether it applies and, if it cannot be done, why.
+`OsmTagText` shows the tags of one element or several as editable
+`key=value` text, as iD's text view does, and applies an edit of it to each.
+
+`OsmSignIn` signs in through the browser with OAuth 2, for an application
+registered on openstreetmap.org with a redirect URI of
+`http://127.0.0.1:8642/`; its documentation says what to register. `OsmUpload`
+can say what is about to be sent, a line to an element, before `send` opens a
+changeset, uploads the lot and closes it again.
+
 ## Taking part of a file
 
 Say what you want with an [OsmFilter] rather than filtering the stream

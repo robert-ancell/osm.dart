@@ -36,8 +36,17 @@ class OsmPresetsCache {
 
   /// Creates a cache in [directory], by default [name] under
   /// [osmCacheDirectory].
-  OsmPresetsCache({Directory? directory, required this.fetch, Uri? from})
-      : directory = directory ?? osmCacheDirectory(name),
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
+  OsmPresetsCache({
+    Directory? directory,
+    String? contact,
+    OsmFetch? fetch,
+    Uri? from,
+  })  : directory = directory ?? osmCacheDirectory(name),
+        fetch = fetch ?? httpFetch(contact: contact),
         from = from ?? Uri.parse(osmPresetsUrl);
 
   /// The files that make up the schema, for [language]. All four are asked

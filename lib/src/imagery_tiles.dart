@@ -25,12 +25,21 @@ class OsmImageryTiles {
   /// Where they are kept between runs, if anywhere.
   final OsmImageryCache? cache;
 
-  /// Creates a fetcher.
-  const OsmImageryTiles({
+  /// Creates a fetcher making no more than [concurrency] requests at once.
+  ///
+  /// More at once than for the API, since imagery servers are built to hand
+  /// out many small tiles quickly.
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
+  OsmImageryTiles({
     required this.source,
-    required this.fetch,
+    String? contact,
+    int concurrency = 6,
+    OsmFetch? fetch,
     this.cache,
-  });
+  }) : fetch = fetch ?? httpFetch(contact: contact, concurrency: concurrency);
 
   /// Whether the source is known to have nothing for [tile], so that asking
   /// would be wasted.

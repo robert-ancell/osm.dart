@@ -33,7 +33,7 @@ export 'src/tag_text.dart';
 export 'src/update/api.dart';
 export 'src/update/auth.dart';
 export 'src/update/change_filter.dart' show OsmUpdateEdges;
-export 'src/update/http.dart';
+export 'src/update/http.dart' hide httpFetch;
 export 'src/update/replication.dart';
 export 'src/update/upload.dart';
 export 'src/update/updater.dart';

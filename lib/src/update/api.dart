@@ -141,10 +141,19 @@ class OsmApi {
   /// How many requests have been made.
   int requests = 0;
 
-  /// Creates a client for the API at [base].
-  OsmApi({Uri? base, required OsmFetch fetch})
-      : base = base ?? openStreetMap,
-        _fetch = fetch;
+  /// Creates a client for the API at [base], making no more than
+  /// [concurrency] requests at once.
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
+  OsmApi({
+    Uri? base,
+    String? contact,
+    int concurrency = 2,
+    OsmFetch? fetch,
+  })  : base = base ?? openStreetMap,
+        _fetch = fetch ?? httpFetch(contact: contact, concurrency: concurrency);
 
   /// Everything OpenStreetMap holds inside [bounds].
   ///

@@ -38,8 +38,17 @@ class OsmImageryIndexCache {
 
   /// Creates a cache in [directory], by default [name] under
   /// [osmCacheDirectory].
-  OsmImageryIndexCache({Directory? directory, required this.fetch, Uri? from})
-      : directory = directory ?? osmCacheDirectory(name),
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
+  OsmImageryIndexCache({
+    Directory? directory,
+    String? contact,
+    OsmFetch? fetch,
+    Uri? from,
+  })  : directory = directory ?? osmCacheDirectory(name),
+        fetch = fetch ?? httpFetch(contact: contact),
         from = from ?? Uri.parse(osmImageryIndexUrl);
 
   /// The index, from disk if a recent copy is held there and from the

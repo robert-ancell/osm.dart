@@ -94,9 +94,13 @@ class OsmReplication {
   final OsmReplicationPeriod? only;
 
   /// Creates a client for the feeds under [base].
-  OsmReplication({Uri? base, required OsmFetch fetch})
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
+  OsmReplication({Uri? base, String? contact, OsmFetch? fetch})
       : base = base ?? planet,
-        _fetch = fetch,
+        _fetch = fetch ?? httpFetch(contact: contact),
         only = null;
 
   /// Creates a client for a feed of one [period], laid out straight under
@@ -107,22 +111,34 @@ class OsmReplication {
   /// they hold everything that entered or left the extract and nothing else.
   /// For a country that is a few hundred kilobytes a day, against the
   /// planet's gigabytes.
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
   OsmReplication.single(
     Uri base, {
     required OsmReplicationPeriod period,
-    required OsmFetch fetch,
+    String? contact,
+    OsmFetch? fetch,
   })  : base = base.path.endsWith('/')
             ? base
             : base.replace(path: '${base.path}/'),
-        _fetch = fetch,
+        _fetch = fetch ?? httpFetch(contact: contact),
         only = period;
 
   /// The feed of the extract Geofabrik publishes at [extract], such as
   /// `australia-oceania/new-zealand`.
-  factory OsmReplication.geofabrik(String extract, {required OsmFetch fetch}) =>
+  ///
+  /// [contact] and [fetch] are as for [OsmReplication.single].
+  factory OsmReplication.geofabrik(
+    String extract, {
+    String? contact,
+    OsmFetch? fetch,
+  }) =>
       OsmReplication.single(
         Uri.parse('https://download.geofabrik.de/$extract-updates/'),
         period: OsmReplicationPeriod.day,
+        contact: contact,
         fetch: fetch,
       );
 

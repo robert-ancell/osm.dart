@@ -190,7 +190,7 @@ already holds what entered or left the extract.
 
 ```dart
 final feed = OsmReplication.geofabrik('australia-oceania/new-zealand',
-    fetch: httpFetch(contact: 'Your Name <you@example.com>'));
+    contact: 'Your Name <you@example.com>');
 const day = OsmReplicationPeriod.day;
 final first = await feed.firstAfter(day, file.header.replicationTimestamp!);
 final latest = await feed.latest(day);

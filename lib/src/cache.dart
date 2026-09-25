@@ -93,15 +93,20 @@ class OsmCache {
     required this.replicationDirectory,
   });
 
-  /// Opens every cache in [directory], by default [osmCacheDirectory],
-  /// fetching what has to be fetched with [fetch].
+  /// Opens every cache in [directory], by default [osmCacheDirectory].
   ///
   /// Nothing is fetched until it is asked for.
+  ///
+  /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
+  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// over HTTP altogether, for tests or a transport of the caller's own.
   static Future<OsmCache> open({
     Directory? directory,
-    required OsmFetch fetch,
+    String? contact,
+    OsmFetch? fetch,
   }) async {
     final root = directory ?? osmCacheDirectory();
+    fetch ??= httpFetch(contact: contact);
     Directory under(String name) =>
         Directory('${root.path}${Platform.pathSeparator}$name');
     return OsmCache._(

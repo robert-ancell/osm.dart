@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:osm/osm.dart';
+import 'package:osm/src/update/http.dart' show httpFetch;
 import 'package:test/test.dart';
 
 /// A server that answers only when told to, and can be made to send its

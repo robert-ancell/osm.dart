@@ -66,7 +66,8 @@ class OsmAbandonedException implements OsmException, IOException {
   String toString() => 'OsmAbandonedException: $message';
 }
 
-/// A fetch over HTTP that says who is asking and waits its turn.
+/// A fetch over HTTP that says who is asking and waits its turn: what every
+/// class here that fetches uses unless it is given a fetch of its own.
 ///
 /// OpenStreetMap's servers ask to be told what is calling them and how to
 /// reach whoever runs it, so [contact] belongs in anything run for real.

@@ -56,7 +56,6 @@ Future<void> main(List<String> arguments) async {
   }
   if (snapshot == null) _fail('Which snapshot?');
 
-  final fetch = httpFetch(contact: contact);
   final target = output ?? snapshot;
   // Written beside the target and moved over it once whole, so a run that
   // fails part way leaves the snapshot as it was.
@@ -66,9 +65,9 @@ Future<void> main(List<String> arguments) async {
     final result = await updateOsmSnapshot(
       input: snapshot,
       output: writing,
-      replication: OsmReplication(fetch: fetch),
+      replication: OsmReplication(contact: contact),
       cache: Directory(cache ?? '$snapshot.diffs'),
-      api: lookups ? OsmApi(fetch: fetch) : null,
+      api: lookups ? OsmApi(contact: contact) : null,
       onProgress: stdout.writeln,
     );
     await File(writing).rename(target);

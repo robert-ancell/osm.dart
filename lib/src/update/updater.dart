@@ -75,7 +75,7 @@ Future<OsmUpdateResult> updateOsmSnapshot({
   required String output,
   required OsmReplication replication,
   Directory? cache,
-  OsmApi? api,
+  OsmApiClient? api,
   void Function(String message)? onProgress,
 }) async {
   void say(String message) => onProgress?.call(message);

@@ -67,7 +67,7 @@ Future<void> main(List<String> arguments) async {
       output: writing,
       replication: OsmReplication(contact: contact),
       cache: Directory(cache ?? '$snapshot.diffs'),
-      api: lookups ? OsmApi(contact: contact) : null,
+      api: lookups ? OsmApiClient(contact: contact) : null,
       onProgress: stdout.writeln,
     );
     await File(writing).rename(target);

@@ -268,7 +268,7 @@ void main() {
 
     test("lists a mapper's changesets since a moment", () async {
       late Uri asked;
-      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
+      final api = OsmApiClient(fetch: (uri, {abandon, onLate}) async {
         asked = uri;
         return xml(
           '<changeset id="12" created_at="2026-09-17T08:00:00Z" '
@@ -297,7 +297,7 @@ void main() {
 
     test('and pages through more than the API lists at once', () async {
       final asked = <Uri>[];
-      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
+      final api = OsmApiClient(fetch: (uri, {abandon, onLate}) async {
         asked.add(uri);
         final before = uri.queryParameters['time']!.split(',').skip(1);
         // 150 changesets, an hour apart, the newest first; 100 a page.
@@ -322,7 +322,7 @@ void main() {
     });
 
     test('says when there is no such mapper', () async {
-      final api = OsmApi(fetch: (uri, {abandon, onLate}) async => null);
+      final api = OsmApiClient(fetch: (uri, {abandon, onLate}) async => null);
       await expectLater(
         api.changesetsBy('Nobody', since: DateTime.utc(2026)),
         throwsA(isA<OsmHttpException>()),
@@ -331,7 +331,7 @@ void main() {
 
     test('reads what a changeset changed', () async {
       late Uri asked;
-      final api = OsmApi(fetch: (uri, {abandon, onLate}) async {
+      final api = OsmApiClient(fetch: (uri, {abandon, onLate}) async {
         asked = uri;
         return Uint8List.fromList(utf8.encode(
           '<osmChange version="0.6">'
@@ -351,7 +351,7 @@ void main() {
     });
 
     test('looks nodes up, leaving out the deleted', () async {
-      final api = OsmApi(
+      final api = OsmApiClient(
         fetch: (uri, {abandon, onLate}) async => xml(
           '<node id="1" visible="true" version="3" lat="-41.1" lon="174.1">'
           '<tag k="a" v="b"/></node>'
@@ -366,7 +366,7 @@ void main() {
 
     test('halves a batch refused for an id that never existed', () async {
       final asked = <String>[];
-      final api = OsmApi(
+      final api = OsmApiClient(
         fetch: (uri, {abandon, onLate}) async {
           final ids = uri.queryParameters['nodes']!.split(',').map(int.parse);
           asked.add(ids.join(','));
@@ -384,7 +384,7 @@ void main() {
     });
 
     test('looks up the ways of a node', () async {
-      final api = OsmApi(
+      final api = OsmApiClient(
         fetch: (uri, {abandon, onLate}) async {
           expect(uri.path, endsWith('/node/5/ways'));
           return xml(
@@ -546,7 +546,7 @@ void main() {
 </osmChange>''',
         },
       );
-      final api = OsmApi(
+      final api = OsmApiClient(
         fetch: (uri, {abandon, onLate}) async => Uint8List.fromList(
           utf8.encode(
             '<osm version="0.6"><node id="77000001" visible="true" '

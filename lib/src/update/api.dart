@@ -126,7 +126,7 @@ const int _batch = 500;
 /// rather than asking twice, and use a fetch that limits how many requests
 /// are in flight and stops when the server asks it to. [httpFetch] does the
 /// last of those.
-class OsmApi {
+class OsmApiClient {
   /// The API's own address.
   static final Uri openStreetMap = Uri.parse(
     'https://api.openstreetmap.org/api/0.6/',
@@ -146,7 +146,7 @@ class OsmApi {
   /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
   /// and a way to reach whoever runs the program. [fetch] replaces fetching
   /// over HTTP altogether, for tests or a transport of the caller's own.
-  OsmApi({
+  OsmApiClient({
     Uri? base,
     String? contact,
     int concurrency = 2,

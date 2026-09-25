@@ -23,18 +23,18 @@
   copies the blocks no change alters without decoding them.
 * `OsmReplication.single` and `OsmReplication.geofabrik` for a feed of one
   period, such as the daily diffs Geofabrik publishes for each extract.
-* `OsmApi.changesetsBy` and `OsmApi.changesetChanges` for taking one mapper's
+* `OsmApiClient.changesetsBy` and `OsmApiClient.changesetChanges` for taking one mapper's
   edits in ahead of the diffs.
 * `OsmXmlFile` for reading OSM XML, and `OsmRegion` for the ground a
   snapshot covers.
-* `OsmApi.map` for everything inside a bounding box, which is what an editor
-  draws, and `OsmApi.capabilities` for the limits the server itself declares.
+* `OsmApiClient.map` for everything inside a bounding box, which is what an editor
+  draws, and `OsmApiClient.capabilities` for the limits the server itself declares.
   A box the API will not answer raises `OsmTooMuchDataException`, which is
   asking for a smaller one rather than an error.
 * `httpFetch` keeps at most `concurrency` requests in flight and stops sending
   altogether while a server answers too many requests, service unavailable or
   bandwidth exceeded, for as long as its `Retry-After` asks.
-* `OsmApi.changesetsIn` for what has been edited over an area since a time,
+* `OsmApiClient.changesetsIn` for what has been edited over an area since a time,
   and `OsmChangeset.bounds` for the ground each one touched. The API holds no
   entity tag to ask a bounding box with, so a held copy is checked by asking
   what has been edited near it instead.
@@ -43,7 +43,7 @@
   before the server has begun replying it is torn down, and once it has, the
   body is still read to the end and handed to `onLate` rather than wasted.
   Either way the call throws `OsmAbandonedException` at once and stops holding
-  a turn, so what is wanted now can go instead. `OsmApi.map` passes both
+  a turn, so what is wanted now can go instead. `OsmApiClient.map` passes both
   through.
 * `OsmImageryIndex` for the editor layer index, the list of background imagery
   editors share, with the ground each layer covers, what it asks to be

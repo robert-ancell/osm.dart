@@ -73,7 +73,7 @@ const _bounds = OsmBounds(
 void main() {
   test('reads what the API says it will do', () async {
     final server = _Api(answers: {'capabilities': _capabilities});
-    final api = OsmApi(fetch: server.fetch);
+    final api = OsmApiClient(fetch: server.fetch);
     final capabilities = await api.capabilities();
     expect(capabilities.maximumArea, 0.25);
     expect(capabilities.maximumWayNodes, 2000);
@@ -86,7 +86,7 @@ void main() {
     final server = _Api(answers: {
       'capabilities': _capabilities.replaceAll('api="online"', 'api="offline"'),
     });
-    final capabilities = await OsmApi(fetch: server.fetch).capabilities();
+    final capabilities = await OsmApiClient(fetch: server.fetch).capabilities();
     expect(capabilities.online, isFalse);
     expect(capabilities.writable, isFalse);
   });
@@ -96,14 +96,14 @@ void main() {
       'capabilities':
           _capabilities.replaceAll('api="online"', 'api="readonly"'),
     });
-    final capabilities = await OsmApi(fetch: server.fetch).capabilities();
+    final capabilities = await OsmApiClient(fetch: server.fetch).capabilities();
     expect(capabilities.online, isTrue);
     expect(capabilities.writable, isFalse);
   });
 
   test('reads a box of the map', () async {
     final server = _Api(answers: {'map': _map});
-    final elements = await OsmApi(fetch: server.fetch).map(_bounds);
+    final elements = await OsmApiClient(fetch: server.fetch).map(_bounds);
     expect(elements.whereType<OsmNode>().length, 2);
     expect(elements.whereType<OsmWay>().length, 1);
     expect(elements.whereType<OsmWay>().single.nodeIds, [1, 2]);
@@ -111,7 +111,7 @@ void main() {
 
   test('asks for the box the way the API wants it', () async {
     final server = _Api(answers: {'map': _map});
-    await OsmApi(fetch: server.fetch).map(_bounds);
+    await OsmApiClient(fetch: server.fetch).map(_bounds);
     expect(
       server.asked.single.queryParameters['bbox'],
       '174.76,-36.85,174.77,-36.84',
@@ -121,7 +121,7 @@ void main() {
   test('reports a box the API will not answer', () async {
     final server = _Api(refuse: {'map': HttpStatus.badRequest});
     expect(
-      () => OsmApi(fetch: server.fetch).map(_bounds),
+      () => OsmApiClient(fetch: server.fetch).map(_bounds),
       throwsA(isA<OsmTooMuchDataException>()),
     );
   });
@@ -129,19 +129,19 @@ void main() {
   test('passes on a failure that asking for less will not fix', () async {
     final server = _Api(refuse: {'map': HttpStatus.internalServerError});
     expect(
-      () => OsmApi(fetch: server.fetch).map(_bounds),
+      () => OsmApiClient(fetch: server.fetch).map(_bounds),
       throwsA(isA<OsmHttpException>()),
     );
   });
 
   test('reads an empty box as empty rather than as missing', () async {
     final server = _Api();
-    expect(await OsmApi(fetch: server.fetch).map(_bounds), isEmpty);
+    expect(await OsmApiClient(fetch: server.fetch).map(_bounds), isEmpty);
   });
 
   test('counts what it asked for', () async {
     final server = _Api(answers: {'map': _map, 'capabilities': _capabilities});
-    final api = OsmApi(fetch: server.fetch);
+    final api = OsmApiClient(fetch: server.fetch);
     await api.capabilities();
     await api.map(_bounds);
     await api.map(_bounds);
@@ -149,7 +149,7 @@ void main() {
   });
   test('reads the ground a changeset touched', () async {
     final server = _Api(answers: {'changesets': _changesets});
-    final found = await OsmApi(fetch: server.fetch)
+    final found = await OsmApiClient(fetch: server.fetch)
         .changesetsIn(_bounds, since: DateTime.utc(2026));
     expect(found, isNotNull);
     expect(found!.length, 2);
@@ -159,7 +159,7 @@ void main() {
 
   test('asks for changesets over the box and since the time', () async {
     final server = _Api(answers: {'changesets': _changesets});
-    await OsmApi(fetch: server.fetch)
+    await OsmApiClient(fetch: server.fetch)
         .changesetsIn(_bounds, since: DateTime.utc(2026, 9, 16));
     final query = server.asked.single.queryParameters;
     expect(query['bbox'], '174.76,-36.85,174.77,-36.84');
@@ -168,7 +168,7 @@ void main() {
 
   test('gives up on an area with more changesets than it will take', () async {
     final server = _Api(answers: {'changesets': _fullPage});
-    final found = await OsmApi(fetch: server.fetch)
+    final found = await OsmApiClient(fetch: server.fetch)
         .changesetsIn(_bounds, since: DateTime.utc(2026), limit: 150);
     // Every page comes back full, so there is no end to reach: the area is
     // too far behind to patch and has to be read again instead.

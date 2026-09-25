@@ -204,12 +204,12 @@ and then `applyOsmChanges` as above. A block of the file no change falls in is
 copied as it is, so a day of a country's changes is seconds rather than the
 whole file written again.
 
-A day is a long time to wait for an edit of your own. `OsmApi` lists a
+A day is a long time to wait for an edit of your own. `OsmApiClient` lists a
 mapper's changesets since a moment and gives back what each one changed, a few
 kilobytes apiece, to apply the same way:
 
 ```dart
-final api = OsmApi(fetch: fetch);
+final api = OsmApiClient(fetch: fetch);
 final since = file.header.replicationTimestamp!;
 final changes = [
   for (final changeset in (await api.changesetsBy('Your Name', since: since))

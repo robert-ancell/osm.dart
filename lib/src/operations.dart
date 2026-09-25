@@ -38,6 +38,9 @@ final _uninterestingKey = RegExp(
 
 /// Whether [tags] say something about what a thing is, rather than only
 /// where the data came from. As iD judges it.
+///
+/// What the operations decide by: an untagged node goes with its way, but
+/// one that says something is kept, extracted or copied in its own right.
 bool osmHasInterestingTags(Map<String, String> tags) => tags.keys.any(
       (key) =>
           !_uninterestingKeys.contains(key) && !_uninterestingKey.hasMatch(key),

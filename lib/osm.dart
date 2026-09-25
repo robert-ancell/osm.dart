@@ -26,7 +26,13 @@ export 'src/pbf/header.dart';
 export 'src/pbf/tile_cache.dart';
 export 'src/pbf/writer.dart';
 export 'src/operations.dart'
-    hide osmContinuable, osmCopy, osmMove, osmPaste, osmReverseWay;
+    hide
+        osmContinuable,
+        osmCopy,
+        osmHasInterestingTags,
+        osmMove,
+        osmPaste,
+        osmReverseWay;
 export 'src/presets.dart';
 export 'src/presets_cache.dart';
 export 'src/region.dart';

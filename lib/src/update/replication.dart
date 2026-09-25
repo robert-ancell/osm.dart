@@ -89,8 +89,9 @@ class OsmReplication {
 
   final OsmFetch _fetch;
 
-  /// The one period a feed without a directory for each has, or null.
-  final OsmReplicationPeriod? only;
+  /// The one period a feed of a single period has, such as an extract's
+  /// daily diffs, or null for a feed of every period.
+  final OsmReplicationPeriod? period;
 
   /// Creates a client for the feeds under [base].
   ///
@@ -100,7 +101,7 @@ class OsmReplication {
   OsmReplication({Uri? base, String? contact, OsmFetch? fetch})
       : base = base ?? planet,
         _fetch = fetch ?? httpFetch(contact: contact),
-        only = null;
+        period = null;
 
   /// Creates a client for a feed of one [period], laid out straight under
   /// [base] rather than in a directory named for the period.
@@ -116,14 +117,13 @@ class OsmReplication {
   /// over HTTP altogether, for tests or a transport of the caller's own.
   OsmReplication.single(
     Uri base, {
-    required OsmReplicationPeriod period,
+    required OsmReplicationPeriod this.period,
     String? contact,
     OsmFetch? fetch,
   })  : base = base.path.endsWith('/')
             ? base
             : base.replace(path: '${base.path}/'),
-        _fetch = fetch ?? httpFetch(contact: contact),
-        only = period;
+        _fetch = fetch ?? httpFetch(contact: contact);
 
   /// The feed of the extract Geofabrik publishes at [extract], such as
   /// `europe/monaco`.
@@ -145,7 +145,7 @@ class OsmReplication {
   ///
   /// Throws an [ArgumentError] for a period a single feed does not have.
   Uri feed(OsmReplicationPeriod period) {
-    final one = only;
+    final one = this.period;
     if (one == null) return base.resolve('${period.name}/');
     if (period != one) {
       throw ArgumentError.value(
@@ -156,7 +156,7 @@ class OsmReplication {
 
   /// Where diff [sequence] is kept, as the feed lays them out:
   /// 7289011 is `007/289/011`.
-  static String sequencePath(int sequence) {
+  static String _sequencePath(int sequence) {
     final digits = sequence.toString().padLeft(9, '0');
     return '${digits.substring(0, 3)}/${digits.substring(3, 6)}/'
         '${digits.substring(6)}';
@@ -164,7 +164,7 @@ class OsmReplication {
 
   /// The diff [sequence] of [period].
   Uri diff(OsmReplicationPeriod period, int sequence) =>
-      feed(period).resolve('${sequencePath(sequence)}.osc.gz');
+      feed(period).resolve('${_sequencePath(sequence)}.osc.gz');
 
   /// Where the feed has got to.
   Future<OsmReplicationState> latest(OsmReplicationPeriod period) =>
@@ -175,7 +175,7 @@ class OsmReplication {
     OsmReplicationPeriod period,
     int sequence,
   ) =>
-      _state(feed(period).resolve('${sequencePath(sequence)}.state.txt'));
+      _state(feed(period).resolve('${_sequencePath(sequence)}.state.txt'));
 
   Future<OsmReplicationState> _state(Uri uri) async {
     final body = await _fetch(uri);
@@ -245,7 +245,7 @@ class OsmReplication {
     int sequence,
   ) async {
     final body = await _fetch(
-      feed(period).resolve('${sequencePath(sequence)}.state.txt'),
+      feed(period).resolve('${_sequencePath(sequence)}.state.txt'),
     );
     return body == null
         ? null
@@ -300,7 +300,7 @@ class OsmReplication {
     final root = directory ?? OsmCache.defaultDirectory(cacheName);
     final file = File(
       '${root.path}/$cachePath/${period.name}/'
-      '${sequencePath(sequence)}.osc.gz',
+      '${_sequencePath(sequence)}.osc.gz',
     );
     if (await file.exists() && await file.length() > 0) return file;
 

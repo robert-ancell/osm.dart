@@ -94,8 +94,15 @@ void main() {
     });
 
     test('lays sequences out the way the feed does', () {
-      expect(OsmReplication.sequencePath(7289011), '007/289/011');
-      expect(OsmReplication.sequencePath(5), '000/000/005');
+      final feed = OsmReplication(fetch: (_, {abandon, onLate}) async => null);
+      expect(
+        feed.diff(OsmReplicationPeriod.minute, 7289011).path,
+        endsWith('/minute/007/289/011.osc.gz'),
+      );
+      expect(
+        feed.diff(OsmReplicationPeriod.minute, 5).path,
+        endsWith('/minute/000/000/005.osc.gz'),
+      );
     });
 
     test('finds the first diff after a moment', () async {
@@ -426,7 +433,7 @@ void main() {
 
       final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
-        cache: Directory('${_work.path}/cache'),
+        diffDirectory: Directory('${_work.path}/cache'),
       ).update(
         input: input,
         output: output,
@@ -484,7 +491,7 @@ void main() {
 
       final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
-        cache: Directory('${_work.path}/cache'),
+        diffDirectory: Directory('${_work.path}/cache'),
       ).update(
         input: input,
         output: output,
@@ -522,7 +529,7 @@ void main() {
 
       final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
-        cache: Directory('${_work.path}/cache'),
+        diffDirectory: Directory('${_work.path}/cache'),
       ).update(
         input: input,
         output: '${_work.path}/updated.osm.pbf',
@@ -563,7 +570,7 @@ void main() {
 
       final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
-        cache: Directory('${_work.path}/cache'),
+        diffDirectory: Directory('${_work.path}/cache'),
         client: client,
       ).update(
         input: input,
@@ -592,7 +599,7 @@ void main() {
         OsmPbfUpdater(
           replication:
               OsmReplication(fetch: (_, {abandon, onLate}) async => null),
-          cache: _work,
+          diffDirectory: _work,
         ).update(
           input: path,
           output: '${_work.path}/out.osm.pbf',

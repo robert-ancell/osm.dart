@@ -16,7 +16,7 @@
 /// ```dart
 /// final client = OsmApiClient(contact: 'Your Name <you@example.com>');
 ///
-/// final elements = await client.map(const OsmBounds(
+/// final elements = await client.elementsIn(const OsmBounds(
 ///   minLatitude: 48.853,
 ///   minLongitude: 2.348,
 ///   maxLatitude: 48.855,
@@ -24,10 +24,10 @@
 /// ));
 /// ```
 ///
-/// `map` gives everything in a box, as an editor wants it: the nodes inside it,
-/// every way through any of them with the rest of its nodes wherever they are,
-/// and the relations over any of it, so each box can be drawn on its own. The
-/// API only answers for small boxes; a larger one throws
+/// `elementsIn` gives everything in a box, as an editor wants it: the nodes
+/// inside it, every way through any of them with the rest of its nodes
+/// wherever they are, and the relations over any of it, so each box can be
+/// drawn on its own. The API only answers for small boxes; a larger one throws
 /// `OsmTooMuchDataException`, and `capabilities` says how large a box it will
 /// take.
 ///
@@ -71,19 +71,19 @@ export 'src/bounds.dart';
 export 'src/cache.dart';
 export 'src/change.dart';
 export 'src/data_cache.dart';
-export 'src/editor_data.dart';
+export 'src/element_source.dart';
 export 'src/element.dart';
 export 'src/exception.dart';
 export 'src/imagery.dart';
 export 'src/imagery_cache.dart';
 export 'src/imagery_index_cache.dart';
 export 'src/imagery_tiles.dart';
-export 'src/json_exception.dart';
+export 'src/json_exception.dart' hide decodeJson;
 export 'src/mercator.dart';
 export 'src/subset.dart';
 export 'src/tile.dart';
 export 'src/update/api.dart';
-export 'src/update/auth.dart';
+export 'src/update/auth.dart' hide whyNoToken;
 export 'src/update/http.dart' hide httpFetch;
 export 'src/update/replication.dart';
 export 'src/update/upload.dart' hide changesetTagXml;

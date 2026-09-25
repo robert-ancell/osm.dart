@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/src/update/auth.dart' show whyNoToken;
 import 'package:test/test.dart';
 
 /// Stands in for openstreetmap.org: takes the authorisation request, sends
@@ -142,7 +143,7 @@ void main() {
       launch: agreeing(),
     );
     final token = await signIn.tokenFromBrowser();
-    expect(token.canWrite, isTrue);
+    expect(token.covers(OsmToken.writeApiScope), isTrue);
     expect(token.coversAll(['write_api', 'read_prefs']), isTrue);
   });
 
@@ -157,15 +158,17 @@ void main() {
       launch: agreeing(),
     );
     final token = await signIn.tokenFromBrowser();
-    expect(token.canWrite, isFalse);
+    expect(token.covers(OsmToken.writeApiScope), isFalse);
     expect(token.covers('read_prefs'), isTrue);
   });
 
   test('says what to go and change when the application is confidential', () {
-    final signIn =
-        OsmAuthenticator(clientId: 'an-application', launch: (_) async {});
     expect(
-      signIn.whyNoToken('{"error": "invalid_client"}', 400),
+      whyNoToken(
+        '{"error": "invalid_client"}',
+        400,
+        redirectUri: 'http://127.0.0.1:8642/',
+      ),
       contains('Confidential'),
     );
   });

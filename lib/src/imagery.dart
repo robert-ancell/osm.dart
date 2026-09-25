@@ -210,7 +210,7 @@ class OsmImageryIndex {
   ///
   /// Throws an [OsmJsonException] if [json] is not JSON.
   factory OsmImageryIndex.parse(String json) => OsmImageryIndex.of(
-        OsmJsonException.decode(json, 'The imagery index'),
+        decodeJson(json, 'The imagery index'),
       );
 
   /// Reads an index from already decoded JSON.

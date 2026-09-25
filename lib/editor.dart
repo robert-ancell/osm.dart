@@ -12,7 +12,7 @@
 /// import 'package:osm/osm.dart';
 ///
 /// final editor = OsmEditor(
-///   OsmEditorData.of(elements),
+///   OsmElementSource.of(elements),
 ///   rules: OsmStandardTagRules(),
 /// );
 ///

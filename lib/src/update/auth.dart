@@ -71,9 +71,6 @@ class OsmToken {
   /// Whether it is allowed to do all of [wanted].
   bool coversAll(Iterable<String> wanted) => wanted.every(covers);
 
-  /// Whether it can be used to change the map.
-  bool get canWrite => covers(OsmToken.writeApiScope);
-
   @override
   String toString() => 'OsmToken(${scopes.join(' ')})';
 }
@@ -119,7 +116,7 @@ class OsmAuthenticator {
   ///
   /// Not the API: the authorisation and token endpoints are on the web site,
   /// and only the calls that follow go to `api.openstreetmap.org`.
-  static final openStreetMap = Uri.parse('https://www.openstreetmap.org/');
+  static final defaultBase = Uri.parse('https://www.openstreetmap.org/');
 
   /// What an editor has to ask for: change the map, and see who you are.
   static const editScopes = 'write_api read_prefs';
@@ -137,25 +134,27 @@ class OsmAuthenticator {
   /// application was registered with.
   final int redirectPort;
 
-  /// Opens a URL in the browser. Replaced in tests, which have no browser
-  /// and no wish for one.
-  final Future<void> Function(Uri url) launch;
+  final Future<void> Function(Uri url) _launch;
 
   /// Creates an authenticator for an application.
+  ///
+  /// [launch] opens the sign-in page, in whatever the desktop uses for a
+  /// URL unless given something else: a program with its own way to show a
+  /// page, or a test with no browser at all.
   OsmAuthenticator({
     required this.clientId,
     this.scopes = OsmAuthenticator.editScopes,
     Uri? base,
     this.redirectPort = 8642,
     Future<void> Function(Uri url)? launch,
-  })  : base = base ?? OsmAuthenticator.openStreetMap,
-        launch = launch ?? openInBrowser;
+  })  : base = base ?? OsmAuthenticator.defaultBase,
+        _launch = launch ?? _openInBrowser;
 
   /// Where OpenStreetMap sends the browser back to.
   String get redirectUri => 'http://127.0.0.1:$redirectPort/';
 
   /// Opens a URL in whatever the desktop uses for one.
-  static Future<void> openInBrowser(Uri url) async {
+  static Future<void> _openInBrowser(Uri url) async {
     final command = Platform.isMacOS
         ? 'open'
         : Platform.isWindows
@@ -219,7 +218,7 @@ class OsmAuthenticator {
       // that opened the browser first would have a window in which the one
       // request it exists for is refused.
       final waiting = _codeFromBrowser(server, state: state);
-      await launch(
+      await _launch(
         base.resolve('oauth2/authorize').replace(
           queryParameters: {
             'client_id': clientId,
@@ -312,7 +311,8 @@ class OsmAuthenticator {
           .transform(const Utf8Decoder(allowMalformed: true))
           .join();
       if (response.statusCode != HttpStatus.ok) {
-        throw OsmAuthenticationException(whyNoToken(body, response.statusCode));
+        throw OsmAuthenticationException(
+            whyNoToken(body, response.statusCode, redirectUri: redirectUri));
       }
       Object? answer;
       try {
@@ -349,46 +349,6 @@ class OsmAuthenticator {
         ? scopes.split(' ').where((s) => s.isNotEmpty)
         : granted;
   }
-
-  /// What OpenStreetMap said when it would not hand over a token, in a
-  /// sentence somebody can act on.
-  ///
-  /// The refusal comes back as OAuth's own `{error, error_description}`,
-  /// which is short and to the point but written for a machine. Two of them
-  /// are nearly always one thing, and the thing is a setting on a web page
-  /// rather than anything in the program, so those two say what to go and
-  /// change.
-  String whyNoToken(String body, int status) {
-    String? error;
-    String? said;
-    try {
-      final json = jsonDecode(body);
-      if (json is Map) {
-        error = json['error']?.toString();
-        said = json['error_description']?.toString();
-      }
-    } catch (_) {
-      // Not JSON: a proxy, or a page. The body is all there is to say.
-    }
-    final what = [
-      if (error != null) error,
-      if (said != null && said != error) said,
-    ].join(' — ');
-    return [
-      'OpenStreetMap would not give a token (HTTP $status)',
-      if (what.isNotEmpty) ': $what' else ': ${body.trim()}',
-      if (error == 'invalid_client')
-        '.\n\nThat usually means the OAuth application is registered as '
-            'confidential, which requires a client secret. A program running '
-            'on your own machine cannot keep one. Edit the application at '
-            'openstreetmap.org/oauth2/applications and untick "Confidential '
-            'application?" — the client ID stays the same.',
-      if (error == 'invalid_grant')
-        '.\n\nThat usually means the redirect URI does not match the one '
-            'registered. It has to be exactly $redirectUri, trailing slash '
-            'and all.',
-    ].join();
-  }
 }
 
 /// Letters and digits, from the system's own random.
@@ -400,4 +360,44 @@ String _randomString(int length) {
     for (var i = 0; i < length; i++)
       alphabet.codeUnitAt(random.nextInt(alphabet.length)),
   ]);
+}
+
+/// What OpenStreetMap said when it would not hand over a token, in a
+/// sentence somebody can act on.
+///
+/// The refusal comes back as OAuth's own `{error, error_description}`,
+/// which is short and to the point but written for a machine. Two of them
+/// are nearly always one thing, and the thing is a setting on a web page
+/// rather than anything in the program, so those two say what to go and
+/// change.
+String whyNoToken(String body, int status, {required String redirectUri}) {
+  String? error;
+  String? said;
+  try {
+    final json = jsonDecode(body);
+    if (json is Map) {
+      error = json['error']?.toString();
+      said = json['error_description']?.toString();
+    }
+  } catch (_) {
+    // Not JSON: a proxy, or a page. The body is all there is to say.
+  }
+  final what = [
+    if (error != null) error,
+    if (said != null && said != error) said,
+  ].join(' — ');
+  return [
+    'OpenStreetMap would not give a token (HTTP $status)',
+    if (what.isNotEmpty) ': $what' else ': ${body.trim()}',
+    if (error == 'invalid_client')
+      '.\n\nThat usually means the OAuth application is registered as '
+          'confidential, which requires a client secret. A program running '
+          'on your own machine cannot keep one. Edit the application at '
+          'openstreetmap.org/oauth2/applications and untick "Confidential '
+          'application?" — the client ID stays the same.',
+    if (error == 'invalid_grant')
+      '.\n\nThat usually means the redirect URI does not match the one '
+          'registered. It has to be exactly $redirectUri, trailing slash '
+          'and all.',
+  ].join();
 }

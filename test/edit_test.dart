@@ -105,7 +105,7 @@ void main() {
   test('says when something has changed', () {
     var told = 0;
     final edits = OsmEditor(
-      OsmEditorData.of(const []),
+      OsmElementSource.of(const []),
       history: OsmEditHistory(onChanged: () => told++),
     );
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
@@ -429,7 +429,7 @@ void _groups() {
           edits.history.toUpload().toXml(changeset: 1, createdBy: 'test');
       expect(xml, contains('<tag k="amenity" v="bench"/>'));
       expect(xml, isNot(contains('crossing')));
-      expect(edits.history.toUpload().describe(), ['Change node/1']);
+      expect(describeUpload(edits.history.toUpload()), ['Change node/1']);
     });
   });
 
@@ -536,7 +536,7 @@ void _groups() {
       expect(deletedWay, lessThan(deletedNode));
       expect(xml, contains('<member type="way" ref="8" role=""/>'));
       expect(xml, isNot(contains('ref="9" role')));
-      expect(edits.history.toUpload().describe(), [
+      expect(describeUpload(edits.history.toUpload()), [
         'Change relation/30',
         'Delete way/9',
         'Delete node/2',

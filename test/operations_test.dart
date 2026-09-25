@@ -439,7 +439,7 @@ void main() {
 
   group('across the antimeridian', () {
     OsmEditor across() => OsmEditor(
-          OsmEditorData.of([
+          OsmElementSource.of([
             testNode(1, 0, 179.999),
             testNode(2, 0, -179.999),
             testNode(3, 0.002, -179.999),

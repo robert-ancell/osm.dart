@@ -139,7 +139,7 @@ const int _batch = 500;
 
 /// The parts of OpenStreetMap's editing API that read.
 ///
-/// Enough to draw a map and to edit it: [map] for everything in a box, and
+/// Enough to draw a map and to edit it: [elementsIn] for everything in a box, and
 /// the rest for what a set of changes cannot supply on its own, such as the
 /// nodes of a way reaching past the edge of a snapshot or the ways using a
 /// node that moved in.
@@ -151,7 +151,7 @@ const int _batch = 500;
 /// last of those.
 class OsmApiClient {
   /// The API's own address.
-  static final Uri openStreetMap = Uri.parse(
+  static final Uri defaultBase = Uri.parse(
     'https://api.openstreetmap.org/api/0.6/',
   );
 
@@ -199,7 +199,7 @@ class OsmApiClient {
     OsmFetch? fetch,
     this.token,
     String? createdBy,
-  })  : base = base ?? openStreetMap,
+  })  : base = base ?? defaultBase,
         createdBy = createdBy ?? 'osm.dart/$packageVersion',
         _userAgent = contact == null
             ? 'osm.dart/$packageVersion'
@@ -367,7 +367,7 @@ class OsmApiClient {
   /// [OsmCapabilities.maximumArea] or holds more elements than the API will
   /// answer with at once. Ask for a smaller box, or four quarters of this
   /// one. Throws [OsmAbandonedException] if it was given up on.
-  Future<List<OsmElement>> map(
+  Future<List<OsmElement>> elementsIn(
     OsmBounds bounds, {
     Future<void>? abandon,
     void Function(List<OsmElement> elements)? onLate,

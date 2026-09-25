@@ -76,7 +76,7 @@ class OsmPbfUpdater {
   /// Where the diffs are kept, as [OsmReplication.download] keeps them, so
   /// an update that stops part way does not fetch them again; by default
   /// under [OsmCache.defaultDirectory].
-  final Directory? cache;
+  final Directory? diffDirectory;
 
   /// What looks up what the changes cannot settle, if anything.
   final OsmApiClient? client;
@@ -87,7 +87,7 @@ class OsmPbfUpdater {
   /// Creates an updater reading diffs from [replication].
   const OsmPbfUpdater({
     required this.replication,
-    this.cache,
+    this.diffDirectory,
     this.client,
     this.onProgress,
   });
@@ -135,8 +135,8 @@ class OsmPbfUpdater {
       say('Reading ${newest.sequence - first + 1} ${period.name} diff(s), '
           '$first to ${newest.sequence}...');
       for (var sequence = first; sequence <= newest.sequence; sequence++) {
-        final diff =
-            await replication.download(period, sequence, directory: cache);
+        final diff = await replication.download(period, sequence,
+            directory: diffDirectory);
         await _decide(filter, diff.path);
         diffs.add((period, sequence));
       }

@@ -23,21 +23,21 @@ class OsmJsonException implements OsmException, FormatException {
   /// Creates an exception describing why [source] could not be read.
   const OsmJsonException(this.message, {this.source, this.offset});
 
-  /// Decodes [json], throwing an [OsmJsonException] saying it is not [what]
-  /// if it is not JSON.
-  static Object? decode(String json, String what) {
-    try {
-      return jsonDecode(json);
-    } on FormatException catch (e) {
-      throw OsmJsonException(
-        '$what is not JSON: ${e.message}',
-        offset: e.offset,
-      );
-    }
-  }
-
   @override
   String toString() => offset == null
       ? 'OsmJsonException: $message'
       : 'OsmJsonException: $message (at character $offset)';
+}
+
+/// Decodes [json], throwing an [OsmJsonException] saying it is not [what]
+/// if it is not JSON.
+Object? decodeJson(String json, String what) {
+  try {
+    return jsonDecode(json);
+  } on FormatException catch (e) {
+    throw OsmJsonException(
+      '$what is not JSON: ${e.message}',
+      offset: e.offset,
+    );
+  }
 }

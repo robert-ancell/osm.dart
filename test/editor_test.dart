@@ -191,7 +191,7 @@ void main() {
   test('tells whoever asked when something changes', () {
     var told = 0;
     final editor = OsmEditor(
-      OsmEditorData.of(const []),
+      OsmElementSource.of(const []),
       onChanged: () => told++,
     );
     editor.createNode(latitude: 0, longitude: 0);

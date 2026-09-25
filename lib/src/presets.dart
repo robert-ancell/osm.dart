@@ -324,12 +324,11 @@ class OsmPresets {
     String? categories,
     String? defaults,
   }) {
-    final words =
-        _wordsOf(OsmJsonException.decode(translations, 'The translations'));
+    final words = _wordsOf(decodeJson(translations, 'The translations'));
     final presetWords = _map(words['presets']);
     final categoryWords = _map(words['categories']);
 
-    final raw = _map(OsmJsonException.decode(presets, 'The presets'));
+    final raw = _map(decodeJson(presets, 'The presets'));
 
     /// The words for [id]. A preset can borrow another's by being named
     /// `{other/id}` — the same thing drawn another way, or found in another
@@ -373,8 +372,7 @@ class OsmPresets {
     final groups = <String, OsmPresetCategory>{};
     if (categories != null) {
       for (final MapEntry(:key, :value)
-          in _map(OsmJsonException.decode(categories, 'The categories'))
-              .entries) {
+          in _map(decodeJson(categories, 'The categories')).entries) {
         if (value is! Map) continue;
         groups[key] = OsmPresetCategory(
           id: key,
@@ -390,7 +388,7 @@ class OsmPresets {
     final offered = <OsmGeometry, List<String>>{};
     if (defaults != null) {
       for (final MapEntry(:key, :value)
-          in _map(OsmJsonException.decode(defaults, 'The defaults')).entries) {
+          in _map(decodeJson(defaults, 'The defaults')).entries) {
         final shape = OsmGeometry.values.asNameMap()[key];
         if (shape == null) continue;
         offered[shape] = [

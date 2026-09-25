@@ -1,4 +1,4 @@
-import 'editor_data.dart';
+import 'element_source.dart';
 import 'element.dart';
 import 'operations.dart';
 import 'tag_rules.dart';
@@ -353,10 +353,10 @@ class OsmEditHistory {
   var _nextId = -1;
 
   /// Called whenever what has been changed changes.
-  final void Function()? onChanged;
+  final void Function()? _onChanged;
 
   /// Creates a set of changes.
-  OsmEditHistory({this.onChanged});
+  OsmEditHistory({void Function()? onChanged}) : _onChanged = onChanged;
 
   /// The edits made, oldest first.
   List<OsmEdit> get edits => List.unmodifiable(_done);
@@ -407,12 +407,6 @@ class OsmEditHistory {
 
   /// Whether the element has been taken off the map.
   bool isGone(OsmElementType type, int id) => _gone.contains((type, id));
-
-  /// An id for something that was not there before.
-  ///
-  /// Negative, which is what OpenStreetMap expects of something that has not
-  /// been uploaded yet and has no id of its own.
-  int get nextId => _nextId;
 
   /// Makes a node at ([latitude], [longitude]).
   OsmNode _createNode({
@@ -717,14 +711,14 @@ class OsmEditHistory {
     final gathered = _done.sublist(mark);
     _done.removeRange(mark, _done.length);
     _done.add(OsmEditGroup._(gathered));
-    onChanged?.call();
+    _onChanged?.call();
   }
 
   /// A new change has been made, which leaves nothing to redo: what was
   /// undone was undone from before it.
   void _changed() {
     _undone.clear();
-    onChanged?.call();
+    _onChanged?.call();
   }
 
   /// What uploading these changes would send.
@@ -776,7 +770,7 @@ class OsmEditHistory {
     final last = _done.removeLast();
     _undoOne(last);
     _undone.add(last);
-    onChanged?.call();
+    _onChanged?.call();
     return true;
   }
 
@@ -786,7 +780,7 @@ class OsmEditHistory {
     final next = _undone.removeLast();
     _redoOne(next);
     _done.add(next);
-    onChanged?.call();
+    _onChanged?.call();
     return true;
   }
 
@@ -948,7 +942,7 @@ class OsmEditHistory {
     while (_done.length > mark) {
       _undoOne(_done.removeLast());
     }
-    onChanged?.call();
+    _onChanged?.call();
   }
 
   /// Undoes everything.
@@ -966,7 +960,7 @@ class OsmEditHistory {
     _deletedWays.clear();
     _relations.clear();
     _deletedRelations.clear();
-    onChanged?.call();
+    _onChanged?.call();
   }
 
   /// Every element taken off the map, whether or not it was ever uploaded.

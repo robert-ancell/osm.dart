@@ -1,5 +1,5 @@
 import 'area.dart';
-import 'editor_data.dart';
+import 'element_source.dart';
 import 'element.dart';
 
 /// The elements taken out of a file, and everything they refer to.
@@ -9,9 +9,9 @@ import 'element.dart';
 /// carries the elements the matches point at as well, indexed by id, so
 /// [nodesOf] and [memberOf] can resolve them.
 ///
-/// It is [OsmEditorData] too, so what was read can be edited as it is:
+/// It is [OsmElementSource] too, so what was read can be edited as it is:
 /// `OsmEditor(subset)`.
-class OsmSubset implements OsmEditorData {
+class OsmSubset implements OsmElementSource {
   /// The elements that matched the filter, in the order they were stored.
   final List<OsmElement> matches;
 

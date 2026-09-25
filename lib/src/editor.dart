@@ -11,7 +11,7 @@ part of 'edit.dart';
 /// made from.
 class OsmEditor {
   /// What was read.
-  final OsmEditorData data;
+  final OsmElementSource data;
 
   /// Every change made, in order.
   final OsmEditHistory history;
@@ -23,6 +23,11 @@ class OsmEditor {
   /// given others, such as [OsmStandardTagRules].
   final OsmTagRules rules;
 
+  /// The most nodes a way can have: the API's
+  /// [OsmCapabilities.maximumWayNodes], which is two thousand on
+  /// OpenStreetMap. Joining ways into one longer than this is refused.
+  final int maximumWayNodes;
+
   /// Creates an editor over [data], deciding what tags mean by [rules].
   ///
   /// Its changes are kept in [history] if it is given one, which is how an
@@ -33,6 +38,7 @@ class OsmEditor {
     this.data, {
     OsmEditHistory? history,
     this.rules = const OsmPlainTagRules(),
+    this.maximumWayNodes = 2000,
     void Function()? onChanged,
   })  : assert(
           history == null || onChanged == null,

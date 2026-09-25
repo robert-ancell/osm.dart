@@ -303,12 +303,13 @@ void main() {
           testWay(11, [2, 3, 4])
         ],
       );
+      final limited = OsmEditor(
+        view.data,
+        rules: view.rules,
+        maximumWayNodes: 3,
+      );
       expect(
-        OsmMergeOperation(
-          view,
-          [view.way(10)!, view.way(11)!],
-          maximumWayNodes: 3,
-        ).disabled,
+        limited.merge([limited.way(10)!, limited.way(11)!]).disabled,
         OsmDisabledReason.tooManyVertices,
       );
     });

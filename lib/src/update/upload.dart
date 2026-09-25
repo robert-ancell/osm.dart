@@ -103,33 +103,6 @@ class OsmUpload {
   /// Whether there is.
   bool get isNotEmpty => length != 0;
 
-  /// A line for each element, in the order they would be sent.
-  ///
-  /// For showing before the button is pressed. Short on purpose: what
-  /// matters to whoever is reading is how many of what, and which ones, not
-  /// the XML.
-  List<String> describe() => [
-        for (final node in createdNodes) 'Create node ${_name(node.id)}',
-        for (final way in createdWays)
-          'Create way ${_name(way.id)} through ${way.nodeIds.length} node(s)',
-        for (final relation in createdRelations)
-          'Create relation ${_name(relation.id)} of '
-              '${relation.members.length} member(s)',
-        // Changed rather than moved or retagged: what is sent is the element
-        // as it now stands, which says nothing of what it was.
-        for (final node in changedNodes) 'Change node/${node.id}',
-        for (final way in changedWays) 'Change way/${way.id}',
-        for (final relation in changedRelations)
-          'Change relation/${relation.id}',
-        for (final relation in deletedRelations)
-          'Delete relation/${relation.id}',
-        for (final way in deletedWays) 'Delete way/${way.id}',
-        for (final node in deletedNodes) 'Delete node/${node.id}',
-      ];
-
-  /// What to call an element that has no id of its own yet.
-  static String _name(int id) => id < 0 ? 'new ($id)' : '$id';
-
   /// The osmChange document that makes these changes in [changeset].
   ///
   /// Every element in full: OpenStreetMap replaces an element rather than

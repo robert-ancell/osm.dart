@@ -99,7 +99,7 @@ void main() {
     final edits = editorOf();
     final node = edits.createNode(latitude: 1, longitude: 2);
     edits.createWay(nodeIds: [node.id]);
-    expect(edits.history.toUpload().describe(), [
+    expect(describeUpload(edits.history.toUpload()), [
       'Create node new (-1)',
       'Create way new (-2) through 1 node(s)',
     ]);

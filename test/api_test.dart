@@ -103,7 +103,8 @@ void main() {
 
   test('reads a box of the map', () async {
     final server = _Api(answers: {'map': _map});
-    final elements = await OsmApiClient(fetch: server.fetch).map(_bounds);
+    final elements =
+        await OsmApiClient(fetch: server.fetch).elementsIn(_bounds);
     expect(elements.whereType<OsmNode>().length, 2);
     expect(elements.whereType<OsmWay>().length, 1);
     expect(elements.whereType<OsmWay>().single.nodeIds, [1, 2]);
@@ -111,7 +112,7 @@ void main() {
 
   test('asks for the box the way the API wants it', () async {
     final server = _Api(answers: {'map': _map});
-    await OsmApiClient(fetch: server.fetch).map(_bounds);
+    await OsmApiClient(fetch: server.fetch).elementsIn(_bounds);
     expect(
       server.asked.single.queryParameters['bbox'],
       '174.76,-36.85,174.77,-36.84',
@@ -121,7 +122,7 @@ void main() {
   test('reports a box the API will not answer', () async {
     final server = _Api(refuse: {'map': HttpStatus.badRequest});
     expect(
-      () => OsmApiClient(fetch: server.fetch).map(_bounds),
+      () => OsmApiClient(fetch: server.fetch).elementsIn(_bounds),
       throwsA(isA<OsmTooMuchDataException>()),
     );
   });
@@ -129,22 +130,23 @@ void main() {
   test('passes on a failure that asking for less will not fix', () async {
     final server = _Api(refuse: {'map': HttpStatus.internalServerError});
     expect(
-      () => OsmApiClient(fetch: server.fetch).map(_bounds),
+      () => OsmApiClient(fetch: server.fetch).elementsIn(_bounds),
       throwsA(isA<OsmHttpException>()),
     );
   });
 
   test('reads an empty box as empty rather than as missing', () async {
     final server = _Api();
-    expect(await OsmApiClient(fetch: server.fetch).map(_bounds), isEmpty);
+    expect(
+        await OsmApiClient(fetch: server.fetch).elementsIn(_bounds), isEmpty);
   });
 
   test('counts what it asked for', () async {
     final server = _Api(answers: {'map': _map, 'capabilities': _capabilities});
     final client = OsmApiClient(fetch: server.fetch);
     await client.capabilities();
-    await client.map(_bounds);
-    await client.map(_bounds);
+    await client.elementsIn(_bounds);
+    await client.elementsIn(_bounds);
     expect(client.requests, 3);
   });
   test('reads the ground a changeset touched', () async {

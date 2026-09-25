@@ -65,7 +65,7 @@ Future<void> main(List<String> arguments) async {
   try {
     final result = await OsmPbfUpdater(
       replication: OsmReplication(contact: contact),
-      cache: Directory(cache ?? '$snapshot.diffs'),
+      diffDirectory: Directory(cache ?? '$snapshot.diffs'),
       client: lookups ? OsmApiClient(contact: contact) : null,
       onProgress: stdout.writeln,
     ).update(

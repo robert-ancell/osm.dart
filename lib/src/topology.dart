@@ -606,12 +606,8 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
   @override
   final List<OsmElement> selected;
 
-  /// The most nodes a way can have, which the API says; see
-  /// [OsmCapabilities.maximumWayNodes]. Two thousand on OpenStreetMap.
-  final int maximumWayNodes;
-
   /// Creates the operation.
-  OsmMergeOperation(this._view, this.selected, {this.maximumWayNodes = 2000});
+  OsmMergeOperation(this._view, this.selected);
 
   /// Whether it can be done: two things or more are selected.
   @override
@@ -633,7 +629,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       if (reasons[i] != null) continue;
       if (i == 0) {
         final ways = _of(OsmGeometry.line).cast<OsmWay>().toList();
-        if (_joinWays(ways).single.nodes.length > maximumWayNodes) {
+        if (_joinWays(ways).single.nodes.length > _view.maximumWayNodes) {
           return (0, OsmDisabledReason.tooManyVertices);
         }
       }
@@ -1341,9 +1337,6 @@ class OsmDisconnectOperation extends OsmOperation<void> {
     _actions;
     return _conjoined;
   }
-
-  /// The nodes it disconnects at, for judging how much of it is in view.
-  List<int> get nodes => [for (final (id, _) in _actions) id];
 
   /// Why it cannot be done, or null if it can.
   @override

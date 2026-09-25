@@ -1,15 +1,15 @@
 import 'element.dart';
 
-/// OpenStreetMap data as it was read, looked up by id: what an editor
-/// edits, laid over with its changes.
+/// OpenStreetMap elements as they were read, looked up by id, with what
+/// uses each: what an editor edits, laid over with its changes.
 ///
 /// Whatever a program holds what it has read in implements this: a store of
 /// tiles fetched from the API, a file read from disk, or a list of elements
-/// ([OsmEditorData.of]). An editor never changes it; it keeps what has
+/// ([OsmElementSource.of]). An editor never changes it; it keeps what has
 /// been changed apart and lays it over the top.
-abstract interface class OsmEditorData {
+abstract interface class OsmElementSource {
   /// Data holding [elements] and nothing else.
-  factory OsmEditorData.of(Iterable<OsmElement> elements) = _ElementData;
+  factory OsmElementSource.of(Iterable<OsmElement> elements) = _ElementData;
 
   /// The node with [id] as it was read, or null if it is not held.
   OsmNode? node(int id);
@@ -27,7 +27,7 @@ abstract interface class OsmEditorData {
   Iterable<int> relationsUsing(OsmElementType type, int id);
 }
 
-class _ElementData implements OsmEditorData {
+class _ElementData implements OsmElementSource {
   final _nodes = <int, OsmNode>{};
   final _ways = <int, OsmWay>{};
   final _relations = <int, OsmRelation>{};

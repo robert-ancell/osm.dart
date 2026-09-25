@@ -163,7 +163,7 @@ class OsmCountryCoder {
   /// at all throws, an [OsmJsonException].
   factory OsmCountryCoder.parse(String json) {
     final features = _list(
-      _map(OsmJsonException.decode(json, 'The borders'))['features'],
+      _map(decodeJson(json, 'The borders'))['features'],
     );
     return OsmCountryCoder._([
       for (final feature in features)

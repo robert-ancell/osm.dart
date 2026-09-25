@@ -21,7 +21,7 @@ void main() {
   group('deleting', () {
     test('deletes a way and the nodes only it used', () {
       final view = _roads();
-      OsmDelete(view, [view.way(11)!]).apply();
+      OsmDeleteOperation(view, [view.way(11)!]).apply();
       expect(view.way(11), isNull);
       // Its far end goes; the node it shares with the road stays.
       expect(view.node(4), isNull);
@@ -39,7 +39,7 @@ void main() {
           testWay(10, [1, 2], {'highway': 'track'}),
         ],
       );
-      OsmDelete(view, [view.way(10)!]).apply();
+      OsmDeleteOperation(view, [view.way(10)!]).apply();
       expect(view.node(1), isNull);
       expect(view.node(2), isNotNull);
     });
@@ -54,14 +54,14 @@ void main() {
           testWay(10, [1, 2], {'highway': 'track'}),
         ],
       );
-      OsmDelete(view, [view.way(10)!]).apply();
+      OsmDeleteOperation(view, [view.way(10)!]).apply();
       // Where it came from is nothing of its own: it goes with the way.
       expect(view.node(1), isNull);
     });
 
     test('deletes a way a node going leaves too short', () {
       final view = _roads();
-      OsmDelete(view, [view.node(4)!]).apply();
+      OsmDeleteOperation(view, [view.node(4)!]).apply();
       expect(view.way(11), isNull);
       expect(view.way(10), isNotNull);
     });
@@ -77,7 +77,7 @@ void main() {
           ),
         ],
       );
-      OsmDelete(view, [view.node(1)!]).apply();
+      OsmDeleteOperation(view, [view.node(1)!]).apply();
       expect(view.relation(20), isNull);
       expect(view.edits.deletedRelations, contains(20));
     });
@@ -93,7 +93,7 @@ void main() {
           tags: {'type': type},
         );
         expect(
-          OsmDelete(view, [view.way(10)!]).disabled,
+          OsmDeleteOperation(view, [view.way(10)!]).disabled,
           'part_of_relation',
           reason: type,
         );
@@ -107,26 +107,28 @@ void main() {
             tags: const {'type': 'multipolygon'},
           );
       final outer = _roads()..relations[30] = multipolygon('outer');
-      expect(OsmDelete(outer, [outer.way(10)!]).disabled, 'part_of_relation');
+      expect(OsmDeleteOperation(outer, [outer.way(10)!]).disabled,
+          'part_of_relation');
       final unroled = _roads()..relations[30] = multipolygon('');
       expect(
-        OsmDelete(unroled, [unroled.way(10)!]).disabled,
+        OsmDeleteOperation(unroled, [unroled.way(10)!]).disabled,
         'part_of_relation',
       );
       final inner = _roads()..relations[30] = multipolygon('inner');
-      expect(OsmDelete(inner, [inner.way(10)!]).disabled, isNull);
+      expect(OsmDeleteOperation(inner, [inner.way(10)!]).disabled, isNull);
     });
 
     test('will not delete something with a Wikidata tag', () {
       final view = TestView(nodes: [
         testNode(1, 0, 0, {'wikidata': 'Q1'})
       ]);
-      expect(OsmDelete(view, [view.node(1)!]).disabled, 'has_wikidata_tag');
+      expect(OsmDeleteOperation(view, [view.node(1)!]).disabled,
+          'has_wikidata_tag');
     });
 
     test('undoes a deletion as one change', () {
       final view = _roads();
-      OsmDelete(view, [view.way(11)!, view.node(1)!]).apply();
+      OsmDeleteOperation(view, [view.way(11)!, view.node(1)!]).apply();
       view.edits.undo();
       expect(view.edits.isEmpty, isTrue);
       expect(view.way(11), isNotNull);
@@ -152,7 +154,7 @@ void main() {
           }),
         ],
       );
-      OsmReverse(view, [view.way(10)!]).apply();
+      OsmReverseOperation(view, [view.way(10)!]).apply();
       final way = view.way(10)!;
       expect(way.nodeIds, [2, 1]);
       expect(way.tags, {
@@ -177,7 +179,7 @@ void main() {
           testWay(10, [1, 2], {'highway': 'residential'}),
         ],
       );
-      OsmReverse(view, [view.way(10)!]).apply();
+      OsmReverseOperation(view, [view.way(10)!]).apply();
       expect(view.node(1)!.tags['direction'], 'backward');
       expect(view.node(2)!.tags['direction'], 'N');
     });
@@ -189,7 +191,7 @@ void main() {
           testNode(2, 0, 0, {'direction': 'NE;190'}),
         ],
       );
-      OsmReverse(view, [view.node(1)!, view.node(2)!]).apply();
+      OsmReverseOperation(view, [view.node(1)!, view.node(2)!]).apply();
       expect(view.node(1)!.tags['direction'], '270');
       expect(view.node(2)!.tags['direction'], 'SW;10');
     });
@@ -203,7 +205,7 @@ void main() {
           ],
           tags: {'type': 'route'},
         );
-      OsmReverse(view, [view.way(10)!]).apply();
+      OsmReverseOperation(view, [view.way(10)!]).apply();
       expect(view.relation(30)!.members.single.role, 'backward');
     });
 
@@ -219,8 +221,8 @@ void main() {
           testWay(10, [1, 2, 3, 1], {'building': 'yes'}),
         ],
       );
-      expect(OsmReverse(view, [view.way(10)!]).available, isFalse);
-      expect(OsmReverse(view, [view.node(4)!]).available, isFalse);
+      expect(OsmReverseOperation(view, [view.way(10)!]).available, isFalse);
+      expect(OsmReverseOperation(view, [view.node(4)!]).available, isFalse);
     });
 
     test('says what it reverses', () {
@@ -234,16 +236,17 @@ void main() {
           testWay(10, [1, 2], {'highway': 'residential'}),
         ],
       );
-      expect(OsmReverse(view, [view.way(10)!]).kind, 'line');
-      expect(OsmReverse(view, [view.node(3)!]).kind, 'point');
-      expect(OsmReverse(view, [view.way(10)!, view.node(3)!]).kind, 'features');
+      expect(OsmReverseOperation(view, [view.way(10)!]).kind, 'line');
+      expect(OsmReverseOperation(view, [view.node(3)!]).kind, 'point');
+      expect(OsmReverseOperation(view, [view.way(10)!, view.node(3)!]).kind,
+          'features');
     });
   });
 
   group('extracting', () {
     test('takes a tagged node out of its lines, leaving another there', () {
       final view = _roads();
-      final points = OsmExtract(view, [view.node(2)!]).apply();
+      final points = OsmExtractOperation(view, [view.node(2)!]).apply();
       expect(points.single.id, 2);
       expect(view.waysUsing(2), isEmpty);
       final road = view.way(10)!;
@@ -258,11 +261,11 @@ void main() {
 
     test('has nothing to take out of an untagged node or one on its own', () {
       final view = _roads();
-      expect(OsmExtract(view, [view.node(1)!]).available, isFalse);
+      expect(OsmExtractOperation(view, [view.node(1)!]).available, isFalse);
       final alone = TestView(nodes: [
         testNode(1, 0, 0, {'amenity': 'bench'})
       ]);
-      expect(OsmExtract(alone, [alone.node(1)!]).available, isFalse);
+      expect(OsmExtractOperation(alone, [alone.node(1)!]).available, isFalse);
     });
 
     group('from an area', () {
@@ -295,7 +298,9 @@ void main() {
           'addr:street': 'Queen Street',
         });
         final point =
-            OsmExtract(view, [view.way(10)!], presets: presets).apply().single;
+            OsmExtractOperation(view, [view.way(10)!], presets: presets)
+                .apply()
+                .single;
         expect(point.tags, {
           'shop': 'bakery',
           'name': 'Crust',
@@ -312,21 +317,22 @@ void main() {
 
       test('keeps an area that is not a building an area', () {
         final view = shop({'shop': 'bakery', 'area': 'yes'});
-        OsmExtract(view, [view.way(10)!], presets: presets).apply();
+        OsmExtractOperation(view, [view.way(10)!], presets: presets).apply();
         expect(view.way(10)!.tags, {'area': 'yes'});
       });
 
       test('takes nothing out of what can only be an area', () {
         final view = shop({'building': 'yes'});
         expect(
-          OsmExtract(view, [view.way(10)!], presets: presets).available,
+          OsmExtractOperation(view, [view.way(10)!], presets: presets)
+              .available,
           isFalse,
         );
       });
 
       test('takes nothing out of a way when the kinds are not known', () {
         final view = shop({'shop': 'bakery', 'area': 'yes'});
-        expect(OsmExtract(view, [view.way(10)!]).available, isFalse);
+        expect(OsmExtractOperation(view, [view.way(10)!]).available, isFalse);
       });
     });
   });
@@ -444,7 +450,7 @@ void main() {
     test('puts what is extracted on the antimeridian, not half a world off',
         () {
       final view = across();
-      final point = OsmExtract(view, [view.way(10)!]).apply().single;
+      final point = OsmExtractOperation(view, [view.way(10)!]).apply().single;
       expect(point.longitude.abs(), closeTo(180, 1e-6));
       expect(point.latitude, closeTo(0.001, 1e-6));
     });

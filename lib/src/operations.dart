@@ -82,17 +82,46 @@ void _asOne(OsmEdits edits, void Function() change) {
   edits.combineSince(mark);
 }
 
+/// Something done to what is selected, as iD offers it: deleting,
+/// reversing, extracting, splitting, merging or disconnecting.
+///
+/// Each is made over the map as it now stands and the selection, says
+/// whether it applies to that selection at all ([available]) and, if it
+/// does, why it cannot be done ([disabled]), and then does it ([apply]) as
+/// one change that one undo takes back. [T] is what it gives back: what it
+/// made, for selecting afterwards, or nothing.
+abstract class OsmOperation<T> {
+  /// What it is to be done to, as it now stands.
+  List<OsmElement> get selected;
+
+  /// Whether it applies to [selected] at all, and so is worth offering.
+  bool get available;
+
+  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  ///
+  /// Only asked of an operation that is [available]: one that is not is not
+  /// offered, disabled or otherwise.
+  String? get disabled => null;
+
+  /// Does it, as one change.
+  ///
+  /// Only for an operation that is [available] and not [disabled].
+  T apply();
+}
+
 /// Deleting what is selected.
-class OsmDelete {
+class OsmDeleteOperation extends OsmOperation<void> {
   final OsmEditView _view;
 
   /// What is to be deleted, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   /// Creates the operation.
-  OsmDelete(this._view, this.selected);
+  OsmDeleteOperation(this._view, this.selected);
 
   /// Whether it can be done: anything can be deleted.
+  @override
   bool get available => selected.isNotEmpty;
 
   /// Why it cannot be done, in iD's words for the reason, or null if it can.
@@ -101,6 +130,7 @@ class OsmDelete {
   /// multipolygon, would leave a hole in something larger, and has to be
   /// taken out of it first. Something with a Wikidata tag is somebody's
   /// careful work, linked from elsewhere, and is not deleted by accident.
+  @override
   String? get disabled {
     if (selected.any(_protected)) return 'part_of_relation';
     if (selected.any((e) => (e.tags['wikidata'] ?? '').trim().isNotEmpty)) {
@@ -134,6 +164,7 @@ class OsmDelete {
   /// A way left with too few nodes by a node going goes too, as does a
   /// relation left with no members. A way takes with it those of its nodes
   /// that nothing else uses and that say nothing of their own.
+  @override
   void apply() => _asOne(_view.edits, () {
         for (final element in selected) {
           switch (element) {
@@ -188,14 +219,15 @@ class OsmDelete {
 
 /// Reversing what is selected: the direction of a line, and of anything
 /// tagged with a direction.
-class OsmReverse {
+class OsmReverseOperation extends OsmOperation<void> {
   final OsmEditView _view;
 
   /// What is to be reversed, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   /// Creates the operation.
-  OsmReverse(this._view, this.selected);
+  OsmReverseOperation(this._view, this.selected);
 
   /// What of the selection reverses: its lines, and the nodes that say
   /// which way they face. Areas have no direction.
@@ -209,6 +241,7 @@ class OsmReverse {
       ];
 
   /// Whether it can be done.
+  @override
   bool get available => _reversible.isNotEmpty;
 
   /// What kind of thing is reversed, for choosing how to describe it: a
@@ -231,6 +264,7 @@ class OsmReverse {
   /// `oneway` is left alone: a oneway drawn the wrong way round is what
   /// reversing is usually for. A node on its own also has its compass
   /// direction turned round.
+  @override
   void apply() => _asOne(_view.edits, () {
         for (final element in _reversible) {
           switch (element) {
@@ -442,10 +476,11 @@ String _number(num value) =>
     value == value.truncate() ? value.truncate().toString() : value.toString();
 
 /// Pulling a point out of what is selected.
-class OsmExtract {
+class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
   final OsmEditView _view;
 
   /// What points are to be pulled out of, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   /// The kinds of thing there are, which say whether what a way is could
@@ -456,7 +491,8 @@ class OsmExtract {
   final Set<String> here;
 
   /// Creates the operation.
-  OsmExtract(this._view, this.selected, {this.presets, this.here = const {}});
+  OsmExtractOperation(this._view, this.selected,
+      {this.presets, this.here = const {}});
 
   bool _extractable(OsmElement element) {
     if (!osmHasInterestingTags(element.tags)) return false;
@@ -473,6 +509,7 @@ class OsmExtract {
 
   /// Whether it can be done: everything selected has a point in it to pull
   /// out.
+  @override
   bool get available => selected.isNotEmpty && selected.every(_extractable);
 
   /// Pulls the points out, as one change, and gives back the points.
@@ -484,6 +521,7 @@ class OsmExtract {
   /// it, and what makes it the shape it is stays: a building keeps its
   /// building tags, anything keeps its address, and an area that would no
   /// longer be one is told it is.
+  @override
   List<OsmNode> apply() {
     final points = <OsmNode>[];
     _asOne(_view.edits, () {

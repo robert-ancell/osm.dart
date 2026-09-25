@@ -300,10 +300,11 @@ bool _segmentsCross(
 }
 
 /// Splitting lines where the selected nodes are.
-class OsmSplit {
+class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
   final OsmEditView _view;
 
   /// What is selected, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   late final List<OsmNode> _vertices = [
@@ -315,10 +316,11 @@ class OsmSplit {
   late final List<OsmWay> _limit = selected.whereType<OsmWay>().toList();
 
   /// Creates the operation.
-  OsmSplit(this._view, this.selected);
+  OsmSplitOperation(this._view, this.selected);
 
   /// Whether it can be done: nodes along lines are selected, and nothing
   /// but them and the lines to split.
+  @override
   bool get available =>
       _vertices.isNotEmpty &&
       _vertices.length + _limit.length == selected.length;
@@ -369,6 +371,7 @@ class OsmSplit {
   }
 
   /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  @override
   String? get disabled {
     final candidates = ways;
     if (candidates.isEmpty ||
@@ -415,6 +418,7 @@ class OsmSplit {
 
   /// Splits them, as one change, and gives back every way the splitting
   /// leaves, old and new, for selecting.
+  @override
   List<OsmWay> apply() {
     final results = <int>{};
     _asOne(_view.edits, () {
@@ -707,10 +711,11 @@ class OsmSplit {
 /// Merging what is selected into one: lines end to end, points into the
 /// line or area they describe, areas into a multipolygon, or nodes into one
 /// node — whichever of those the selection is, tried in that order.
-class OsmMerge {
+class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
   final OsmEditView _view;
 
   /// What is selected, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   /// The most nodes a way can have, which the API says; see
@@ -718,9 +723,10 @@ class OsmMerge {
   final int maximumWayNodes;
 
   /// Creates the operation.
-  OsmMerge(this._view, this.selected, {this.maximumWayNodes = 2000});
+  OsmMergeOperation(this._view, this.selected, {this.maximumWayNodes = 2000});
 
   /// Whether it can be done: two things or more are selected.
+  @override
   bool get available => selected.length >= 2;
 
   late final _way = selected.whereType<OsmWay>().toList();
@@ -754,10 +760,12 @@ class OsmMerge {
   }
 
   /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  @override
   String? get disabled => _choice.$2;
 
   /// Merges them, as one change, and gives back what is left of them for
   /// selecting: the ones that say something, if any do.
+  @override
   List<OsmElement> apply() {
     final (way, reason) = _choice;
     if (reason != null) return const [];
@@ -1259,7 +1267,7 @@ void osmConnect(OsmEditView view, List<int> ids) {
   }
   view.edits.setTags(view.node(survivorId)!, tags);
   for (final way in view.waysUsing(survivorId)) {
-    if (osmIsDegenerate(way)) OsmDelete(view, [way]).apply();
+    if (osmIsDegenerate(way)) OsmDeleteOperation(view, [way]).apply();
   }
 }
 
@@ -1406,10 +1414,11 @@ String? osmConnectDisabled(OsmEditView view, List<int> ids) {
 }
 
 /// Disconnecting what is selected from what it is joined to.
-class OsmDisconnect {
+class OsmDisconnectOperation extends OsmOperation<void> {
   final OsmEditView _view;
 
   /// What is selected, as it now stands.
+  @override
   final List<OsmElement> selected;
 
   late final List<OsmNode> _vertices = [
@@ -1429,7 +1438,7 @@ class OsmDisconnect {
   var _conjoined = false;
 
   /// Creates the operation.
-  OsmDisconnect(this._view, this.selected);
+  OsmDisconnectOperation(this._view, this.selected);
 
   List<(int, List<int>?)> _plan() {
     if (_vertices.isNotEmpty) {
@@ -1460,6 +1469,7 @@ class OsmDisconnect {
   }
 
   /// Whether it can be done.
+  @override
   bool get available {
     if (_actions.isEmpty || _others != 0) return false;
     if (_vertices.isNotEmpty &&
@@ -1503,6 +1513,7 @@ class OsmDisconnect {
   List<int> get nodes => [for (final (id, _) in _actions) id];
 
   /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  @override
   String? get disabled {
     for (final (id, limit) in _actions) {
       final reason = _disabledAt(id, limit);
@@ -1572,6 +1583,7 @@ class OsmDisconnect {
   ///
   /// Every way but one at each node — or those selected — is given a node
   /// of its own in the same place, with the same tags.
+  @override
   void apply() => _asOne(_view.edits, () {
         for (final (id, limit) in _actions) {
           final node = _view.node(id);

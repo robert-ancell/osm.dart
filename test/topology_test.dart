@@ -35,7 +35,7 @@ void main() {
           testWay(10, [1, 2, 3, 4], {'highway': 'residential'}),
         ],
       );
-      final split = OsmSplit(view, [view.node(3)!]);
+      final split = OsmSplitOperation(view, [view.node(3)!]);
       expect(split.available, isTrue);
       expect(split.disabled, isNull);
       final ways = split.apply();
@@ -53,7 +53,7 @@ void main() {
         testWay(10, [1, 2, 3, 4])
       ]);
       // Offered, as iD offers it, but not to be done.
-      expect(OsmSplit(view, [view.node(1)!]).disabled, 'not_eligible');
+      expect(OsmSplitOperation(view, [view.node(1)!]).disabled, 'not_eligible');
       final end = TestView(
         nodes: _row(),
         ways: [
@@ -61,7 +61,7 @@ void main() {
           testWay(11, [4, 1])
         ],
       );
-      expect(OsmSplit(end, [end.node(4)!]).disabled, 'not_eligible');
+      expect(OsmSplitOperation(end, [end.node(4)!]).disabled, 'not_eligible');
     });
 
     test('divides a count along the line between the pieces', () {
@@ -71,7 +71,7 @@ void main() {
           testWay(10, [1, 2, 3, 4], {'highway': 'steps', 'step_count': '30'}),
         ],
       );
-      OsmSplit(view, [view.node(2)!]).apply();
+      OsmSplitOperation(view, [view.node(2)!]).apply();
       final counts = [
         view.way(10)!.tags['step_count'],
         view.edits.changedWays.values
@@ -100,7 +100,7 @@ void main() {
           }),
         ],
       );
-      OsmSplit(view, [view.node(2)!]).apply();
+      OsmSplitOperation(view, [view.node(2)!]).apply();
       final made = view.edits.changedWays.keys.firstWhere((id) => id < 0);
       // 10 kept the longer end, 2 to 4, so the piece from 1 to 2 goes
       // before it, between it and 9.
@@ -126,7 +126,7 @@ void main() {
           }),
         ],
       );
-      OsmSplit(view, [view.node(3)!]).apply();
+      OsmSplitOperation(view, [view.node(3)!]).apply();
       // 10 kept 1 to 3; the new piece, 3 to 4, reaches the junction.
       final made = view.edits.changedWays.keys.firstWhere((id) => id < 0);
       expect(
@@ -147,7 +147,7 @@ void main() {
           testWay(10, [1, 2, 3, 4, 1], {'building': 'yes', 'name': 'Hall'}),
         ],
       );
-      final split = OsmSplit(view, [view.node(1)!, view.node(3)!]);
+      final split = OsmSplitOperation(view, [view.node(1)!, view.node(3)!]);
       expect(split.kind, 'area');
       split.apply();
       final relation = view.edits.changedRelations.values.single;
@@ -174,7 +174,8 @@ void main() {
           _relation(30, [(_way, 10, '')], {'type': 'route'}),
         ],
       );
-      expect(OsmSplit(view, [view.node(2)!]).disabled, 'simple_roundabout');
+      expect(OsmSplitOperation(view, [view.node(2)!]).disabled,
+          'simple_roundabout');
     });
 
     test('will not split part of a route with none of its neighbours here', () {
@@ -187,7 +188,8 @@ void main() {
           _relation(30, [(_way, 8, ''), (_way, 10, ''), (_way, 12, '')]),
         ],
       );
-      expect(OsmSplit(view, [view.node(2)!]).disabled, 'parent_incomplete');
+      expect(OsmSplitOperation(view, [view.node(2)!]).disabled,
+          'parent_incomplete');
     });
   });
 
@@ -200,7 +202,7 @@ void main() {
           testWay(10, [1, 2, 3], {'highway': 'residential', 'name': 'A'}),
         ],
       );
-      final merge = OsmMerge(view, [view.way(11)!, view.way(10)!]);
+      final merge = OsmMergeOperation(view, [view.way(11)!, view.way(10)!]);
       expect(merge.disabled, isNull);
       merge.apply();
       expect(view.way(11), isNull);
@@ -218,7 +220,7 @@ void main() {
               11, [3, 2], {'highway': 'residential', 'sidewalk:left': 'yes'}),
         ],
       );
-      OsmMerge(view, [view.way(10)!, view.way(11)!]).apply();
+      OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).apply();
       expect(view.way(10)!.nodeIds, [1, 2, 3]);
       // The pavement on 11's left, as it was drawn, is on the right of the
       // line it is now part of.
@@ -237,7 +239,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled,
+        OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
         'conflicting_tags',
       );
     });
@@ -251,7 +253,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled,
+        OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
         'not_adjacent',
       );
     });
@@ -265,7 +267,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled,
+        OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
         'conflicting_tags',
       );
     });
@@ -282,7 +284,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled,
+        OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
         'conflicting_relations',
       );
     });
@@ -296,7 +298,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(
+        OsmMergeOperation(
           view,
           [view.way(10)!, view.way(11)!],
           maximumWayNodes: 3,
@@ -313,7 +315,7 @@ void main() {
           testWay(11, [2, 3], {'highway': 'steps', 'step_count': '8'}),
         ],
       );
-      OsmMerge(view, [view.way(10)!, view.way(11)!]).apply();
+      OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).apply();
       expect(view.way(10)!.tags['step_count'], '20');
     });
   });
@@ -334,7 +336,7 @@ void main() {
 
     test('moves what the point says onto the area', () {
       final view = shop();
-      final merge = OsmMerge(view, [view.node(5)!, view.way(10)!]);
+      final merge = OsmMergeOperation(view, [view.node(5)!, view.way(10)!]);
       expect(merge.disabled, isNull);
       merge.apply();
       expect(view.way(10)!.tags, {
@@ -347,7 +349,7 @@ void main() {
     test('keeps the point on as one of the area\'s corners', () {
       // Its history carries on in the area rather than ending.
       final view = shop();
-      OsmMerge(view, [view.node(5)!, view.way(10)!]).apply();
+      OsmMergeOperation(view, [view.node(5)!, view.way(10)!]).apply();
       expect(view.node(5), isNotNull);
       expect(view.way(10)!.nodeIds, contains(5));
       expect(view.node(5)!.tags, isEmpty);
@@ -372,7 +374,7 @@ void main() {
           testWay(11, [5, 6, 7, 5], {'area': 'yes'}),
         ],
       );
-      final merge = OsmMerge(view, [view.way(10)!, view.way(11)!]);
+      final merge = OsmMergeOperation(view, [view.way(10)!, view.way(11)!]);
       expect(merge.disabled, isNull);
       merge.apply();
       final relation = view.edits.changedRelations.values.single;
@@ -397,7 +399,7 @@ void main() {
           testWay(11, [5, 6]),
         ],
       );
-      OsmMerge(view, [view.node(2)!, view.node(5)!]).apply();
+      OsmMergeOperation(view, [view.node(2)!, view.node(5)!]).apply();
       // The gate says something and is on the map, so it is kept.
       expect(view.node(2), isNull);
       expect(view.way(10)!.nodeIds, [1, 5, 3, 4]);
@@ -412,7 +414,7 @@ void main() {
         ],
       );
       expect(
-        OsmMerge(view, [view.node(1)!, view.node(2)!]).disabled,
+        OsmMergeOperation(view, [view.node(1)!, view.node(2)!]).disabled,
         'relation',
       );
     });
@@ -432,7 +434,7 @@ void main() {
 
     test('gives each line its own node where they meet', () {
       final view = crossroads();
-      final disconnect = OsmDisconnect(view, [view.node(2)!]);
+      final disconnect = OsmDisconnectOperation(view, [view.node(2)!]);
       expect(disconnect.available, isTrue);
       expect(disconnect.kind, 'single_point.no_ways');
       disconnect.apply();
@@ -445,7 +447,7 @@ void main() {
 
     test('disconnects a selected line from what it touches', () {
       final view = crossroads();
-      final disconnect = OsmDisconnect(view, [view.way(11)!]);
+      final disconnect = OsmDisconnectOperation(view, [view.way(11)!]);
       expect(disconnect.kind, 'no_points.single_way.line');
       disconnect.apply();
       expect(view.way(10)!.nodeIds, [1, 2, 3, 4]);
@@ -454,7 +456,8 @@ void main() {
 
     test('says why a node on one line only cannot be disconnected', () {
       final view = crossroads();
-      expect(OsmDisconnect(view, [view.node(3)!]).disabled, 'not_connected');
+      expect(OsmDisconnectOperation(view, [view.node(3)!]).disabled,
+          'not_connected');
     });
 
     test('says why lines joined in a relation cannot be disconnected', () {
@@ -465,7 +468,8 @@ void main() {
         ], {
           'type': 'route',
         });
-      expect(OsmDisconnect(view, [view.node(2)!]).disabled, 'relation');
+      expect(
+          OsmDisconnectOperation(view, [view.node(2)!]).disabled, 'relation');
     });
   });
 
@@ -482,6 +486,7 @@ void main() {
         testWay(11, [2, 3, 4], {'highway': 'residential'}),
       ],
     );
-    expect(OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled, isNull);
+    expect(OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
+        isNull);
   });
 }

@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
-import '../utf8.dart';
 import 'exception.dart';
 
 /// How a field's value is laid out, which is the low three bits of its tag.
@@ -104,9 +104,9 @@ class ProtobufReader {
   String readString() {
     final length = readVarint();
     final start = _checkedAdvance(length);
-    return decodeUtf8(
+    return utf8.decode(
       Uint8List.sublistView(_bytes, start, _offset),
-      (message) => OsmPbfException(message, offset: start),
+      allowMalformed: true,
     );
   }
 

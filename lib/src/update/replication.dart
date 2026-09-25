@@ -4,7 +4,6 @@ import 'dart:math' as math;
 
 import '../cache.dart';
 import '../exception.dart';
-import '../utf8.dart';
 import 'http.dart';
 
 /// Thrown when a replication feed cannot bring a snapshot up to date: the
@@ -181,8 +180,7 @@ class OsmReplication {
   Future<OsmReplicationState> _state(Uri uri) async {
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return OsmReplicationState.parse(
-        decodeUtf8(body, OsmReplicationException.new));
+    return OsmReplicationState.parse(utf8.decode(body, allowMalformed: true));
   }
 
   /// The first diff holding any edit after [after].
@@ -251,8 +249,7 @@ class OsmReplication {
     );
     return body == null
         ? null
-        : OsmReplicationState.parse(
-            decodeUtf8(body, OsmReplicationException.new));
+        : OsmReplicationState.parse(utf8.decode(body, allowMalformed: true));
   }
 
   /// The oldest diff the feed keeps, between [missing], which it does not,

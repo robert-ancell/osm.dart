@@ -93,11 +93,11 @@ abstract final class OsmChangeFile {
 
     Stream<List<int>> bytes = file.openRead();
     if (gzipped) bytes = bytes.transform(gzip.decoder);
-    // Damaged gzip and text that is not UTF-8 both come as a FormatException
-    // from dart:convert, which is said here as what it means: the file
-    // cannot be read.
+    // Anything that is not UTF-8 is read as U+FFFD, for the parser to say
+    // what is wrong. Damaged gzip comes as a FormatException from dart:io,
+    // which is said here as what it means: the file cannot be read.
     yield* parseStream(
-      bytes.transform(utf8.decoder).handleError(
+      bytes.transform(const Utf8Decoder(allowMalformed: true)).handleError(
             (Object e) => throw OsmXmlException(
               '$path cannot be read: ${(e as FormatException).message}',
             ),

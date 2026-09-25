@@ -1,14 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import '../bounds.dart';
 import '../element.dart';
 import '../xml/change.dart';
-import '../xml/exception.dart';
 import '../xml/osm_xml.dart';
 import '../xml/reader.dart';
 import '../exception.dart';
-import '../utf8.dart';
 import 'http.dart';
 
 /// A changeset, as the API lists one.
@@ -198,8 +197,8 @@ class OsmApi {
         abandon: abandon,
         onLate: onLate == null
             ? null
-            : (late) =>
-                onLate(OsmXmlFile.parse(decodeUtf8(late, OsmXmlException.new))),
+            : (late) => onLate(
+                OsmXmlFile.parse(utf8.decode(late, allowMalformed: true))),
       );
     } on OsmHttpException catch (e) {
       if (e.status == HttpStatus.badRequest) {
@@ -210,7 +209,7 @@ class OsmApi {
     // An empty box is answered with an empty document, not a not found, so
     // nothing here means the ocean rather than a mistake.
     if (body == null) return const [];
-    return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new));
+    return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true));
   }
 
   /// What this API will answer.
@@ -219,7 +218,7 @@ class OsmApi {
     requests++;
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return _capabilities(decodeUtf8(body, OsmXmlException.new));
+    return _capabilities(utf8.decode(body, allowMalformed: true));
   }
 
   static OsmCapabilities _capabilities(String xml) {
@@ -275,7 +274,7 @@ class OsmApi {
     requests++;
     final body = await _fetch(base.resolve('nodes?nodes=${ids.join(',')}'));
     if (body != null) {
-      return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new))
+      return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true))
           .whereType<OsmNode>()
           .toList();
     }
@@ -313,7 +312,7 @@ class OsmApi {
       requests++;
       final body = await _fetch(uri);
       if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-      final page = _changesets(decodeUtf8(body, OsmXmlException.new));
+      final page = _changesets(utf8.decode(body, allowMalformed: true));
       final held = found.length;
       found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
       if (page.length < _changesetPage) break;
@@ -403,7 +402,7 @@ class OsmApi {
       requests++;
       final body = await _fetch(uri);
       if (body == null) return found;
-      final page = _changesets(decodeUtf8(body, OsmXmlException.new));
+      final page = _changesets(utf8.decode(body, allowMalformed: true));
       final held = found.length;
       found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
       if (page.length < _changesetPage) return found;
@@ -424,7 +423,7 @@ class OsmApi {
     final uri = base.resolve('changeset/$id/download');
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return OsmChangeFile.parse(decodeUtf8(body, OsmXmlException.new));
+    return OsmChangeFile.parse(utf8.decode(body, allowMalformed: true));
   }
 
   /// The ways that use node [id].
@@ -432,7 +431,7 @@ class OsmApi {
     requests++;
     final body = await _fetch(base.resolve('node/$id/ways'));
     if (body == null) return const [];
-    return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new))
+    return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true))
         .whereType<OsmWay>()
         .toList();
   }

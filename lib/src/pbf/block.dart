@@ -1,10 +1,10 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../bounds.dart';
 import '../box_index.dart';
 import '../element.dart';
 import '../filter_plan.dart';
-import '../utf8.dart';
 import 'exception.dart';
 import 'fields.dart';
 import 'header.dart';
@@ -191,7 +191,7 @@ class _StringTable {
   int get length => _bytes.length;
 
   String operator [](int index) =>
-      _decoded[index] ??= decodeUtf8(_bytes[index], OsmPbfException.new);
+      _decoded[index] ??= utf8.decode(_bytes[index], allowMalformed: true);
 
   /// The indexes of the entries equal to one of [wanted], or null if there is
   /// nothing to look for.

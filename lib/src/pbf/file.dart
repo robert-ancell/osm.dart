@@ -131,17 +131,17 @@ class OsmPbfFile {
 
   /// Everything standing inside [bounds], with the ways kept whole.
   ///
-  /// The nodes inside the boxes, the ways using any of those nodes along with the rest
-  /// of their nodes wherever those are, and the relations with any of those as
-  /// a member. A way crossing the edge of a box keeps the nodes that fall
-  /// outside it and can still be drawn.
+  /// The nodes inside the boxes, the ways using any of those nodes along with
+  /// the rest of their nodes wherever those are, and the relations with any of
+  /// those as a member. A way crossing the edge of a box keeps the nodes that
+  /// fall outside it and can still be drawn.
   ///
   /// What a kept relation refers to is not read. A relation is kept because it
-  /// has something here, not because it belongs here, and reading the rest of
-  /// a bus route or a coastline that happens to pass by would pull in the
-  /// country around it: on a country extract that can be the difference
-  /// between five and a half million nodes and thirteen million. Pass the relations to [subset]
-  /// if their whole geometry is wanted.
+  /// has something here, not because it belongs here, and reading the rest of a
+  /// bus route or a coastline that happens to pass by would pull in the country
+  /// around it: on a country extract that can be the difference between five
+  /// and a half million nodes and thirteen million. Pass the relations to
+  /// [subset] if their whole geometry is wanted.
   ///
   /// Everything inside is taken. There is no filter here on purpose: what is
   /// inside a box is decided by the nodes standing in it, so a filter narrowing

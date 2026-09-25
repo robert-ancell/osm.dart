@@ -62,8 +62,8 @@ abstract final class Mercator {
   ///
   /// Mercator preserves angles by stretching distances away from the equator,
   /// so a line drawn one pixel wide far from the equator covers less ground
-  /// than the same line nearer to it. Widths that are meant to be in metres have to be
-  /// divided by this.
+  /// than the same line nearer to it. Widths that are meant to be in metres
+  /// have to be divided by this.
   static double metresPerUnit(double latitude) =>
       _earthCircumference * math.cos(latitude * math.pi / 180);
 

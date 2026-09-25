@@ -19,7 +19,7 @@ export 'src/json_exception.dart';
 export 'src/mercator.dart';
 export 'src/tile.dart';
 export 'src/topology.dart' hide osmConnect, osmConnectDisabled;
-export 'src/pbf/apply.dart';
+export 'src/pbf/transformer.dart';
 export 'src/pbf/exception.dart';
 export 'src/pbf/file.dart';
 export 'src/pbf/header.dart';

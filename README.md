@@ -148,9 +148,10 @@ file cannot quietly come out claiming an order its elements do not have.
 ## Applying changes
 
 ```dart
-final counts = await applyOsmChanges(
+final transformer = OsmPbfTransformer(
+    [for (final path in diffs) ...await OsmChangeFile.read(path)]);
+final counts = await transformer.transform(
   input: 'new-zealand.osm.pbf',
-  changes: [for (final path in diffs) ...await OsmChangeFile.read(path)],
   output: 'updated.osm.pbf',
   header: file.header.copyWith(replicationSequenceNumber: 4906),
 );
@@ -200,7 +201,7 @@ final changes = [
 ];
 ```
 
-and then `applyOsmChanges` as above. A block of the file no change falls in is
+and then `OsmPbfTransformer` as above. A block of the file no change falls in is
 copied as it is, so a day of a country's changes is seconds rather than the
 whole file written again.
 

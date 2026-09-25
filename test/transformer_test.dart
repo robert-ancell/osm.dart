@@ -33,9 +33,10 @@ void main() {
 
   test('creates, replaces and removes what the changes say', () async {
     final output = '${_work.path}/applied.osm.pbf';
-    final counts = await applyOsmChanges(
+    final counts = await OsmPbfTransformer(
+            await OsmChangeFile.read('test/data/changes.osc'))
+        .transform(
       input: await _base(),
-      changes: await OsmChangeFile.read('test/data/changes.osc'),
       output: output,
     );
 
@@ -62,9 +63,9 @@ void main() {
   test('writes the elements in order, whatever order they arrived in',
       () async {
     final output = '${_work.path}/ordered.osm.pbf';
-    await applyOsmChanges(
+    await OsmPbfTransformer(await OsmChangeFile.read('test/data/changes.osc'))
+        .transform(
       input: await _base(),
-      changes: await OsmChangeFile.read('test/data/changes.osc'),
       output: output,
     );
 
@@ -86,30 +87,29 @@ void main() {
     // Node 42000001 is at version 3 in the file. Overlapping diffs can hand
     // back an older version, or the same one, and neither may win.
     final output = '${_work.path}/stale.osm.pbf';
-    final counts = await applyOsmChanges(
-      input: await _base(),
-      changes: const [
-        OsmChange(
-          action: OsmChangeAction.modify,
-          type: OsmElementType.node,
+    final counts = await OsmPbfTransformer(const [
+      OsmChange(
+        action: OsmChangeAction.modify,
+        type: OsmElementType.node,
+        id: 42000001,
+        version: 2,
+        element: OsmNode(
           id: 42000001,
-          version: 2,
-          element: OsmNode(
-            id: 42000001,
-            latitude: 9,
-            longitude: 9,
-            info: OsmInfo(version: 2),
-          ),
+          latitude: 9,
+          longitude: 9,
+          info: OsmInfo(version: 2),
         ),
-        // Node 42000004 is at version 2, and a delete of version 1 is
-        // older than it.
-        OsmChange(
-          action: OsmChangeAction.delete,
-          type: OsmElementType.node,
-          id: 42000004,
-          version: 1,
-        ),
-      ],
+      ),
+      // Node 42000004 is at version 2, and a delete of version 1 is
+      // older than it.
+      OsmChange(
+        action: OsmChangeAction.delete,
+        type: OsmElementType.node,
+        id: 42000004,
+        version: 1,
+      ),
+    ]).transform(
+      input: await _base(),
       output: output,
     );
     expect(counts.stale, 2);
@@ -128,22 +128,21 @@ void main() {
     // no newer than the file, four deleted golf courses stayed in a
     // country's extract for good.
     final output = '${_work.path}/deleted.osm.pbf';
-    final counts = await applyOsmChanges(
+    final counts = await OsmPbfTransformer(const [
+      OsmChange(
+        action: OsmChangeAction.delete,
+        type: OsmElementType.node,
+        id: 42000003,
+        version: 11,
+      ),
+      OsmChange(
+        action: OsmChangeAction.delete,
+        type: OsmElementType.way,
+        id: 42000801,
+        version: 7,
+      ),
+    ]).transform(
       input: await _base(),
-      changes: const [
-        OsmChange(
-          action: OsmChangeAction.delete,
-          type: OsmElementType.node,
-          id: 42000003,
-          version: 11,
-        ),
-        OsmChange(
-          action: OsmChangeAction.delete,
-          type: OsmElementType.way,
-          id: 42000801,
-          version: 7,
-        ),
-      ],
       output: output,
     );
     expect(counts.deleted, 2);
@@ -196,40 +195,39 @@ void main() {
 
     test('copies the blocks no change falls in as they are', () async {
       final output = '${_work.path}/blocks-applied.osm.pbf';
-      final counts = await applyOsmChanges(
-        input: input,
-        changes: const [
-          // In the second block.
-          OsmChange(
-            action: OsmChangeAction.modify,
-            type: OsmElementType.node,
+      final counts = await OsmPbfTransformer(const [
+        // In the second block.
+        OsmChange(
+          action: OsmChangeAction.modify,
+          type: OsmElementType.node,
+          id: 20000,
+          version: 2,
+          element: OsmNode(
             id: 20000,
-            version: 2,
-            element: OsmNode(
-              id: 20000,
-              latitude: 1,
-              longitude: 1,
-              info: OsmInfo(version: 2),
-            ),
+            latitude: 1,
+            longitude: 1,
+            info: OsmInfo(version: 2),
           ),
-          // Between two ids of the second block, which the file does not
-          // hold.
-          OsmChange(
-            action: OsmChangeAction.create,
-            type: OsmElementType.node,
-            id: 20001,
-            version: 1,
-            element: OsmNode(id: 20001, latitude: 2, longitude: 2),
-          ),
-          // Past everything, and before the ways.
-          OsmChange(
-            action: OsmChangeAction.create,
-            type: OsmElementType.node,
-            id: 90000,
-            version: 1,
-            element: OsmNode(id: 90000, latitude: 3, longitude: 3),
-          ),
-        ],
+        ),
+        // Between two ids of the second block, which the file does not
+        // hold.
+        OsmChange(
+          action: OsmChangeAction.create,
+          type: OsmElementType.node,
+          id: 20001,
+          version: 1,
+          element: OsmNode(id: 20001, latitude: 2, longitude: 2),
+        ),
+        // Past everything, and before the ways.
+        OsmChange(
+          action: OsmChangeAction.create,
+          type: OsmElementType.node,
+          id: 90000,
+          version: 1,
+          element: OsmNode(id: 90000, latitude: 3, longitude: 3),
+        ),
+      ]).transform(
+        input: input,
         output: output,
       );
       expect(counts.modified, 1);
@@ -263,16 +261,15 @@ void main() {
 
     test('and a delete in a block is the only thing that changes', () async {
       final output = '${_work.path}/blocks-deleted.osm.pbf';
-      await applyOsmChanges(
+      await OsmPbfTransformer(const [
+        OsmChange(
+          action: OsmChangeAction.delete,
+          type: OsmElementType.node,
+          id: 40000,
+          version: 1,
+        ),
+      ]).transform(
         input: input,
-        changes: const [
-          OsmChange(
-            action: OsmChangeAction.delete,
-            type: OsmElementType.node,
-            id: 40000,
-            version: 1,
-          ),
-        ],
         output: output,
       );
       final ids = (await _elementsOf(output)).map((e) => e.id).toSet();
@@ -295,10 +292,9 @@ void main() {
           ),
         );
     final output = '${_work.path}/newest.osm.pbf';
-    await applyOsmChanges(
+    // An hour diff and then the minute diffs overlapping it.
+    await OsmPbfTransformer([version(6), version(4), version(5)]).transform(
       input: await _base(),
-      // An hour diff and then the minute diffs overlapping it.
-      changes: [version(6), version(4), version(5)],
       output: output,
     );
     final node = (await _elementsOf(output)).firstWhere((e) => e.id == 42000001)
@@ -308,15 +304,14 @@ void main() {
 
   test('counts a change for something the file never had', () async {
     final output = '${_work.path}/missed.osm.pbf';
-    final counts = await applyOsmChanges(
+    final counts = await OsmPbfTransformer(const [
+      OsmChange(
+        action: OsmChangeAction.delete,
+        type: OsmElementType.node,
+        id: 999999,
+      ),
+    ]).transform(
       input: await _base(),
-      changes: const [
-        OsmChange(
-          action: OsmChangeAction.delete,
-          type: OsmElementType.node,
-          id: 999999,
-        ),
-      ],
       output: output,
     );
     expect(counts.missed, 1);
@@ -329,9 +324,9 @@ void main() {
     final was = (await OsmPbfFile.open(input)).header;
     final output = '${_work.path}/moved.osm.pbf';
 
-    await applyOsmChanges(
+    await OsmPbfTransformer(await OsmChangeFile.read('test/data/changes.osc'))
+        .transform(
       input: input,
-      changes: await OsmChangeFile.read('test/data/changes.osc'),
       output: output,
       header: was.copyWith(
         replicationSequenceNumber: 42,
@@ -349,12 +344,27 @@ void main() {
 
   test('refuses a file that does not say its elements are in order', () async {
     await expectLater(
-      applyOsmChanges(
+      OsmPbfTransformer(const []).transform(
         input: 'test/data/elements.osm.pbf',
-        changes: const [],
         output: '${_work.path}/never.osm.pbf',
       ),
       throwsA(isA<OsmPbfException>()),
     );
+  });
+
+  test('applies the same changes to each file it is given', () async {
+    final transformer =
+        OsmPbfTransformer(await OsmChangeFile.read('test/data/changes.osc'));
+    final input = await _base();
+    final first = await transformer.transform(
+      input: input,
+      output: '${_work.path}/first.osm.pbf',
+    );
+    final second = await transformer.transform(
+      input: input,
+      output: '${_work.path}/second.osm.pbf',
+    );
+    expect(second.toString(), first.toString());
+    expect(first.created + first.modified + first.deleted, greaterThan(0));
   });
 }

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import '../element.dart';
-import '../pbf/apply.dart';
+import '../pbf/transformer.dart';
 import '../pbf/file.dart';
 import '../version.g.dart';
 import '../xml/change.dart';
@@ -144,9 +144,9 @@ Future<OsmUpdateResult> updateOsmSnapshot({
   }
 
   say('Writing $output...');
-  final counts = await applyOsmChanges(
+  final counts =
+      await OsmPbfTransformer([...filter.kept, ...lookedUp]).transform(
     input: input,
-    changes: [...filter.kept, ...lookedUp],
     output: output,
     header: file.header.copyWith(
       replicationBaseUrl: reached == null

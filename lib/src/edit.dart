@@ -14,6 +14,11 @@ part 'editor.dart';
 /// old one must have been.
 sealed class OsmEdit {
   const OsmEdit();
+}
+
+/// A change to one element, and whatever that took with it.
+sealed class OsmElementEdit extends OsmEdit {
+  const OsmElementEdit();
 
   /// The kind of element changed.
   OsmElementType get type;
@@ -23,12 +28,12 @@ sealed class OsmEdit {
 }
 
 /// A node that was not there before.
-class OsmNodeCreated extends OsmEdit {
+class OsmNodeCreated extends OsmElementEdit {
   /// The node made.
   final OsmNode node;
 
   /// Creates a record of a new node.
-  const OsmNodeCreated(this.node);
+  const OsmNodeCreated._(this.node);
 
   @override
   OsmElementType get type => OsmElementType.node;
@@ -41,7 +46,7 @@ class OsmNodeCreated extends OsmEdit {
 }
 
 /// A node taken off the map.
-class OsmNodeDeleted extends OsmEdit {
+class OsmNodeDeleted extends OsmElementEdit {
   /// The node as it was.
   final OsmNode node;
 
@@ -59,15 +64,15 @@ class OsmNodeDeleted extends OsmEdit {
 
   /// Whether [node] is the node as it was read, rather than as an earlier
   /// change left it. Undoing back to what was read means holding nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a deletion.
-  const OsmNodeDeleted(
+  const OsmNodeDeleted._(
     this.node, {
     this.ways = const [],
     this.relations = const [],
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.node;
@@ -80,12 +85,12 @@ class OsmNodeDeleted extends OsmEdit {
 }
 
 /// A way that was not there before.
-class OsmWayCreated extends OsmEdit {
+class OsmWayCreated extends OsmElementEdit {
   /// The way made.
   final OsmWay way;
 
   /// Creates a record of a new way.
-  const OsmWayCreated(this.way);
+  const OsmWayCreated._(this.way);
 
   @override
   OsmElementType get type => OsmElementType.way;
@@ -101,7 +106,7 @@ class OsmWayCreated extends OsmEdit {
 ///
 /// Only the way: whichever of its nodes go with it are deletions of their
 /// own, gathered into the same change by whoever deleted it.
-class OsmWayDeleted extends OsmEdit {
+class OsmWayDeleted extends OsmElementEdit {
   /// The way as it was.
   final OsmWay way;
 
@@ -110,14 +115,14 @@ class OsmWayDeleted extends OsmEdit {
 
   /// Whether [way] is the way as it was read, rather than as an earlier
   /// change left it. Undoing back to what was read means holding nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a deletion.
-  const OsmWayDeleted(
+  const OsmWayDeleted._(
     this.way, {
     this.relations = const [],
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.way;
@@ -130,12 +135,12 @@ class OsmWayDeleted extends OsmEdit {
 }
 
 /// A relation that was not there before.
-class OsmRelationCreated extends OsmEdit {
+class OsmRelationCreated extends OsmElementEdit {
   /// The relation made.
   final OsmRelation relation;
 
   /// Creates a record of a new relation.
-  const OsmRelationCreated(this.relation);
+  const OsmRelationCreated._(this.relation);
 
   @override
   OsmElementType get type => OsmElementType.relation;
@@ -148,7 +153,7 @@ class OsmRelationCreated extends OsmEdit {
 }
 
 /// A relation taken off the map.
-class OsmRelationDeleted extends OsmEdit {
+class OsmRelationDeleted extends OsmElementEdit {
   /// The relation as it was.
   final OsmRelation relation;
 
@@ -158,14 +163,14 @@ class OsmRelationDeleted extends OsmEdit {
   /// Whether [relation] is the relation as it was read, rather than as an
   /// earlier change left it. Undoing back to what was read means holding
   /// nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a deletion.
-  const OsmRelationDeleted(
+  const OsmRelationDeleted._(
     this.relation, {
     this.relations = const [],
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.relation;
@@ -178,7 +183,7 @@ class OsmRelationDeleted extends OsmEdit {
 }
 
 /// The members of a relation, changed.
-class OsmRelationChanged extends OsmEdit {
+class OsmRelationChanged extends OsmElementEdit {
   /// The relation as it was.
   final OsmRelation from;
 
@@ -188,14 +193,14 @@ class OsmRelationChanged extends OsmEdit {
   /// Whether [from] is the relation as it was read, rather than as an
   /// earlier change left it. Undoing back to what was read means holding
   /// nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a change to a relation's members.
-  const OsmRelationChanged({
+  const OsmRelationChanged._({
     required this.from,
     required this.to,
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.relation;
@@ -208,7 +213,7 @@ class OsmRelationChanged extends OsmEdit {
 }
 
 /// The nodes a way runs through, changed.
-class OsmWayNodesChanged extends OsmEdit {
+class OsmWayNodesChanged extends OsmElementEdit {
   /// The way as it was.
   final OsmWay from;
 
@@ -217,14 +222,14 @@ class OsmWayNodesChanged extends OsmEdit {
 
   /// Whether [from] is the way as it was read, rather than an earlier
   /// change to it. Undoing back to what was read means holding nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a change to a way's nodes.
-  const OsmWayNodesChanged({
+  const OsmWayNodesChanged._({
     required this.from,
     required this.to,
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.way;
@@ -244,23 +249,16 @@ class OsmWayNodesChanged extends OsmEdit {
 /// line, and a line is what is put back.
 class OsmEditGroup extends OsmEdit {
   /// What was done, in the order it was done.
-  final List<OsmEdit> changes;
+  final List<OsmEdit> edits;
 
-  /// Creates a group.
-  const OsmEditGroup(this.changes);
-
-  @override
-  OsmElementType get type => changes.last.type;
+  const OsmEditGroup._(this.edits);
 
   @override
-  int get id => changes.last.id;
-
-  @override
-  String toString() => 'OsmEditGroup(${changes.length})';
+  String toString() => 'OsmEditGroup(${edits.length})';
 }
 
 /// A node moved to somewhere else.
-class OsmNodeMoved extends OsmEdit {
+class OsmNodeMoved extends OsmElementEdit {
   /// Where it was.
   final OsmNode from;
 
@@ -269,14 +267,14 @@ class OsmNodeMoved extends OsmEdit {
 
   /// Whether [from] is the node as it was read, rather than as an earlier
   /// change left it. Undoing back to what was read means holding nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a move.
-  const OsmNodeMoved({
+  const OsmNodeMoved._({
     required this.from,
     required this.to,
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => OsmElementType.node;
@@ -289,7 +287,7 @@ class OsmNodeMoved extends OsmEdit {
 }
 
 /// The tags of a node or a way, changed.
-class OsmTagsChanged extends OsmEdit {
+class OsmTagsChanged extends OsmElementEdit {
   /// The element as it was.
   final OsmElement from;
 
@@ -298,14 +296,14 @@ class OsmTagsChanged extends OsmEdit {
 
   /// Whether [from] is the element as it was read, rather than as an earlier
   /// change left it. Undoing back to what was read means holding nothing.
-  final bool wasRead;
+  final bool _wasRead;
 
   /// Creates a record of a change to an element's tags.
-  const OsmTagsChanged({
+  const OsmTagsChanged._({
     required this.from,
     required this.to,
-    this.wasRead = false,
-  });
+    bool wasRead = false,
+  }) : _wasRead = wasRead;
 
   @override
   OsmElementType get type => from.type;
@@ -360,8 +358,8 @@ class OsmEditHistory {
   /// Creates a set of changes.
   OsmEditHistory({this.onChanged});
 
-  /// The changes made, oldest first.
-  List<OsmEdit> get changes => List.unmodifiable(_done);
+  /// The edits made, oldest first.
+  List<OsmEdit> get edits => List.unmodifiable(_done);
 
   /// How many changes have been made.
   int get length => _done.length;
@@ -429,7 +427,7 @@ class OsmEditHistory {
       tags: tags,
     );
     _nodes[node.id] = node;
-    _done.add(OsmNodeCreated(node));
+    _done.add(OsmNodeCreated._(node));
     _changed();
     return node;
   }
@@ -441,7 +439,7 @@ class OsmEditHistory {
   }) {
     final way = OsmWay(id: _nextId--, nodeIds: [...nodeIds], tags: tags);
     _ways[way.id] = way;
-    _done.add(OsmWayCreated(way));
+    _done.add(OsmWayCreated._(way));
     _changed();
     return way;
   }
@@ -457,7 +455,7 @@ class OsmEditHistory {
       tags: tags,
     );
     _relations[relation.id] = relation;
-    _done.add(OsmRelationCreated(relation));
+    _done.add(OsmRelationCreated._(relation));
     _changed();
     return relation;
   }
@@ -494,7 +492,7 @@ class OsmEditHistory {
     // out of the edits and there is nothing to tell OpenStreetMap about.
     if (node.id > 0) _deleted[node.id] = current;
     _done.add(
-      OsmNodeDeleted(
+      OsmNodeDeleted._(
         current,
         ways: ways,
         relations: members,
@@ -517,7 +515,7 @@ class OsmEditHistory {
     _gone.add((OsmElementType.way, way.id));
     if (way.id > 0) _deletedWays[way.id] = current;
     _done.add(
-      OsmWayDeleted(current, relations: members, wasRead: wasRead),
+      OsmWayDeleted._(current, relations: members, wasRead: wasRead),
     );
     _changed();
   }
@@ -539,7 +537,7 @@ class OsmEditHistory {
     _gone.add((OsmElementType.relation, relation.id));
     if (relation.id > 0) _deletedRelations[relation.id] = current;
     _done.add(
-      OsmRelationDeleted(current, relations: members, wasRead: wasRead),
+      OsmRelationDeleted._(current, relations: members, wasRead: wasRead),
     );
     _changed();
   }
@@ -580,7 +578,7 @@ class OsmEditHistory {
       info: was.info,
     );
     _relations[relation.id] = now;
-    return OsmRelationChanged(from: was, to: now, wasRead: wasRead);
+    return OsmRelationChanged._(from: was, to: now, wasRead: wasRead);
   }
 
   /// Puts [way] through [nodeIds] instead of what it ran through before.
@@ -605,7 +603,7 @@ class OsmEditHistory {
       info: was.info,
     );
     _ways[way.id] = now;
-    return OsmWayNodesChanged(from: was, to: now, wasRead: wasRead);
+    return OsmWayNodesChanged._(from: was, to: now, wasRead: wasRead);
   }
 
   /// Moves [node] to ([latitude], [longitude]).
@@ -629,14 +627,14 @@ class OsmEditHistory {
 
     final last = _done.isEmpty ? null : _done.last;
     if (continuing && last is OsmNodeMoved && last.id == node.id) {
-      _done[_done.length - 1] = OsmNodeMoved(
+      _done[_done.length - 1] = OsmNodeMoved._(
         from: last.from,
         to: moved,
-        wasRead: last.wasRead,
+        wasRead: last._wasRead,
       );
     } else {
       _done.add(
-        OsmNodeMoved(
+        OsmNodeMoved._(
           from: _nodes[node.id] ?? node,
           to: moved,
           wasRead: !_nodes.containsKey(node.id),
@@ -650,8 +648,9 @@ class OsmEditHistory {
   /// Gives [element] [tags] in place of the ones it has, and says whether
   /// that changed anything.
   ///
-  /// A node or a way, as it now stands or as it was read. Everything but the
-  /// tags is kept, and nothing is recorded if the tags are already these.
+  /// A node, a way or a relation, as it now stands or as it was read.
+  /// Everything but the tags is kept, and nothing is recorded if the tags are
+  /// already these.
   bool _setTags(OsmElement element, Map<String, String> tags) {
     if (isGone(element.type, element.id)) return false;
     final OsmElement was;
@@ -664,7 +663,8 @@ class OsmEditHistory {
         wasRead = !_ways.containsKey(element.id);
         was = _ways[element.id] ?? element;
       case OsmRelation():
-        throw ArgumentError.value(element, 'element', 'not a node or a way');
+        wasRead = !_relations.containsKey(element.id);
+        was = _relations[element.id] ?? element;
     }
     if (_sameTags(was.tags, tags)) return false;
 
@@ -686,10 +686,15 @@ class OsmEditHistory {
           tags: kept,
           info: way.info,
         );
-      case OsmRelation():
-        throw StateError('unreachable');
+      case final OsmRelation relation:
+        now = _relations[relation.id] = OsmRelation(
+          id: relation.id,
+          members: relation.members,
+          tags: kept,
+          info: relation.info,
+        );
     }
-    _done.add(OsmTagsChanged(from: was, to: now, wasRead: wasRead));
+    _done.add(OsmTagsChanged._(from: was, to: now, wasRead: wasRead));
     _changed();
     return true;
   }
@@ -711,7 +716,7 @@ class OsmEditHistory {
     if (mark < 0 || _done.length - mark < 2) return;
     final gathered = _done.sublist(mark);
     _done.removeRange(mark, _done.length);
-    _done.add(OsmEditGroup(gathered));
+    _done.add(OsmEditGroup._(gathered));
     onChanged?.call();
   }
 
@@ -723,7 +728,7 @@ class OsmEditHistory {
   }
 
   /// What uploading these changes would send.
-  OsmUpload get upload {
+  OsmUpload toUpload() {
     final nodes = changedNodes;
     final ways = changedWays;
     return OsmUpload(
@@ -790,7 +795,7 @@ class OsmEditHistory {
   void _redoOne(OsmEdit change) {
     switch (change) {
       case OsmEditGroup():
-        for (final part in change.changes) {
+        for (final part in change.edits) {
           _redoOne(part);
         }
       case OsmNodeMoved():
@@ -835,8 +840,8 @@ class OsmEditHistory {
             _nodes[node.id] = node;
           case final OsmWay way:
             _ways[way.id] = way;
-          case OsmRelation():
-            break;
+          case final OsmRelation relation:
+            _relations[relation.id] = relation;
         }
     }
   }
@@ -844,17 +849,17 @@ class OsmEditHistory {
   void _undoOne(OsmEdit last) {
     switch (last) {
       case OsmEditGroup():
-        for (final change in last.changes.reversed) {
+        for (final change in last.edits.reversed) {
           _undoOne(change);
         }
       case OsmNodeMoved():
-        _putNode(last.from, wasRead: last.wasRead);
+        _putNode(last.from, wasRead: last._wasRead);
       case OsmNodeCreated():
         _nodes.remove(last.id);
       case OsmNodeDeleted():
         _gone.remove((OsmElementType.node, last.id));
         _deleted.remove(last.id);
-        _putNode(last.node, wasRead: last.wasRead);
+        _putNode(last.node, wasRead: last._wasRead);
         for (final change in last.relations.reversed) {
           _undoRelation(change);
         }
@@ -864,7 +869,7 @@ class OsmEditHistory {
       case OsmWayDeleted():
         _gone.remove((OsmElementType.way, last.id));
         _deletedWays.remove(last.id);
-        if (!last.wasRead) _ways[last.id] = last.way;
+        if (!last._wasRead) _ways[last.id] = last.way;
         for (final change in last.relations.reversed) {
           _undoRelation(change);
         }
@@ -875,7 +880,7 @@ class OsmEditHistory {
       case OsmRelationDeleted():
         _gone.remove((OsmElementType.relation, last.id));
         _deletedRelations.remove(last.id);
-        if (!last.wasRead) _relations[last.id] = last.relation;
+        if (!last._wasRead) _relations[last.id] = last.relation;
         for (final change in last.relations.reversed) {
           _undoRelation(change);
         }
@@ -889,7 +894,7 @@ class OsmEditHistory {
   }
 
   void _undoRelation(OsmRelationChanged change) {
-    if (change.wasRead) {
+    if (change._wasRead) {
       _relations.remove(change.id);
     } else {
       _relations[change.id] = change.from;
@@ -908,21 +913,25 @@ class OsmEditHistory {
   void _undoTags(OsmTagsChanged change) {
     switch (change.from) {
       case final OsmNode node:
-        _putNode(node, wasRead: change.wasRead);
+        _putNode(node, wasRead: change._wasRead);
       case final OsmWay way:
-        if (change.wasRead) {
+        if (change._wasRead) {
           _ways.remove(way.id);
         } else {
           _ways[way.id] = way;
         }
-      case OsmRelation():
-        break;
+      case final OsmRelation relation:
+        if (change._wasRead) {
+          _relations.remove(relation.id);
+        } else {
+          _relations[relation.id] = relation;
+        }
     }
   }
 
   /// Puts a way back to however it ran before a change.
   void _undoWay(OsmWayNodesChanged change) {
-    if (change.wasRead) {
+    if (change._wasRead) {
       _ways.remove(change.id);
     } else {
       _ways[change.id] = change.from;

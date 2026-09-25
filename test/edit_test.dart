@@ -16,7 +16,7 @@ void main() {
   test('holds nothing to begin with', () {
     final edits = editorOf();
     expect(edits.history.isEmpty, isTrue);
-    expect(edits.history.changes, isEmpty);
+    expect(edits.history.edits, isEmpty);
     expect(edits.history.changedNode(1), isNull);
     expect(edits.undo(), isFalse);
   });
@@ -44,9 +44,9 @@ void main() {
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
     edits.moveNode(_node, latitude: -36.87, longitude: 174.78);
     expect(edits.history.length, 2);
-    expect(edits.history.changes.first, isA<OsmNodeMoved>());
-    expect((edits.history.changes.first as OsmNodeMoved).from.latitude, -36.85);
-    expect((edits.history.changes.last as OsmNodeMoved).to.latitude, -36.87);
+    expect(edits.history.edits.first, isA<OsmNodeMoved>());
+    expect((edits.history.edits.first as OsmNodeMoved).from.latitude, -36.85);
+    expect((edits.history.edits.last as OsmNodeMoved).to.latitude, -36.87);
   });
 
   test('counts a drag as one change rather than one a frame', () {
@@ -122,7 +122,7 @@ void main() {
   test('hands out a list of changes that cannot be written to', () {
     final edits = editorOf();
     edits.moveNode(_node, latitude: -36.86, longitude: 174.77);
-    expect(() => edits.history.changes.clear(), throwsUnsupportedError);
+    expect(() => edits.history.edits.clear(), throwsUnsupportedError);
     expect(() => edits.history.changedNodes.clear(), throwsUnsupportedError);
   });
 }
@@ -140,7 +140,7 @@ void _more() {
       final made = edits.createNode(latitude: -36.85, longitude: 174.76);
       expect(made.id, lessThan(0), reason: 'not uploaded yet');
       expect(edits.history.changedNode(made.id), made);
-      expect(edits.history.changes.single, isA<OsmNodeCreated>());
+      expect(edits.history.edits.single, isA<OsmNodeCreated>());
     });
 
     test('gives every new thing a different id', () {
@@ -253,7 +253,7 @@ void _groups() {
   group('changes made as one', () {
     test('gathers what was done since a mark', () {
       final edits = editorOf();
-      final mark = edits.history.length;
+      final mark = edits.mark();
       final first = edits.createNode(latitude: 0, longitude: 0);
       final second = edits.createNode(latitude: 1, longitude: 1);
       edits.createWay(nodeIds: [first.id, second.id]);
@@ -261,12 +261,12 @@ void _groups() {
 
       edits.combineSince(mark);
       expect(edits.history.length, 1);
-      expect(edits.history.changes.single, isA<OsmEditGroup>());
+      expect(edits.history.edits.single, isA<OsmEditGroup>());
     });
 
     test('undoes the whole of it at once', () {
       final edits = editorOf();
-      final mark = edits.history.length;
+      final mark = edits.mark();
       final first = edits.createNode(latitude: 0, longitude: 0);
       final second = edits.createNode(latitude: 1, longitude: 1);
       final way = edits.createWay(nodeIds: [first.id, second.id]);
@@ -282,7 +282,7 @@ void _groups() {
     test('leaves what was done before the mark alone', () {
       final edits = editorOf();
       final kept = edits.createNode(latitude: 5, longitude: 5);
-      final mark = edits.history.length;
+      final mark = edits.mark();
       final first = edits.createNode(latitude: 0, longitude: 0);
       edits.createWay(nodeIds: [first.id]);
       edits.combineSince(mark);
@@ -295,10 +295,10 @@ void _groups() {
     test('gathers nothing when there is nothing to gather', () {
       final edits = editorOf();
       edits.createNode(latitude: 0, longitude: 0);
-      final mark = edits.history.length;
+      final mark = edits.mark();
       edits.combineSince(mark);
       expect(edits.history.length, 1);
-      expect(edits.history.changes.single, isA<OsmNodeCreated>());
+      expect(edits.history.edits.single, isA<OsmNodeCreated>());
 
       edits.createNode(latitude: 1, longitude: 1);
       edits.combineSince(mark);
@@ -308,7 +308,7 @@ void _groups() {
     test('undoes a group of moves back to where things started', () {
       const node = OsmNode(id: 1, latitude: 0, longitude: 0);
       final edits = editorOf();
-      final mark = edits.history.length;
+      final mark = edits.mark();
       edits.moveNode(node, latitude: 1, longitude: 1);
       edits.moveNode(node, latitude: 2, longitude: 2);
       edits.combineSince(mark);
@@ -323,7 +323,7 @@ void _groups() {
     // afterwards and taking that back must leave the point where it was put,
     // not take it away from under the line.
     final edits = editorOf();
-    final mark = edits.history.length;
+    final mark = edits.mark();
     final a = edits.createNode(latitude: 1, longitude: 1);
     final b = edits.createNode(latitude: 2, longitude: 2);
     edits.createWay(nodeIds: [a.id, b.id]);
@@ -405,7 +405,7 @@ void _groups() {
 
     test('changes several elements as one', () {
       final edits = editorOf();
-      final mark = edits.history.length;
+      final mark = edits.mark();
       edits
         ..setTags(_node, const {'name': 'Queen Street'})
         ..setTags(way, const {'name': 'Queen Street'})
@@ -416,20 +416,20 @@ void _groups() {
       expect(edits.history.changedWay(9), isNull);
     });
 
-    test('will not tag a relation', () {
+    test('tags a relation as it does anything else', () {
       const relation = OsmRelation(id: 3, members: [], tags: {});
-      expect(
-        () => editorOf().setTags(relation, const {'type': 'route'}),
-        throwsArgumentError,
-      );
+      final edits = editorOf([relation]);
+      expect(edits.setTags(relation, const {'type': 'route'}), isTrue);
+      expect(edits.relation(3)!.tags, {'type': 'route'});
     });
 
     test('sends a retagged node with its new tags', () {
       final edits = editorOf()..setTags(_node, const {'amenity': 'bench'});
-      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
+      final xml =
+          edits.history.toUpload().toXml(changeset: 1, createdBy: 'test');
       expect(xml, contains('<tag k="amenity" v="bench"/>'));
       expect(xml, isNot(contains('crossing')));
-      expect(edits.history.upload.describe(), ['Change node/1']);
+      expect(edits.history.toUpload().describe(), ['Change node/1']);
     });
   });
 
@@ -526,7 +526,8 @@ void _groups() {
         )
         // The way as the edits have it by now, without the node.
         ..deleteWay(way);
-      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
+      final xml =
+          edits.history.toUpload().toXml(changeset: 1, createdBy: 'test');
       final relation = xml.indexOf('<relation id="30" version="7"');
       final deletedWay = xml.indexOf('<way id="9"', xml.indexOf('<delete>'));
       final deletedNode = xml.indexOf('<node id="2"', xml.indexOf('<delete>'));
@@ -535,7 +536,7 @@ void _groups() {
       expect(deletedWay, lessThan(deletedNode));
       expect(xml, contains('<member type="way" ref="8" role=""/>'));
       expect(xml, isNot(contains('ref="9" role')));
-      expect(edits.history.upload.describe(), [
+      expect(edits.history.toUpload().describe(), [
         'Change relation/30',
         'Delete way/9',
         'Delete node/2',
@@ -586,7 +587,8 @@ void _groups() {
       final edits = editorOf([outer])..deleteRelation(inner);
       expect(edits.history.isGone(OsmElementType.relation, 40), isTrue);
       expect(edits.history.changedRelation(41)!.members, isEmpty);
-      final xml = edits.history.upload.toXml(changeset: 1, createdBy: 'test');
+      final xml =
+          edits.history.toUpload().toXml(changeset: 1, createdBy: 'test');
       expect(
         xml.indexOf('<relation id="41"'),
         lessThan(xml.indexOf('<relation id="40"')),
@@ -605,11 +607,11 @@ void _groups() {
   test('undoes everything since a mark, and nothing before it', () {
     final edits = editorOf();
     final kept = edits.createNode(latitude: 0, longitude: 0);
-    final mark = edits.history.length;
+    final mark = edits.mark();
     edits.createNode(latitude: 1, longitude: 1);
     edits.createNode(latitude: 2, longitude: 2);
     edits.undoSince(mark);
-    expect(edits.history.length, mark);
+    expect(edits.history.length, 1);
     expect(edits.history.changedNodes.keys, [kept.id]);
   });
 }

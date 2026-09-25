@@ -141,7 +141,7 @@ void main() {
 
     test('cannot redo what was given up on', () {
       final editor = _square();
-      final mark = editor.history.length;
+      final mark = editor.mark();
       editor.createNode(latitude: 1, longitude: 1);
       editor.undoSince(mark);
       expect(editor.canRedo, isFalse);
@@ -197,6 +197,67 @@ void main() {
     editor.createNode(latitude: 0, longitude: 0);
     editor.undo();
     expect(told, 2);
+  });
+
+  test('retags a relation, and undoes and redoes it', () {
+    final editor = editorOf([
+      const OsmRelation(
+        id: 20,
+        members: [],
+        tags: {'type': 'route'},
+        info: OsmInfo(version: 1),
+      ),
+    ]);
+    editor.setTags(editor.relation(20)!, {'type': 'route', 'name': 'A'});
+    expect(editor.relation(20)!.tags['name'], 'A');
+    expect(editor.history.toUpload().changedRelations.single.id, 20);
+    editor.undo();
+    expect(editor.relation(20)!.tags['name'], isNull);
+    editor.redo();
+    expect(editor.relation(20)!.tags['name'], 'A');
+  });
+
+  test('merges an area into the multipolygon beside it', () {
+    final editor = testEditor(
+      nodes: [
+        for (var i = 0; i < 8; i++)
+          testNode(i + 1, (i ~/ 4) * 0.01, (i % 4) * 0.001),
+      ],
+      ways: [
+        testWay(10, [1, 2, 6, 5, 1], {'building': 'yes'}),
+        testWay(11, [3, 4, 8, 7, 3], {'building': 'yes'}),
+      ],
+      relations: [
+        const OsmRelation(
+          id: 20,
+          members: [
+            OsmMember(type: OsmElementType.way, ref: 10, role: 'outer'),
+          ],
+          tags: {'type': 'multipolygon', 'building': 'yes'},
+        ),
+      ],
+    );
+    editor.merge([editor.relation(20)!, editor.way(11)!]).apply();
+    final merged = editor.relation(20)!;
+    expect(merged.members.map((m) => m.ref), unorderedEquals([10, 11]));
+    expect(merged.tags, {'type': 'multipolygon', 'building': 'yes'});
+  });
+
+  test('makes nodes one, as an operation', () {
+    final editor = testEditor(
+      nodes: [testNode(1, 0, 0), testNode(2, 0, 0.001), testNode(3, 1, 1)],
+      ways: [
+        testWay(10, [1, 3]),
+        testWay(11, [2, 3]),
+      ],
+    );
+    expect(editor.connect([editor.node(1)!]).available, isFalse);
+    final connect = editor.connect([editor.node(1)!, editor.node(2)!]);
+    expect(connect.available, isTrue);
+    expect(connect.disabled, isNull);
+    connect.apply();
+    expect(editor.way(10)!.nodeIds.first, editor.way(11)!.nodeIds.first);
+    expect(editor.history.length, 1);
   });
 }
 

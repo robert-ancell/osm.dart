@@ -39,7 +39,7 @@ class OsmUploadException implements OsmException {
 /// What an upload would send: elements made, changed and taken off the map.
 ///
 /// An editor's history gathers one of these out of its edits,
-/// `OsmEditHistory.upload`.
+/// `OsmEditHistory.toUpload`.
 ///
 /// Made once and shown before it is sent: the list somebody reads and the
 /// document that goes are built from the same thing, so what was agreed to

@@ -386,7 +386,7 @@ void main() {
       final copied = view.copy([view.way(11)!], worldAnchor: (0.5, 0.5))!;
       expect(copied.length, 1);
       expect(copied.nodes.keys, containsAll([2, 4]));
-      final pasted = view.paste(copied, worldDx: 0.001, worldDy: 0);
+      final pasted = view.paste(copied, worldDx: 0.001, worldDy: 0).apply();
       final way = pasted.single as OsmWay;
       expect(way.id, isNegative);
       expect(way.tags, {'highway': 'service'});
@@ -425,7 +425,8 @@ void main() {
     test('moves a way and its nodes, once each, as one change', () {
       final view = _roads();
       final before = OsmMercator.x(view.node(2)!.longitude);
-      view.move([view.way(10)!, view.node(2)!], worldDx: 0.0001, worldDy: 0);
+      view.move([view.way(10)!, view.node(2)!],
+          worldDx: 0.0001, worldDy: 0).apply();
       expect(
         OsmMercator.x(view.node(2)!.longitude),
         closeTo(before + 0.0001, 1e-12),
@@ -458,12 +459,12 @@ void main() {
 
     test('moves and pastes across it onto real longitudes', () {
       final view = across();
-      view.move([view.node(1)!], worldDx: 0.002 / 360, worldDy: 0);
+      view.move([view.node(1)!], worldDx: 0.002 / 360, worldDy: 0).apply();
       expect(view.node(1)!.longitude, closeTo(-179.999, 1e-6));
 
       final copied = view.copy([view.way(10)!])!;
       expect(copied.worldMiddle.$1, anyOf(closeTo(1, 1e-5), closeTo(0, 1e-5)));
-      final pasted = view.paste(copied, worldDx: 0.01, worldDy: 0);
+      final pasted = view.paste(copied, worldDx: 0.01, worldDy: 0).apply();
       for (final id in (pasted.single as OsmWay).nodeIds) {
         final longitude = view.node(id)!.longitude;
         expect(longitude, inInclusiveRange(-180, 180));

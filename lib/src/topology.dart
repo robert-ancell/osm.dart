@@ -1443,3 +1443,32 @@ class OsmDisconnectOperation extends OsmOperation<void> {
         }
       });
 }
+
+/// Making several nodes one node, which every way and relation through any
+/// of them goes through.
+class OsmConnectOperation extends OsmOperation<void> {
+  final OsmEditor _view;
+
+  /// The nodes to make one, as they now stand.
+  @override
+  final List<OsmNode> selected;
+
+  /// Creates the operation.
+  OsmConnectOperation(this._view, this.selected);
+
+  /// Whether it can be done: there are nodes to make one.
+  @override
+  bool get available => selected.length >= 2;
+
+  /// Why it cannot be done, or null if it can: when they play different
+  /// parts in one relation, or it would spoil a turn restriction.
+  @override
+  OsmDisabledReason? get disabled =>
+      osmConnectDisabled(_view, [for (final node in selected) node.id]);
+
+  /// Makes them one, as one change: the oldest of them that says something
+  /// is kept, and the others' tags and memberships go to it.
+  @override
+  void apply() =>
+      _view.group(() => osmConnect(_view, [for (final n in selected) n.id]));
+}

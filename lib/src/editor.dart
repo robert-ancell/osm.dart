@@ -127,18 +127,21 @@ class OsmEditor {
     }
   }
 
-  /// Gathers everything done since [mark], a [OsmEditHistory.length] taken
-  /// before it started, into one change to undo.
+  /// A point in the history to come back to: what [combineSince] and
+  /// [undoSince] take.
+  OsmEditMark mark() => OsmEditMark._(history.length);
+
+  /// Gathers everything done since [mark] into one change to undo.
   ///
   /// For a run of changes made across several events, such as a line drawn
   /// a click at a time, where [group] cannot wrap them all.
-  void combineSince(int mark) => history._combineSince(mark);
+  void combineSince(OsmEditMark mark) => history._combineSince(mark._length);
 
-  /// Undoes everything done since [mark], a [OsmEditHistory.length] taken
-  /// before it started: for giving up on something made a change at a time.
+  /// Undoes everything done since [mark]: for giving up on something made a
+  /// change at a time.
   ///
   /// Given up on rather than undone, so none of it can be redone.
-  void undoSince(int mark) => history._undoSince(mark);
+  void undoSince(OsmEditMark mark) => history._undoSince(mark._length);
 
   // Single changes.
 
@@ -244,17 +247,17 @@ class OsmEditor {
   OsmDisconnectOperation disconnect(List<OsmElement> selected) =>
       OsmDisconnectOperation(this, selected);
 
-  /// Moves [selected] by ([worldDx], [worldDy]), as one change.
+  /// Moving [selected] by ([worldDx], [worldDy]).
   ///
   /// The distances are in world coordinates, as [OsmMercator] gives them,
   /// not degrees: a drag on a map is the same distance on screen wherever
   /// it is made, and that is a distance in world coordinates.
-  void move(
+  OsmMoveOperation move(
     List<OsmElement> selected, {
     required double worldDx,
     required double worldDy,
   }) =>
-      osmMove(this, selected, dx: worldDx, dy: worldDy);
+      OsmMoveOperation(this, selected, worldDx: worldDx, worldDy: worldDy);
 
   /// Copies [selected], or null if there is nothing in it to copy; see
   /// [OsmCopied]. [worldAnchor] is where the pointer was, in world
@@ -265,30 +268,36 @@ class OsmEditor {
   }) =>
       osmCopy(this, selected, anchor: worldAnchor);
 
-  /// Puts down what was [copied], moved by ([worldDx], [worldDy]) in world
-  /// coordinates, as one change, and gives back what was made.
-  List<OsmElement> paste(
+  /// Putting down what was [copied], moved by ([worldDx], [worldDy]) in
+  /// world coordinates.
+  OsmPasteOperation paste(
     OsmCopied copied, {
     required double worldDx,
     required double worldDy,
   }) =>
-      osmPaste(this, copied, dx: worldDx, dy: worldDy);
+      OsmPasteOperation(this, copied, worldDx: worldDx, worldDy: worldDy);
 
   /// The lines that selecting [selected] would continue drawing, or null if
   /// the selection is not one a line is continued from.
   List<OsmWay>? continuable(List<OsmElement> selected) =>
       osmContinuable(this, selected);
 
-  /// Makes the nodes [ids] one node, which every way and relation through
-  /// any of them goes through.
-  void connect(List<int> ids) => osmConnect(this, ids);
+  /// Making [nodes] one node, which every way and relation through any of
+  /// them goes through.
+  OsmConnectOperation connect(List<OsmNode> nodes) =>
+      OsmConnectOperation(this, nodes);
+}
 
-  /// Why the nodes [ids] cannot be made one, or null if they can.
-  OsmDisabledReason? connectDisabled(List<int> ids) =>
-      osmConnectDisabled(this, ids);
+/// A point in an [OsmEditor]'s history, from [OsmEditor.mark].
+class OsmEditMark {
+  final int _length;
 
-  /// Turns [way] round, and whatever about it faces along it; see
-  /// [osmReversedTags] for [oneway].
-  void reverseWay(OsmWay way, {bool oneway = false}) =>
-      osmReverseWay(this, way, oneway: oneway);
+  const OsmEditMark._(this._length);
+
+  @override
+  bool operator ==(Object other) =>
+      other is OsmEditMark && other._length == _length;
+
+  @override
+  int get hashCode => _length.hashCode;
 }

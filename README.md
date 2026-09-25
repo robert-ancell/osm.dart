@@ -78,7 +78,7 @@ client.token = signedIn.accessToken;
 print('Signed in as ${await client.displayName()}');
 
 final changeset = await client.upload(
-  editor.history.upload,
+  editor.history.toUpload(),
   comment: 'Add opening hours',
 );
 print('Uploaded as changeset $changeset');

@@ -562,3 +562,71 @@ void osmMove(
     }
   });
 }
+
+/// Moving what is selected by a distance on the map.
+class OsmMoveOperation extends OsmOperation<void> {
+  final OsmEditor _view;
+
+  /// What is to be moved, as it now stands: its nodes, and the nodes of its
+  /// ways, each once.
+  @override
+  final List<OsmElement> selected;
+
+  /// How far east it moves, in world coordinates, as [OsmMercator] gives
+  /// them.
+  final double worldDx;
+
+  /// How far south it moves, in world coordinates.
+  final double worldDy;
+
+  /// Creates the operation.
+  OsmMoveOperation(
+    this._view,
+    this.selected, {
+    required this.worldDx,
+    required this.worldDy,
+  });
+
+  /// Whether it can be done: anything can be moved.
+  @override
+  bool get available => selected.isNotEmpty;
+
+  /// Moves it all, as one change.
+  @override
+  void apply() => osmMove(_view, selected, dx: worldDx, dy: worldDy);
+}
+
+/// Putting down a copy of what was copied, a distance from where it was.
+class OsmPasteOperation extends OsmOperation<List<OsmElement>> {
+  final OsmEditor _view;
+
+  /// What was copied.
+  final OsmCopied copied;
+
+  /// How far east of the original the copy goes, in world coordinates.
+  final double worldDx;
+
+  /// How far south of the original the copy goes, in world coordinates.
+  final double worldDy;
+
+  /// Creates the operation.
+  OsmPasteOperation(
+    this._view,
+    this.copied, {
+    required this.worldDx,
+    required this.worldDy,
+  });
+
+  /// Nothing: pasting adds to the map rather than doing something to what
+  /// is on it.
+  @override
+  List<OsmElement> get selected => const [];
+
+  /// Whether it can be done: there is something copied.
+  @override
+  bool get available => copied.length > 0;
+
+  /// Puts the copy down, as one change, and gives back what was made.
+  @override
+  List<OsmElement> apply() => osmPaste(_view, copied, dx: worldDx, dy: worldDy);
+}

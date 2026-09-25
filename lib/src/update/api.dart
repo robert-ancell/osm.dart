@@ -161,7 +161,8 @@ class OsmApiClient {
   final OsmFetch _fetch;
 
   /// How many reads have been made.
-  int requests = 0;
+  int get requests => _requests;
+  int _requests = 0;
 
   /// The bearer token of whoever is signed in, from [OsmAuthenticator], or
   /// null for nobody.
@@ -379,7 +380,7 @@ class OsmApiClient {
         bounds.maxLatitude,
       ].join(','),
     });
-    requests++;
+    _requests++;
     final Uint8List? body;
     try {
       body = await _fetch(
@@ -405,7 +406,7 @@ class OsmApiClient {
   /// What this API will answer.
   Future<OsmCapabilities> capabilities() async {
     final uri = base.resolve('capabilities');
-    requests++;
+    _requests++;
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
     return _capabilities(utf8.decode(body, allowMalformed: true));
@@ -461,7 +462,7 @@ class OsmApiClient {
 
   Future<List<OsmNode>> _nodes(List<int> ids) async {
     if (ids.isEmpty) return const [];
-    requests++;
+    _requests++;
     final body = await _fetch(base.resolve('nodes?nodes=${ids.join(',')}'));
     if (body != null) {
       return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true))
@@ -499,7 +500,7 @@ class OsmApiClient {
         'time': time,
         'limit': '$_changesetPage',
       });
-      requests++;
+      _requests++;
       final body = await _fetch(uri);
       if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
       final page = _changesets(utf8.decode(body, allowMalformed: true));
@@ -590,7 +591,7 @@ class OsmApiClient {
         ].join(','),
         'limit': '$_changesetPage',
       });
-      requests++;
+      _requests++;
       final body = await _fetch(uri);
       if (body == null) return found;
       final page = _changesets(utf8.decode(body, allowMalformed: true));
@@ -612,7 +613,7 @@ class OsmApiClient {
 
   /// The changes changeset [id] made, in the order it made them.
   Future<List<OsmChange>> changesetChanges(int id) async {
-    requests++;
+    _requests++;
     final uri = base.resolve('changeset/$id/download');
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
@@ -621,7 +622,7 @@ class OsmApiClient {
 
   /// The ways that run through the node with [nodeId].
   Future<List<OsmWay>> waysUsing(int nodeId) async {
-    requests++;
+    _requests++;
     final body = await _fetch(base.resolve('node/$nodeId/ways'));
     if (body == null) return const [];
     return OsmXmlFile.parse(utf8.decode(body, allowMalformed: true))

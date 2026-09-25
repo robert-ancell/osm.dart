@@ -47,7 +47,7 @@ class _Server {
 
 OsmUpload _oneNode() {
   final history = editorOf()..createNode(latitude: 1, longitude: 2);
-  return history.history.upload;
+  return history.history.toUpload();
 }
 
 void main() {
@@ -106,7 +106,7 @@ void main() {
 
   test('sends nothing without a change or a comment', () async {
     await expectLater(
-      client.upload(editorOf().history.upload, comment: 'Nothing'),
+      client.upload(editorOf().history.toUpload(), comment: 'Nothing'),
       throwsA(isA<OsmUploadException>()),
     );
     await expectLater(

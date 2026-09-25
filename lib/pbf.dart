@@ -180,10 +180,10 @@ library;
 
 export 'src/filter.dart';
 export 'src/pbf/exception.dart';
-export 'src/pbf/file.dart';
+export 'src/pbf/file.dart' hide pbfDefaultIsolates;
 export 'src/pbf/header.dart';
 export 'src/pbf/transformer.dart';
-export 'src/pbf/writer.dart';
+export 'src/pbf/writer.dart' hide pbfWriteBlock;
 export 'src/region.dart';
 export 'src/update/change_filter.dart' show OsmUpdateEdges;
 export 'src/update/updater.dart';

@@ -76,7 +76,7 @@ class OsmImageryTiles {
     }
 
     final body = await fetch(
-      Uri.parse(source.tileUrl(tile.zoom, tile.x, tile.y)),
+      Uri.parse(source.tileUrl(tile)),
       abandon: abandon,
       onLate: onLate == null
           ? null

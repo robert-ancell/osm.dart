@@ -105,38 +105,39 @@ void main() {
   });
 
   test('offers only what covers the place asked about', () {
-    final inside = index.at(-36.85, 174.76);
+    final inside = index.layersAt(-36.85, 174.76);
     expect(inside.map((layer) => layer.id),
         ['Example_Aerial_Imagery', 'Everywhere', 'Older_Imagery']);
 
-    final london = index.at(51.5, -0.12);
+    final london = index.layersAt(51.5, -0.12);
     expect(london.map((layer) => layer.id), ['Everywhere']);
   });
 
   test('offers the layer the index says is best first', () {
-    expect(index.at(-36.85, 174.76).first.best, isTrue);
+    expect(index.layersAt(-36.85, 174.76).first.best, isTrue);
   });
 
   test('offers the closest in first among the rest', () {
-    final rest = index.at(-36.85, 174.76).skip(1).toList();
+    final rest = index.layersAt(-36.85, 174.76).skip(1).toList();
     expect(rest.first.maximumZoom, greaterThan(rest.last.maximumZoom));
   });
 
   test('leaves out layers drawn over another unless asked for', () {
-    expect(index.at(51.5, -0.12).map((l) => l.id), isNot(contains('Labels')));
+    expect(index.layersAt(51.5, -0.12).map((l) => l.id),
+        isNot(contains('Labels')));
     expect(
-      index.at(51.5, -0.12, overlays: true).map((l) => l.id),
+      index.layersAt(51.5, -0.12, overlays: true).map((l) => l.id),
       contains('Labels'),
     );
   });
 
   test('offers only the category asked for', () {
     expect(
-      index.at(51.5, -0.12, category: OsmImageryCategory.photo).single.id,
+      index.layersAt(51.5, -0.12, category: OsmImageryCategory.photo).single.id,
       'Everywhere',
     );
     expect(
-      index.at(51.5, -0.12, category: OsmImageryCategory.elevation),
+      index.layersAt(51.5, -0.12, category: OsmImageryCategory.elevation),
       isEmpty,
     );
   });
@@ -150,7 +151,7 @@ void main() {
 
   test('fills a tile into the address', () {
     expect(
-      index.layers.first.tileUrl(17, 129167, 79983),
+      index.layers.first.tileUrl(const OsmTile(17, 129167, 79983)),
       'https://aerial.test/17/129167/79983.webp',
     );
   });
@@ -162,7 +163,7 @@ void main() {
       url: 'https://{switch:a,b}.test/{z}/{x}/{-y}.png',
     );
     // Row three of eight counted from the north is row four from the south.
-    expect(layer.tileUrl(3, 1, 3), 'https://a.test/3/1/4.png');
+    expect(layer.tileUrl(const OsmTile(3, 1, 3)), 'https://a.test/3/1/4.png');
   });
 
   test('leaves out a hole in the ground a layer covers', () {

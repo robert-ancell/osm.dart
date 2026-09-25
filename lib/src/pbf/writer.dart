@@ -79,24 +79,9 @@ class OsmPbfWriter {
     _block.add(element);
   }
 
-  /// Adds a block read from another file, as it is.
-  ///
-  /// [body] is the blob as it sat in that file, still compressed, and
-  /// [span] what it holds. Nothing is decoded or compressed again, which is
-  /// what makes copying most of a file through an update cheap. What has
-  /// been added before it is written first, so the order holds.
-  void addBlock(Uint8List body, PbfBlockSpan span) {
-    if (_sorted) {
-      _checkOrderOf(span.type, span.first);
-      _lastId = span.last;
-    }
-    _flush();
-    _sink.add(_frame('OSMData', body));
-  }
-
   /// Waits for what has been written so far to reach the file.
   ///
-  /// [add] and [addBlock] do not wait, so a caller streaming a whole file
+  /// [add] does not wait, so a caller streaming a whole file
   /// through should, now and then, or the file is held in memory on its
   /// way out.
   Future<void> flush() => _sink.flush();
@@ -399,4 +384,20 @@ Uint8List _frame(String type, Uint8List body) {
     ..add(headerBytes)
     ..add(body);
   return out.takeBytes();
+}
+
+/// Adds a block read from another file to [writer], as it is: what
+/// `OsmPbfTransformer` copies through unchanged.
+///
+/// [body] is the blob as it sat in that file, still compressed, and
+/// [span] what it holds. Nothing is decoded or compressed again, which is
+/// what makes copying most of a file through an update cheap. What has
+/// been added before it is written first, so the order holds.
+void pbfWriteBlock(OsmPbfWriter writer, Uint8List body, PbfBlockSpan span) {
+  if (writer._sorted) {
+    writer._checkOrderOf(span.type, span.first);
+    writer._lastId = span.last;
+  }
+  writer._flush();
+  writer._sink.add(_frame('OSMData', body));
 }

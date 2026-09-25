@@ -77,10 +77,10 @@ class OsmPbfFile {
   ///
   /// A filtered read decodes blocks on [isolates] worker isolates at once, by
   /// default two per processor. Pass 1 to decode on the calling isolate
-  /// instead, which some reads are better off doing: see [defaultIsolates].
+  /// instead, which some reads are better off doing: see `pbfDefaultIsolates`.
   Stream<OsmElement> elements({OsmFilter? filter, int? isolates}) {
     final plan = OsmFilterPlan.of(filter);
-    final workers = isolates ?? defaultIsolates(plan);
+    final workers = isolates ?? pbfDefaultIsolates(plan);
     if (workers < 1) {
       throw ArgumentError.value(isolates, 'isolates', 'Must be at least 1');
     }
@@ -88,22 +88,6 @@ class OsmPbfFile {
         ? _readHere(plan)
         : decodeAhead(_blobs(), plan, workers);
   }
-
-  /// How many isolates to decode a read on when the caller does not say.
-  ///
-  /// One for a read with no filter: everything crossing an isolate boundary
-  /// has to be handed over, and with no filter that is every element of the
-  /// file. Reading a 434 MB country extract end to end takes 25s here against
-  /// 31s on 32 isolates.
-  ///
-  /// Everything else goes to the workers, including the reads that name ids.
-  /// Those used to come back here too, because the ids go the other way and a
-  /// filter naming hundreds of thousands of them was handed over once per
-  /// blob: 864,414 node ids over a country extract took 10.9s on the calling
-  /// isolate and 64s on sixteen workers. They are handed over once per batch
-  /// of blobs now — see `_blobsPerJob` — which is 3.4s on sixteen.
-  static int defaultIsolates(OsmFilterPlan plan) =>
-      plan.filter == null ? 1 : Platform.numberOfProcessors * 2;
 
   /// The elements matching [filter], and everything they refer to.
   ///
@@ -121,7 +105,7 @@ class OsmPbfFile {
   /// this is for pulling a few things out of a country, not for loading one.
   ///
   /// Each read is decoded on [isolates] worker isolates, by default as many as
-  /// [defaultIsolates] says, which for the reads by id depends on how many ids
+  /// `pbfDefaultIsolates` says, which for the reads by id depends on how many ids
   /// there are to hand to the workers.
   Future<OsmSubset> subset(OsmFilter filter, {int? isolates}) async =>
       _complete(
@@ -412,3 +396,19 @@ class OsmPbfFile {
   @override
   String toString() => 'OsmPbfFile($path)';
 }
+
+/// How many isolates to decode a read on when the caller does not say.
+///
+/// One for a read with no filter: everything crossing an isolate boundary
+/// has to be handed over, and with no filter that is every element of the
+/// file. Reading a 434 MB country extract end to end takes 25s here against
+/// 31s on 32 isolates.
+///
+/// Everything else goes to the workers, including the reads that name ids.
+/// Those used to come back here too, because the ids go the other way and a
+/// filter naming hundreds of thousands of them was handed over once per
+/// blob: 864,414 node ids over a country extract took 10.9s on the calling
+/// isolate and 64s on sixteen workers. They are handed over once per batch
+/// of blobs now — see `_blobsPerJob` — which is 3.4s on sixteen.
+int pbfDefaultIsolates(OsmFilterPlan plan) =>
+    plan.filter == null ? 1 : Platform.numberOfProcessors * 2;

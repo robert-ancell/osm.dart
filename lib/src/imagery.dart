@@ -1,5 +1,6 @@
 import 'bounds.dart';
 import 'json_exception.dart';
+import 'tile.dart';
 
 /// What a layer of imagery is for.
 enum OsmImageryCategory {
@@ -99,12 +100,13 @@ class OsmImagery {
   bool contains(double latitude, double longitude) =>
       coverage?.contains(latitude, longitude) ?? true;
 
-  /// Where the tile at [zoom], [x] and [y] is.
+  /// Where [tile] is.
   ///
   /// Fills in the placeholders the index uses: the tile's numbers, `{-y}` for
   /// the servers that count rows from the south, and `{switch:a,b}` for the
   /// ones spread over several names, of which the first is taken.
-  String tileUrl(int zoom, int x, int y) {
+  String tileUrl(OsmTile tile) {
+    final OsmTile(:zoom, :x, :y) = tile;
     final flipped = (1 << zoom) - 1 - y;
     return url
         .replaceAll('{zoom}', '$zoom')
@@ -226,7 +228,7 @@ class OsmImageryIndex {
   ///
   /// Ordered as an editor would offer them: those the index marks best, then
   /// whichever has tiles closest in, which is usually the most detailed.
-  List<OsmImagery> at(
+  List<OsmImagery> layersAt(
     double latitude,
     double longitude, {
     OsmImageryCategory? category,

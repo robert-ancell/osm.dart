@@ -237,7 +237,7 @@ class OsmPbfTransformer {
           final ids = pending[span.type]!;
           final at = next[span.type]!;
           if (at >= ids.length || ids[at] > span.last) {
-            writer.addBlock(blob.body, span);
+            pbfWriteBlock(writer, blob.body, span);
             unchanged += span.count;
             await writer.flush();
             continue;
@@ -255,7 +255,7 @@ class OsmPbfTransformer {
           emit = writer.add;
         }
         if (span != null && created + modified + deleted == before) {
-          writer.addBlock(blob.body, span);
+          pbfWriteBlock(writer, blob.body, span);
         } else {
           held.forEach(writer.add);
         }

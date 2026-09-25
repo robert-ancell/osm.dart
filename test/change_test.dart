@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/xml.dart';
 import 'package:test/test.dart';
 
 /// Written for this package, and the same file gzipped the way replication

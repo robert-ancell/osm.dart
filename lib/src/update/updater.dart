@@ -4,6 +4,7 @@ import '../element.dart';
 import '../pbf/transformer.dart';
 import '../pbf/file.dart';
 import '../version.g.dart';
+import '../change.dart';
 import '../xml/change.dart';
 import '../cache.dart';
 import 'api.dart';

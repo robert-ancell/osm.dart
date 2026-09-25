@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../bounds.dart';
 import '../element.dart';
+import '../change.dart';
 import '../xml/change.dart';
 import '../xml/osm_xml.dart';
 import '../xml/reader.dart';

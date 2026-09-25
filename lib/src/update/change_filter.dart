@@ -1,5 +1,5 @@
 import '../element.dart';
-import '../xml/change.dart';
+import '../change.dart';
 import 'snapshot_index.dart';
 
 /// What a set of changes did at the edge of a snapshot, where deciding what

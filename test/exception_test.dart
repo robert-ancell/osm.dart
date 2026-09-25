@@ -1,7 +1,10 @@
 import 'dart:io';
 
+import 'package:osm/country_coder.dart';
+import 'package:osm/editor.dart';
 import 'package:osm/osm.dart';
 import 'package:osm/pbf.dart';
+import 'package:osm/xml.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-import 'package:osm/osm.dart';
+import 'package:osm/editor.dart';
 import 'package:test/test.dart';
 
 /// What [tagSets] come out as once the text shown for them is edited by

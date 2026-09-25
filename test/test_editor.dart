@@ -1,3 +1,4 @@
+import 'package:osm/editor.dart';
 import 'package:osm/osm.dart';
 
 /// An editor over [nodes], [ways] and [relations], as they were read.

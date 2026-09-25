@@ -2,11 +2,15 @@
 
 Read and process OpenStreetMap data in Dart, with no native dependencies.
 
-There are two libraries:
+It comes as several libraries, so a program imports only what it uses:
 
-* `package:osm/osm.dart` — elements, the OpenStreetMap API, editing and
-  uploading, change files and replication feeds;
-* `package:osm/pbf.dart` — reading, writing and updating `.osm.pbf` files.
+* `package:osm/osm.dart` — elements, the OpenStreetMap API and uploading to
+  it, replication feeds, imagery and caches;
+* `package:osm/editor.dart` — editing the way iD does, and iD's tagging
+  schema;
+* `package:osm/country_coder.dart` — which country a place is in;
+* `package:osm/pbf.dart` — reading, writing and updating `.osm.pbf` files;
+* `package:osm/xml.dart` — reading OSM XML and osmChange files.
 
 ## Reading a PBF file
 
@@ -57,6 +61,9 @@ holds every request back until the moment it names.
 ## Editing and uploading changes
 
 ```dart
+import 'package:osm/editor.dart';
+import 'package:osm/osm.dart';
+
 final editor = OsmEditor(OsmEditorData.of(elements));
 
 final cafe = editor.node(4061287113)!;
@@ -181,6 +188,8 @@ it.
 ## Reading a change file
 
 ```dart
+import 'package:osm/xml.dart';
+
 for (final change in await OsmChangeFile.read('523.osc.gz')) {
   switch (change.action) {
     case OsmChangeAction.create || OsmChangeAction.modify:

@@ -1,3 +1,5 @@
+import 'package:osm/country_coder.dart';
+import 'package:osm/editor.dart';
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 

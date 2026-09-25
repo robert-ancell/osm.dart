@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import '../element.dart';
-import '../xml/change.dart';
+import '../change.dart';
 import 'blob.dart';
 import 'block.dart';
 import 'exception.dart';

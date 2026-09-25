@@ -73,7 +73,7 @@ void main() {
       };
 
   test('comes back with a token', () async {
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8643,
@@ -88,7 +88,7 @@ void main() {
   });
 
   test('will not take a code from a sign-in it did not start', () async {
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8644,
@@ -101,7 +101,7 @@ void main() {
   });
 
   test('gives up rather than holding the port all day', () async {
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8645,
@@ -115,7 +115,7 @@ void main() {
 
   test('gives up when asked to, and lets go of the port', () async {
     final cancel = Completer<void>();
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8648,
@@ -135,7 +135,7 @@ void main() {
     // OAuth lets the field be left out when the answer is exactly what was
     // asked for, and reading that as nothing granted would have the editor
     // asking somebody to sign in again over a perfectly good token.
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8646,
@@ -150,7 +150,7 @@ void main() {
     // A token issued before a permission was added to the registration goes
     // on being short of it, and OpenStreetMap's tokens do not expire.
     osm.granted = 'read_prefs';
-    final signIn = OsmSignIn(
+    final signIn = OsmAuthenticator(
       clientId: 'an-application',
       base: osm.base,
       redirectPort: 8647,
@@ -162,7 +162,8 @@ void main() {
   });
 
   test('says what to go and change when the application is confidential', () {
-    final signIn = OsmSignIn(clientId: 'an-application', launch: (_) async {});
+    final signIn =
+        OsmAuthenticator(clientId: 'an-application', launch: (_) async {});
     expect(
       signIn.whyNoToken('{"error": "invalid_client"}', 400),
       contains('Confidential'),

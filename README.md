@@ -55,7 +55,7 @@ final editor = OsmEditor(OsmEditorData.of(elements));
 final cafe = editor.node(4061287113)!;
 editor.setTags(cafe, {...cafe.tags, 'opening_hours': 'Mo-Fr 07:00-15:00'});
 
-final token = await OsmSignIn(clientId: 'your-client-id').tokenFromBrowser();
+final token = await OsmAuthenticator(clientId: 'your-client-id').tokenFromBrowser();
 final uploader = OsmUploader(token: token.token, generator: 'my-editor/1.0');
 try {
   final changeset = await uploader.send(
@@ -77,7 +77,7 @@ rules, each saying first whether it applies and, if it cannot be done, why.
 `OsmTagText` shows the tags of one element or several as editable
 `key=value` text, as iD's text view does, and applies an edit of it to each.
 
-`OsmSignIn` signs in through the browser with OAuth 2, for an application
+`OsmAuthenticator` signs in through the browser with OAuth 2, for an application
 registered on openstreetmap.org with a redirect URI of
 `http://127.0.0.1:8642/`; its documentation says what to register. `OsmUpload`
 can say what is about to be sent, a line to an element, before `send` opens a

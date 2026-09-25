@@ -117,12 +117,13 @@ class OsmSignInCancelledException implements OsmException {
   String toString() => message;
 }
 
-/// Takes somebody through the browser and comes back with a token.
+/// Authenticates with OpenStreetMap: takes somebody through the browser
+/// and comes back with a token.
 ///
 /// The dance, in order: make a secret, put its fingerprint in a URL, open
 /// that in the browser, listen on 127.0.0.1 for OpenStreetMap to send the
 /// browser back with a code, then swap the code and the secret for a token.
-class OsmSignIn {
+class OsmAuthenticator {
   /// The application asking, as registered with OpenStreetMap.
   final String clientId;
 
@@ -140,8 +141,8 @@ class OsmSignIn {
   /// and no wish for one.
   final Future<void> Function(Uri url) launch;
 
-  /// Creates a sign-in for an application.
-  OsmSignIn({
+  /// Creates an authenticator for an application.
+  OsmAuthenticator({
     required this.clientId,
     this.scopes = osmEditScopes,
     Uri? base,

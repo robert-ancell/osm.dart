@@ -39,8 +39,8 @@ class OsmCache {
   /// Shared by every program using this package that does not choose its own,
   /// so that what one has fetched the next does not fetch again. A program
   /// that will be running at the same time as another should give its caches
-  /// a directory of its own: a data or imagery cache's index is written by one program at
-  /// a time.
+  /// a directory of its own: a data or imagery cache's index is written by
+  /// one program at a time.
   static Directory defaultDirectory([String? name]) {
     final environment = Platform.environment;
     final home = environment['HOME'] ?? environment['USERPROFILE'] ?? '.';

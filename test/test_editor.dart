@@ -8,6 +8,10 @@ OsmEditor testEditor({
 }) =>
     OsmEditor(OsmEditorData.of([...nodes, ...ways, ...relations]));
 
+/// An editor over [read], by default nothing at all.
+OsmEditor editorOf([Iterable<OsmElement> read = const []]) =>
+    OsmEditor(OsmEditorData.of(read));
+
 OsmNode testNode(int id, double latitude, double longitude,
         [Map<String, String> tags = const {}]) =>
     OsmNode(

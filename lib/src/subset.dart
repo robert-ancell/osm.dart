@@ -1,4 +1,5 @@
 import 'area.dart';
+import 'edit.dart';
 import 'element.dart';
 
 /// The elements taken out of a file, and everything they refer to.
@@ -7,7 +8,10 @@ import 'element.dart';
 /// matching element on its own is not enough to build geometry from. A subset
 /// carries the elements the matches point at as well, indexed by id, so
 /// [nodesOf] and [memberOf] can resolve them.
-class OsmSubset {
+///
+/// It is [OsmEditorData] too, so what was read can be edited as it is:
+/// `OsmEditor(subset)`.
+class OsmSubset implements OsmEditorData {
   /// The elements that matched the filter, in the order they were stored.
   final List<OsmElement> matches;
 
@@ -38,6 +42,23 @@ class OsmSubset {
         OsmElementType.relation => relations[id],
       };
 
+  @override
+  OsmNode? node(int id) => nodes[id];
+
+  @override
+  OsmWay? way(int id) => ways[id];
+
+  @override
+  OsmRelation? relation(int id) => relations[id];
+
+  @override
+  Iterable<int> waysUsing(int nodeId) =>
+      _indexes[this].waysUsing[nodeId] ?? const [];
+
+  @override
+  Iterable<int> relationsUsing(OsmElementType type, int id) =>
+      _indexes[this].relationsUsing[(type, id)] ?? const [];
+
   /// The element a relation member refers to, or null if it is not held.
   OsmElement? memberOf(OsmMember member) => element(member.type, member.ref);
 
@@ -59,8 +80,8 @@ class OsmSubset {
 
   /// The area [element] covers, or null if it does not cover one.
   ///
-  /// See [assembleArea] for what is and is not assembled. Everything it needs
-  /// is looked up here, so a relation whose members were not read comes back
+  /// A closed way, or a relation whose member ways make up rings. Everything
+  /// it needs is looked up here, so a relation whose members were not read comes back
   /// as null rather than as a torn outline.
   OsmArea? areaOf(OsmElement element) => assembleArea(
         element,
@@ -72,4 +93,33 @@ class OsmSubset {
   String toString() =>
       'OsmSubset(${matches.length} matched, ${nodes.length} nodes, '
       '${ways.length} ways, ${relations.length} relations)';
+}
+
+/// Which ways run through each node, and which relations list each element,
+/// worked out the first time a subset is asked and kept beside it: a subset
+/// is made const, so it cannot keep them itself.
+final _indexes = _Indexes();
+
+class _Indexes {
+  final _held = Expando<_Index>();
+
+  _Index operator [](OsmSubset subset) => _held[subset] ??= _Index(subset);
+}
+
+class _Index {
+  final waysUsing = <int, List<int>>{};
+  final relationsUsing = <(OsmElementType, int), List<int>>{};
+
+  _Index(OsmSubset subset) {
+    for (final way in subset.ways.values) {
+      for (final node in way.nodeIds.toSet()) {
+        (waysUsing[node] ??= []).add(way.id);
+      }
+    }
+    for (final relation in subset.relations.values) {
+      for (final member in relation.members) {
+        (relationsUsing[(member.type, member.ref)] ??= []).add(relation.id);
+      }
+    }
+  }
 }

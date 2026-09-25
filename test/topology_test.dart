@@ -53,7 +53,8 @@ void main() {
         testWay(10, [1, 2, 3, 4])
       ]);
       // Offered, as iD offers it, but not to be done.
-      expect(OsmSplitOperation(view, [view.node(1)!]).disabled, 'not_eligible');
+      expect(OsmSplitOperation(view, [view.node(1)!]).disabled,
+          OsmDisabledReason.notEligible);
       final end = testEditor(
         nodes: _row(),
         ways: [
@@ -61,7 +62,8 @@ void main() {
           testWay(11, [4, 1])
         ],
       );
-      expect(OsmSplitOperation(end, [end.node(4)!]).disabled, 'not_eligible');
+      expect(OsmSplitOperation(end, [end.node(4)!]).disabled,
+          OsmDisabledReason.notEligible);
     });
 
     test('divides a count along the line between the pieces', () {
@@ -175,7 +177,7 @@ void main() {
         ],
       );
       expect(OsmSplitOperation(view, [view.node(2)!]).disabled,
-          'simple_roundabout');
+          OsmDisabledReason.simpleRoundabout);
     });
 
     test('will not split part of a route with none of its neighbours here', () {
@@ -189,7 +191,7 @@ void main() {
         ],
       );
       expect(OsmSplitOperation(view, [view.node(2)!]).disabled,
-          'parent_incomplete');
+          OsmDisabledReason.parentIncomplete);
     });
   });
 
@@ -240,7 +242,7 @@ void main() {
       );
       expect(
         OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
-        'conflicting_tags',
+        OsmDisabledReason.conflictingTags,
       );
     });
 
@@ -254,7 +256,7 @@ void main() {
       );
       expect(
         OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
-        'not_adjacent',
+        OsmDisabledReason.notAdjacent,
       );
     });
 
@@ -268,7 +270,7 @@ void main() {
       );
       expect(
         OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
-        'conflicting_tags',
+        OsmDisabledReason.conflictingTags,
       );
     });
 
@@ -285,7 +287,7 @@ void main() {
       );
       expect(
         OsmMergeOperation(view, [view.way(10)!, view.way(11)!]).disabled,
-        'conflicting_relations',
+        OsmDisabledReason.conflictingRelations,
       );
     });
 
@@ -303,7 +305,7 @@ void main() {
           [view.way(10)!, view.way(11)!],
           maximumWayNodes: 3,
         ).disabled,
-        'too_many_vertices',
+        OsmDisabledReason.tooManyVertices,
       );
     });
 
@@ -415,7 +417,7 @@ void main() {
       );
       expect(
         OsmMergeOperation(view, [view.node(1)!, view.node(2)!]).disabled,
-        'relation',
+        OsmDisabledReason.relation,
       );
     });
   });
@@ -459,15 +461,15 @@ void main() {
     test('says why a node on one line only cannot be disconnected', () {
       final view = crossroads();
       expect(OsmDisconnectOperation(view, [view.node(3)!]).disabled,
-          'not_connected');
+          OsmDisabledReason.notConnected);
     });
 
     test('says why lines joined in a relation cannot be disconnected', () {
       final view = crossroads(relations: [
         _relation(30, [(_way, 10, ''), (_way, 11, '')], {'type': 'route'}),
       ]);
-      expect(
-          OsmDisconnectOperation(view, [view.node(2)!]).disabled, 'relation');
+      expect(OsmDisconnectOperation(view, [view.node(2)!]).disabled,
+          OsmDisabledReason.relation);
     });
   });
 

@@ -1,8 +1,4 @@
-import 'edit.dart';
-import 'element.dart';
-import 'operations.dart';
-import 'presets.dart';
-import 'topology.dart';
+part of 'edit.dart';
 
 /// The data an [OsmEditor] edits, as it was read.
 ///
@@ -53,6 +49,13 @@ class OsmEditor {
   /// Can be set once they arrive, which may be after editing has started.
   OsmPresets? presets;
 
+  /// Which country and regions a place is in, if that is known: what
+  /// decides which kinds of thing that only exist in some places apply,
+  /// through [regionsOf].
+  ///
+  /// Can be set once the borders arrive, as [presets] can.
+  OsmCountryCoder? countryCoder;
+
   /// Whether a closed way with these tags is an area, for when there are no
   /// [presets] to say.
   final bool Function(Map<String, String> tags) isArea;
@@ -67,6 +70,7 @@ class OsmEditor {
     this.data, {
     OsmEditHistory? history,
     this.presets,
+    this.countryCoder,
     bool Function(Map<String, String> tags)? isArea,
   })  : history = history ?? OsmEditHistory(),
         isArea = isArea ?? _isArea;
@@ -114,6 +118,24 @@ class OsmEditor {
             relation,
       ];
 
+  /// Every code of every region [element] is in, by where it now is: a node
+  /// where it stands, and a way where it starts. What [OsmPresets.match] and
+  /// [OsmPreset.appliesAt] take as `here`.
+  ///
+  /// Empty while [countryCoder] is not known, or for something with nowhere
+  /// to stand, which leaves only what is meant for everywhere.
+  Set<String> regionsOf(OsmElement element) {
+    final coder = countryCoder;
+    if (coder == null) return const {};
+    final standing = switch (element) {
+      OsmNode() => node(element.id) ?? element,
+      OsmWay() when element.nodeIds.isNotEmpty => node(element.nodeIds.first),
+      _ => null,
+    };
+    if (standing == null) return const {};
+    return coder.codesAt(standing.latitude, standing.longitude);
+  }
+
   /// The shape [element] now takes, as far as what it can be is concerned.
   ///
   /// A node is a vertex when it is in a way and a point when it stands
@@ -140,16 +162,16 @@ class OsmEditor {
   bool get canUndo => history.isNotEmpty;
 
   /// Undoes the last change, and says whether there was one to undo.
-  bool undo() => history.undo();
+  bool undo() => history._undo();
 
   /// Whether there is an undone change to make again.
   bool get canRedo => history.canRedo;
 
   /// Makes the last undone change again, and says whether there was one.
-  bool redo() => history.redo();
+  bool redo() => history._redo();
 
   /// Undoes everything, leaving nothing to redo.
-  void undoAll() => history.undoAll();
+  void undoAll() => history._undoAll();
 
   /// Does [change], and makes whatever it changes one change to undo.
   ///
@@ -160,9 +182,22 @@ class OsmEditor {
     try {
       return change();
     } finally {
-      history.combineSince(mark);
+      history._combineSince(mark);
     }
   }
+
+  /// Gathers everything done since [mark], a [OsmEditHistory.length] taken
+  /// before it started, into one change to undo.
+  ///
+  /// For a run of changes made across several events, such as a line drawn
+  /// a click at a time, where [group] cannot wrap them all.
+  void combineSince(int mark) => history._combineSince(mark);
+
+  /// Undoes everything done since [mark], a [OsmEditHistory.length] taken
+  /// before it started: for giving up on something made a change at a time.
+  ///
+  /// Given up on rather than undone, so none of it can be redone.
+  void undoSince(int mark) => history._undoSince(mark);
 
   // Single changes.
 
@@ -172,50 +207,55 @@ class OsmEditor {
     required double longitude,
     Map<String, String> tags = const {},
   }) =>
-      history.createNode(latitude: latitude, longitude: longitude, tags: tags);
+      history._createNode(latitude: latitude, longitude: longitude, tags: tags);
 
   /// Makes a way through [nodeIds].
   OsmWay createWay({
     required List<int> nodeIds,
     Map<String, String> tags = const {},
   }) =>
-      history.createWay(nodeIds: nodeIds, tags: tags);
+      history._createWay(nodeIds: nodeIds, tags: tags);
 
   /// Makes a relation of [members].
   OsmRelation createRelation({
     required List<OsmMember> members,
     Map<String, String> tags = const {},
   }) =>
-      history.createRelation(members: members, tags: tags);
+      history._createRelation(members: members, tags: tags);
 
-  /// Takes [node] off the map, and out of the ways in [from] and the
-  /// relations in [relations]; see [OsmEditHistory.deleteNode].
-  void deleteNode(
-    OsmNode node, {
-    Iterable<OsmWay> from = const [],
-    Iterable<OsmRelation> relations = const [],
-  }) =>
-      history.deleteNode(node, from: from, relations: relations);
+  /// Takes [node] off the map, and out of every way through it and every
+  /// relation listing it: a way cannot run through something that is no
+  /// longer there, and OpenStreetMap will not delete something a relation
+  /// still lists.
+  void deleteNode(OsmNode node) => history._deleteNode(
+        node,
+        from: waysUsing(node.id),
+        relations: relationsUsing(OsmElementType.node, node.id),
+      );
 
-  /// Takes [way] off the map, and out of the relations in [relations]; see
-  /// [OsmEditHistory.deleteWay].
-  void deleteWay(OsmWay way, {Iterable<OsmRelation> relations = const []}) =>
-      history.deleteWay(way, relations: relations);
+  /// Takes [way] off the map, and out of every relation listing it.
+  ///
+  /// Only the way. Its nodes stay unless they are deleted as well, which is
+  /// for whoever deletes the way to decide: some are shared with other ways
+  /// or say something of their own. [delete] decides it as iD does.
+  void deleteWay(OsmWay way) => history._deleteWay(
+        way,
+        relations: relationsUsing(OsmElementType.way, way.id),
+      );
 
-  /// Takes [relation] off the map, and out of the relations in [relations].
-  void deleteRelation(
-    OsmRelation relation, {
-    Iterable<OsmRelation> relations = const [],
-  }) =>
-      history.deleteRelation(relation, relations: relations);
+  /// Takes [relation] off the map, and out of every relation listing it.
+  void deleteRelation(OsmRelation relation) => history._deleteRelation(
+        relation,
+        relations: relationsUsing(OsmElementType.relation, relation.id),
+      );
 
   /// Puts [way] through [nodeIds] instead of what it ran through before.
   void setWayNodes(OsmWay way, List<int> nodeIds) =>
-      history.setWayNodes(way, nodeIds);
+      history._setWayNodes(way, nodeIds);
 
   /// Gives [relation] [members] in place of the ones it has.
   void setRelationMembers(OsmRelation relation, List<OsmMember> members) =>
-      history.setRelationMembers(relation, members);
+      history._setRelationMembers(relation, members);
 
   /// Moves [node] to ([latitude], [longitude]); see
   /// [OsmEditHistory.moveNode] for [continuing].
@@ -225,7 +265,7 @@ class OsmEditor {
     required double longitude,
     bool continuing = false,
   }) =>
-      history.moveNode(
+      history._moveNode(
         node,
         latitude: latitude,
         longitude: longitude,
@@ -235,7 +275,7 @@ class OsmEditor {
   /// Gives [element] [tags] in place of the ones it has, and says whether
   /// that changed anything.
   bool setTags(OsmElement element, Map<String, String> tags) =>
-      history.setTags(element, tags);
+      history._setTags(element, tags);
 
   // What can be done to what is selected, as iD offers it.
 
@@ -247,13 +287,14 @@ class OsmEditor {
   OsmReverseOperation reverse(List<OsmElement> selected) =>
       OsmReverseOperation(this, selected);
 
-  /// Pulling points out of [selected], choosing among kinds of thing that
-  /// only exist in some places by [here].
-  OsmExtractOperation extract(
-    List<OsmElement> selected, {
-    Set<String> here = const {},
-  }) =>
-      OsmExtractOperation(this, selected, presets: presets, here: here);
+  /// Pulling points out of [selected], by the kinds of thing that apply
+  /// where the first of them is.
+  OsmExtractOperation extract(List<OsmElement> selected) => OsmExtractOperation(
+        this,
+        selected,
+        presets: presets,
+        here: selected.isEmpty ? const {} : regionsOf(selected.first),
+      );
 
   /// Splitting lines at the nodes in [selected].
   OsmSplitOperation split(List<OsmElement> selected) =>
@@ -267,27 +308,35 @@ class OsmEditor {
   OsmDisconnectOperation disconnect(List<OsmElement> selected) =>
       OsmDisconnectOperation(this, selected);
 
-  /// Moves [selected] by ([dx], [dy]) in world coordinates, as one change.
+  /// Moves [selected] by ([worldDx], [worldDy]), as one change.
+  ///
+  /// The distances are in world coordinates, as [OsmMercator] gives them,
+  /// not degrees: a drag on a map is the same distance on screen wherever
+  /// it is made, and that is a distance in world coordinates.
   void move(
     List<OsmElement> selected, {
-    required double dx,
-    required double dy,
+    required double worldDx,
+    required double worldDy,
   }) =>
-      osmMove(this, selected, dx: dx, dy: dy);
+      osmMove(this, selected, dx: worldDx, dy: worldDy);
 
   /// Copies [selected], or null if there is nothing in it to copy; see
-  /// [OsmCopied].
-  OsmCopied? copy(List<OsmElement> selected, {(double, double)? anchor}) =>
-      osmCopy(this, selected, anchor: anchor);
+  /// [OsmCopied]. [worldAnchor] is where the pointer was, in world
+  /// coordinates, so that pasting puts the copies the same way round it.
+  OsmCopied? copy(
+    List<OsmElement> selected, {
+    (double, double)? worldAnchor,
+  }) =>
+      osmCopy(this, selected, anchor: worldAnchor);
 
-  /// Puts down what was [copied], moved by ([dx], [dy]) in world
+  /// Puts down what was [copied], moved by ([worldDx], [worldDy]) in world
   /// coordinates, as one change, and gives back what was made.
   List<OsmElement> paste(
     OsmCopied copied, {
-    required double dx,
-    required double dy,
+    required double worldDx,
+    required double worldDy,
   }) =>
-      osmPaste(this, copied, dx: dx, dy: dy);
+      osmPaste(this, copied, dx: worldDx, dy: worldDy);
 
   /// The lines that selecting [selected] would continue drawing, or null if
   /// the selection is not one a line is continued from.
@@ -298,9 +347,9 @@ class OsmEditor {
   /// any of them goes through.
   void connect(List<int> ids) => osmConnect(this, ids);
 
-  /// Why the nodes [ids] cannot be made one, in iD's words for the reason,
-  /// or null if they can.
-  String? connectDisabled(List<int> ids) => osmConnectDisabled(this, ids);
+  /// Why the nodes [ids] cannot be made one, or null if they can.
+  OsmDisabledReason? connectDisabled(List<int> ids) =>
+      osmConnectDisabled(this, ids);
 
   /// Turns [way] round, and whatever about it faces along it; see
   /// [osmReversedTags] for [oneway].

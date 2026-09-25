@@ -11,7 +11,6 @@ export 'src/cache.dart';
 export 'src/country_coder.dart';
 export 'src/country_coder_cache.dart';
 export 'src/edit.dart';
-export 'src/editor.dart';
 export 'src/element.dart';
 export 'src/exception.dart';
 export 'src/imagery.dart';

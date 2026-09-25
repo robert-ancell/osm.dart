@@ -112,6 +112,27 @@ class OsmWay extends OsmElement {
   /// nodes have been taken away, which is deleted rather than kept.
   bool get isDegenerate => nodeIds.toSet().length < (isClosed ? 3 : 2);
 
+  /// The nodes of this way without the node [id], as they are once it is taken
+  /// out: every time the way ran through it, and any repeat that leaves.
+  ///
+  /// A way that is closed stays closed. The node a ring was drawn from is
+  /// also the one it comes back to, so taking it out would leave the ring
+  /// open, and the next node along closes it instead.
+  List<int> withoutNode(int id) {
+    final nodes = <int>[];
+    for (final node in nodeIds) {
+      if (node == id) continue;
+      if (nodes.isNotEmpty && nodes.last == node) continue;
+      nodes.add(node);
+    }
+    if (isClosed &&
+        nodes.isNotEmpty &&
+        (nodes.length == 1 || nodes.first != nodes.last)) {
+      nodes.add(nodes.first);
+    }
+    return nodes;
+  }
+
   @override
   OsmElementType get type => OsmElementType.way;
 

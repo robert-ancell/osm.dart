@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
+import 'test_editor.dart';
+
 /// An API on this machine that takes a changeset, as OpenStreetMap does, and
 /// remembers what it was asked.
 class _Server {
@@ -44,8 +46,8 @@ class _Server {
 }
 
 OsmUpload _oneNode() {
-  final history = OsmEditHistory()..createNode(latitude: 1, longitude: 2);
-  return OsmUpload.of(history);
+  final history = editorOf()..createNode(latitude: 1, longitude: 2);
+  return OsmUpload.of(history.history);
 }
 
 void main() {
@@ -104,7 +106,7 @@ void main() {
 
   test('sends nothing without a change or a comment', () async {
     await expectLater(
-      client.upload(OsmUpload.of(OsmEditHistory()), comment: 'Nothing'),
+      client.upload(OsmUpload.of(editorOf().history), comment: 'Nothing'),
       throwsA(isA<OsmUploadException>()),
     );
     await expectLater(

@@ -20,6 +20,7 @@ void main() {
       OsmHttpException(Uri.parse('https://example.org/'), 500),
       const OsmAbandonedException(),
       OsmTooMuchDataException(bounds, 'too big'),
+      OsmTooManyChangesetsException(bounds, 500),
       const OsmAuthenticationException('bad'),
       const OsmAuthenticationCancelledException(),
       const OsmUploadException('bad'),

@@ -151,8 +151,7 @@ void main() {
     final server = _Api(answers: {'changesets': _changesets});
     final found = await OsmApiClient(fetch: server.fetch)
         .changesetsIn(_bounds, since: DateTime.utc(2026));
-    expect(found, isNotNull);
-    expect(found!.length, 2);
+    expect(found.length, 2);
     expect(found.first.bounds!.minLatitude, -36.848);
     expect(found.last.bounds, isNull);
   });
@@ -168,11 +167,13 @@ void main() {
 
   test('gives up on an area with more changesets than it will take', () async {
     final server = _Api(answers: {'changesets': _fullPage});
-    final found = await OsmApiClient(fetch: server.fetch)
-        .changesetsIn(_bounds, since: DateTime.utc(2026), limit: 150);
     // Every page comes back full, so there is no end to reach: the area is
     // too far behind to patch and has to be read again instead.
-    expect(found, isNull);
+    await expectLater(
+      OsmApiClient(fetch: server.fetch)
+          .changesetsIn(_bounds, since: DateTime.utc(2026), limit: 150),
+      throwsA(isA<OsmTooManyChangesetsException>()),
+    );
   });
 }
 

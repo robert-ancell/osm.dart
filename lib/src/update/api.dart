@@ -109,6 +109,26 @@ class OsmTooMuchDataException implements OsmException, IOException {
   String toString() => 'OsmTooMuchDataException: $message';
 }
 
+/// Thrown when more changesets touched an area than
+/// [OsmApiClient.changesetsIn] was asked to list: whatever is held of it is
+/// too far behind to be worth patching, and is better read again.
+class OsmTooManyChangesetsException implements OsmException {
+  /// The area asked about.
+  final OsmBounds bounds;
+
+  /// How many changesets were more than enough.
+  final int limit;
+
+  /// Creates an exception for an area edited more than [limit] times.
+  const OsmTooManyChangesetsException(this.bounds, this.limit);
+
+  @override
+  String get message => 'More than $limit changesets touched $bounds';
+
+  @override
+  String toString() => 'OsmTooManyChangesetsException: $message';
+}
+
 /// How many changesets the API lists at once, at most.
 const int _changesetPage = 100;
 
@@ -545,9 +565,10 @@ class OsmApiClient {
   /// question has to be turned around: rather than asking whether this area
   /// is still current, ask what has been edited near it.
   ///
-  /// Answers are capped at [limit] changesets. More than that means the copy
-  /// is too far behind to patch and is better read again.
-  Future<List<OsmChangeset>?> changesetsIn(
+  /// Answers are capped at [limit] changesets. More than that throws an
+  /// [OsmTooManyChangesetsException]: a copy that far behind is better read
+  /// again than patched.
+  Future<List<OsmChangeset>> changesetsIn(
     OsmBounds bounds, {
     required DateTime since,
     int limit = 500,
@@ -577,13 +598,15 @@ class OsmApiClient {
       if (page.length < _changesetPage) return found;
       // A full page that holds nothing new means the next request would be
       // the one just made, so there is no way to get any further.
-      if (found.length == held) return null;
+      if (found.length == held) {
+        throw OsmTooManyChangesetsException(bounds, limit);
+      }
       before = page
           .map((c) => c.createdAt)
           .reduce((a, b) => a.isBefore(b) ? a : b)
           .add(const Duration(seconds: 1));
     }
-    return null;
+    throw OsmTooManyChangesetsException(bounds, limit);
   }
 
   /// The changes changeset [id] made, in the order it made them.

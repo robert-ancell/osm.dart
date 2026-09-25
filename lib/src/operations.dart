@@ -10,7 +10,7 @@ library;
 
 import 'dart:math' as math;
 
-import 'editor.dart';
+import 'edit.dart';
 import 'element.dart';
 import 'mercator.dart';
 import 'presets.dart';
@@ -46,6 +46,62 @@ bool osmHasInterestingTags(Map<String, String> tags) => tags.keys.any(
           !_uninterestingKeys.contains(key) && !_uninterestingKey.hasMatch(key),
     );
 
+/// Why an [OsmOperation] cannot be done, as iD gives the reason.
+///
+/// [id] is iD's own name for it, which is what iD's translations of the
+/// messages it shows are keyed by.
+enum OsmDisabledReason {
+  /// Nothing selected is something it can be done to, or not all of it is.
+  notEligible('not_eligible'),
+
+  /// A way that is part of a route or a boundary, or the outside of a multipolygon, which deleting would leave a hole in.
+  partOfRelation('part_of_relation'),
+
+  /// Something linked from Wikidata, which is not deleted by accident.
+  hasWikidataTag('has_wikidata_tag'),
+
+  /// A relation it is part of has not been read in full, so what the change does to it cannot be worked out.
+  parentIncomplete('parent_incomplete'),
+
+  /// A roundabout that is part of a larger relation, which splitting would break.
+  simpleRoundabout('simple_roundabout'),
+
+  /// The result would have more nodes than a way may.
+  tooManyVertices('too_many_vertices'),
+
+  /// The lines do not meet end to end.
+  notAdjacent('not_adjacent'),
+
+  /// The lines are in different relations.
+  conflictingRelations('conflicting_relations'),
+
+  /// The lines cross, so joining them would make a line that crosses itself.
+  pathsIntersect('paths_intersect'),
+
+  /// It would break a turn restriction.
+  restriction('restriction'),
+
+  /// It would break a lane connectivity relation.
+  connectivity('connectivity'),
+
+  /// The things say different things about the same tag.
+  conflictingTags('conflicting_tags'),
+
+  /// A multipolygon it involves has not been read in full.
+  incompleteRelation('incomplete_relation'),
+
+  /// It would break a relation, whose members it joins or separates.
+  relation('relation'),
+
+  /// Nothing is joined here to be disconnected.
+  notConnected('not_connected');
+
+  /// iD's name for the reason.
+  final String id;
+
+  const OsmDisabledReason(this.id);
+}
+
 /// Something done to what is selected, as iD offers it: deleting,
 /// reversing, extracting, splitting, merging or disconnecting.
 ///
@@ -61,11 +117,11 @@ abstract class OsmOperation<T> {
   /// Whether it applies to [selected] at all, and so is worth offering.
   bool get available;
 
-  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  /// Why it cannot be done, or null if it can.
   ///
   /// Only asked of an operation that is [available]: one that is not is not
   /// offered, disabled or otherwise.
-  String? get disabled => null;
+  OsmDisabledReason? get disabled => null;
 
   /// Does it, as one change.
   ///
@@ -88,17 +144,17 @@ class OsmDeleteOperation extends OsmOperation<void> {
   @override
   bool get available => selected.isNotEmpty;
 
-  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  /// Why it cannot be done, or null if it can.
   ///
   /// A way that is part of a route or a boundary, or an outer edge of a
   /// multipolygon, would leave a hole in something larger, and has to be
   /// taken out of it first. Something with a Wikidata tag is somebody's
   /// careful work, linked from elsewhere, and is not deleted by accident.
   @override
-  String? get disabled {
-    if (selected.any(_protected)) return 'part_of_relation';
+  OsmDisabledReason? get disabled {
+    if (selected.any(_protected)) return OsmDisabledReason.partOfRelation;
     if (selected.any((e) => (e.tags['wikidata'] ?? '').trim().isNotEmpty)) {
-      return 'has_wikidata_tag';
+      return OsmDisabledReason.hasWikidataTag;
     }
     return null;
   }
@@ -145,7 +201,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
   void _deleteNode(OsmNode node) {
     final ways = _view.waysUsing(node.id);
     final relations = _view.relationsUsing(OsmElementType.node, node.id);
-    _view.deleteNode(node, from: ways, relations: relations);
+    _view.deleteNode(node);
     for (final way in ways) {
       final now = _view.way(way.id);
       if (now != null && now.isDegenerate) _deleteWay(now);
@@ -155,7 +211,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
 
   void _deleteWay(OsmWay way) {
     final relations = _view.relationsUsing(OsmElementType.way, way.id);
-    _view.deleteWay(way, relations: relations);
+    _view.deleteWay(way);
     _deleteEmpty(relations);
     for (final id in way.nodeIds.toSet()) {
       final node = _view.node(id);
@@ -169,7 +225,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
 
   void _deleteRelation(OsmRelation relation) {
     final parents = _view.relationsUsing(OsmElementType.relation, relation.id);
-    _view.deleteRelation(relation, relations: parents);
+    _view.deleteRelation(relation);
     _deleteEmpty(parents);
   }
 
@@ -666,18 +722,19 @@ class OsmCopied {
   /// of the ways copied.
   final Map<int, OsmNode> nodes;
 
-  /// Where on the map the copies are to be anchored: the point the pointer
-  /// was at when they were copied, so that pasting puts them the same way
-  /// round the pointer. Null to anchor them by their middle instead.
-  final (double, double)? anchor;
+  /// Where on the map, in world coordinates, the copies are to be anchored:
+  /// the point the pointer was at when they were copied, so that pasting
+  /// puts them the same way round the pointer. Null to anchor them by
+  /// [worldMiddle] instead.
+  final (double, double)? worldAnchor;
 
-  const OsmCopied._(this.elements, this.nodes, this.anchor);
+  const OsmCopied._(this.elements, this.nodes, this.worldAnchor);
 
   /// How many things were copied.
   int get length => elements.length;
 
   /// The middle of what was copied, in world coordinates.
-  (double, double) get middle {
+  (double, double) get worldMiddle {
     var left = double.infinity, top = double.infinity;
     var right = double.negativeInfinity, bottom = double.negativeInfinity;
     double? first;

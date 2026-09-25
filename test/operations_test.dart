@@ -96,7 +96,7 @@ void main() {
         ]);
         expect(
           OsmDeleteOperation(view, [view.way(10)!]).disabled,
-          'part_of_relation',
+          OsmDisabledReason.partOfRelation,
           reason: type,
         );
       }
@@ -110,11 +110,11 @@ void main() {
           );
       final outer = _roads(relations: [multipolygon('outer')]);
       expect(OsmDeleteOperation(outer, [outer.way(10)!]).disabled,
-          'part_of_relation');
+          OsmDisabledReason.partOfRelation);
       final unroled = _roads(relations: [multipolygon('')]);
       expect(
         OsmDeleteOperation(unroled, [unroled.way(10)!]).disabled,
-        'part_of_relation',
+        OsmDisabledReason.partOfRelation,
       );
       final inner = _roads(relations: [multipolygon('inner')]);
       expect(OsmDeleteOperation(inner, [inner.way(10)!]).disabled, isNull);
@@ -125,13 +125,13 @@ void main() {
         testNode(1, 0, 0, {'wikidata': 'Q1'})
       ]);
       expect(OsmDeleteOperation(view, [view.node(1)!]).disabled,
-          'has_wikidata_tag');
+          OsmDisabledReason.hasWikidataTag);
     });
 
     test('undoes a deletion as one change', () {
       final view = _roads();
       OsmDeleteOperation(view, [view.way(11)!, view.node(1)!]).apply();
-      view.history.undo();
+      view.undo();
       expect(view.history.isEmpty, isTrue);
       expect(view.way(11), isNotNull);
       expect(view.node(4), isNotNull);
@@ -384,10 +384,10 @@ void main() {
   group('copying and pasting', () {
     test('copies a way with its nodes, and pastes it somewhere else', () {
       final view = _roads();
-      final copied = view.copy([view.way(11)!], anchor: (0.5, 0.5))!;
+      final copied = view.copy([view.way(11)!], worldAnchor: (0.5, 0.5))!;
       expect(copied.length, 1);
       expect(copied.nodes.keys, containsAll([2, 4]));
-      final pasted = view.paste(copied, dx: 0.001, dy: 0);
+      final pasted = view.paste(copied, worldDx: 0.001, worldDy: 0);
       final way = pasted.single as OsmWay;
       expect(way.id, isNegative);
       expect(way.tags, {'highway': 'service'});
@@ -412,7 +412,8 @@ void main() {
       final view = testEditor(nodes: [
         testNode(1, 0, 0, {'amenity': 'bench'})
       ]);
-      expect(view.copy([view.node(1)!], anchor: (0.5, 0.5))!.anchor, isNull);
+      expect(view.copy([view.node(1)!], worldAnchor: (0.5, 0.5))!.worldAnchor,
+          isNull);
     });
 
     test('has nothing to copy in a lone untagged vertex', () {
@@ -425,13 +426,13 @@ void main() {
     test('moves a way and its nodes, once each, as one change', () {
       final view = _roads();
       final before = OsmMercator.x(view.node(2)!.longitude);
-      view.move([view.way(10)!, view.node(2)!], dx: 0.0001, dy: 0);
+      view.move([view.way(10)!, view.node(2)!], worldDx: 0.0001, worldDy: 0);
       expect(
         OsmMercator.x(view.node(2)!.longitude),
         closeTo(before + 0.0001, 1e-12),
       );
       expect(view.history.length, 1);
-      view.history.undo();
+      view.undo();
       expect(view.history.changedNodes, isEmpty);
     });
   });
@@ -459,12 +460,12 @@ void main() {
 
     test('moves and pastes across it onto real longitudes', () {
       final view = across();
-      view.move([view.node(1)!], dx: 0.002 / 360, dy: 0);
+      view.move([view.node(1)!], worldDx: 0.002 / 360, worldDy: 0);
       expect(view.node(1)!.longitude, closeTo(-179.999, 1e-6));
 
       final copied = view.copy([view.way(10)!])!;
-      expect(copied.middle.$1, anyOf(closeTo(1, 1e-5), closeTo(0, 1e-5)));
-      final pasted = view.paste(copied, dx: 0.01, dy: 0);
+      expect(copied.worldMiddle.$1, anyOf(closeTo(1, 1e-5), closeTo(0, 1e-5)));
+      final pasted = view.paste(copied, worldDx: 0.01, worldDy: 0);
       for (final id in (pasted.single as OsmWay).nodeIds) {
         final longitude = view.node(id)!.longitude;
         expect(longitude, inInclusiveRange(-180, 180));

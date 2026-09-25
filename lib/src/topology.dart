@@ -8,7 +8,6 @@ library;
 import 'dart:math' as math;
 
 import 'edit.dart';
-import 'editor.dart';
 import 'element.dart';
 import 'operations.dart';
 import 'presets.dart';
@@ -365,13 +364,13 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
     return shapes.single == OsmGeometry.area ? 'area' : 'line';
   }
 
-  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  /// Why it cannot be done, or null if it can.
   @override
-  String? get disabled {
+  OsmDisabledReason? get disabled {
     final candidates = ways;
     if (candidates.isEmpty ||
         (_limit.isNotEmpty && _limit.length != candidates.length)) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     for (final way in candidates) {
       for (final relation in _view.relationsUsing(OsmElementType.way, way.id)) {
@@ -379,7 +378,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
           final vias = relation.members.where(
             (m) => m.role == 'via' || m.role == 'intersection',
           );
-          if (!vias.every(_held)) return 'parent_incomplete';
+          if (!vias.every(_held)) return OsmDisabledReason.parentIncomplete;
         } else {
           final members = relation.members;
           for (var i = 0; i < members.length; i++) {
@@ -388,14 +387,14 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
             final before = i > 0 && _held(members[i - 1]);
             final after = i < members.length - 1 && _held(members[i + 1]);
             if (!before && !after && members.length > 1) {
-              return 'parent_incomplete';
+              return OsmDisabledReason.parentIncomplete;
             }
           }
         }
         const splittableTypes = {'junction', 'enforcement'};
         if (_isCircular(way) &&
             !splittableTypes.contains(relation.tags['type'])) {
-          return 'simple_roundabout';
+          return OsmDisabledReason.simpleRoundabout;
         }
       }
     }
@@ -734,14 +733,14 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       ];
 
   /// Which way of merging applies, and why it cannot be done if none can.
-  (int, String?) get _choice {
+  (int, OsmDisabledReason?) get _choice {
     final reasons = [_joinDisabled, _pointsDisabled, _polygonDisabled];
     for (var i = 0; i < reasons.length; i++) {
       if (reasons[i] != null) continue;
       if (i == 0) {
         final ways = _of(OsmGeometry.line).cast<OsmWay>().toList();
         if (_joinWays(ways).single.nodes.length > maximumWayNodes) {
-          return (0, 'too_many_vertices');
+          return (0, OsmDisabledReason.tooManyVertices);
         }
       }
       return (i, null);
@@ -749,14 +748,14 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     final nodes = _nodesDisabled;
     if (nodes == null) return (3, null);
     for (var i = 0; i < reasons.length; i++) {
-      if (reasons[i] != 'not_eligible') return (i, reasons[i]);
+      if (reasons[i] != OsmDisabledReason.notEligible) return (i, reasons[i]);
     }
     return (3, nodes);
   }
 
-  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  /// Why it cannot be done, or null if it can.
   @override
-  String? get disabled => _choice.$2;
+  OsmDisabledReason? get disabled => _choice.$2;
 
   /// Merges them, as one change, and gives back what is left of them for
   /// selecting: the ones that say something, if any do.
@@ -797,28 +796,28 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
           if (!_isRestriction(r) && !_isConnectivity(r)) r,
       ];
 
-  String? get _joinDisabled {
+  OsmDisabledReason? get _joinDisabled {
     final lines = _of(OsmGeometry.line);
     if (selected.length < 2 || lines.length != selected.length) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     final ways = lines.cast<OsmWay>();
     final sequences = _joinWays(ways);
-    if (sequences.length > 1) return 'not_adjacent';
+    if (sequences.length > 1) return OsmDisabledReason.notAdjacent;
 
     Set<int> parentIds(OsmWay way) => {for (final r in _parents(way)) r.id};
     final first = parentIds(ways.first);
     for (final way in ways.skip(1)) {
       final other = parentIds(way);
       if (other.length != first.length || !other.containsAll(first)) {
-        return 'conflicting_relations';
+        return OsmDisabledReason.conflictingRelations;
       }
     }
 
     for (var i = 0; i < ways.length - 1; i++) {
       for (var j = i + 1; j < ways.length; j++) {
         if (_pathsCross(_view, ways[i].nodeIds, ways[j].nodeIds)) {
-          return 'paths_intersect';
+          return OsmDisabledReason.pathsIntersect;
         }
       }
     }
@@ -851,9 +850,11 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       }
     }
     if (restricting != null) {
-      return _isRestriction(restricting) ? 'restriction' : 'connectivity';
+      return _isRestriction(restricting)
+          ? OsmDisabledReason.restriction
+          : OsmDisabledReason.connectivity;
     }
-    if (conflicting) return 'conflicting_tags';
+    if (conflicting) return OsmDisabledReason.conflictingTags;
     return null;
   }
 
@@ -899,10 +900,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
         survivor,
         _mergeTags(survivor.tags, gone.tags, set: summed),
       );
-      view.deleteWay(
-        gone,
-        relations: view.relationsUsing(OsmElementType.way, gone.id),
-      );
+      view.deleteWay(gone);
     }
     _collapseMultipolygon(survivorId);
   }
@@ -931,10 +929,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       OsmElementType.way,
       survivorId,
     );
-    view.deleteRelation(
-      view.relation(multipolygon.id)!,
-      relations: view.relationsUsing(OsmElementType.relation, multipolygon.id),
-    );
+    view.deleteRelation(view.relation(multipolygon.id)!);
     tags.remove('type');
     final area = view.geometryOf(
       OsmWay(id: survivorId, nodeIds: survivor.nodeIds, tags: tags),
@@ -945,12 +940,12 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
 
   // Points into a line or an area.
 
-  String? get _pointsDisabled {
+  OsmDisabledReason? get _pointsDisabled {
     final points = _of(OsmGeometry.point);
     final targets = _of(OsmGeometry.area).whereType<OsmWay>().length +
         _of(OsmGeometry.line).length;
     if (points.isEmpty || targets != 1 || _relations.isNotEmpty) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     return null;
   }
@@ -1011,11 +1006,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
           remove = replacing;
         }
       }
-      view.deleteNode(
-        view.node(remove.id)!,
-        from: view.waysUsing(remove.id),
-        relations: view.relationsUsing(OsmElementType.node, remove.id),
-      );
+      view.deleteNode(view.node(remove.id)!);
     }
     // An area tag that the rest of the tags now make needless goes.
     final target = view.way(targetId)!;
@@ -1041,17 +1032,17 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
           if (_isMultipolygon(r)) r,
       ];
 
-  String? get _polygonDisabled {
+  OsmDisabledReason? get _polygonDisabled {
     final closed = _closedWays, multipolygons = _multipolygons;
     if (closed.length + multipolygons.length != selected.length ||
         closed.length + multipolygons.length < 2) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     for (final r in multipolygons) {
       if (!r.members.every(
         (m) => m.type != OsmElementType.way || _view.way(m.ref) != null,
       )) {
-        return 'incomplete_relation';
+        return OsmDisabledReason.incompleteRelation;
       }
     }
     if (multipolygons.isEmpty) {
@@ -1066,14 +1057,14 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       if ((shared ?? const {}).any(
         (id) => _view.relation(id)!.members.length == closed.length,
       )) {
-        return 'not_eligible';
+        return OsmDisabledReason.notEligible;
       }
     } else if (closed.any(
       (way) => _view
           .relationsUsing(OsmElementType.way, way.id)
           .any((r) => multipolygons.any((m) => m.id == r.id)),
     )) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     return null;
   }
@@ -1140,10 +1131,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     for (final m in multipolygons) {
       if (m.id == keep?.id) continue;
       tags = _mergeTags(tags, m.tags);
-      view.deleteRelation(
-        view.relation(m.id)!,
-        relations: view.relationsUsing(OsmElementType.relation, m.id),
-      );
+      view.deleteRelation(view.relation(m.id)!);
     }
     for (final way in closed) {
       if (!members.any((m) => m.ref == way.id && m.role != 'inner')) continue;
@@ -1189,9 +1177,9 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
 
   // Nodes into one.
 
-  String? get _nodesDisabled {
+  OsmDisabledReason? get _nodesDisabled {
     if (selected.length < 2 || _nodes.length != selected.length) {
-      return 'not_eligible';
+      return OsmDisabledReason.notEligible;
     }
     return osmConnectDisabled(_view, [for (final n in _nodes) n.id]);
   }
@@ -1264,14 +1252,13 @@ void osmConnect(OsmEditor view, List<int> ids) {
   }
 }
 
-/// Why the nodes [ids] cannot be made one, in iD's words for the reason, or
-/// null if they can.
+/// Why the nodes [ids] cannot be made one, or null if they can.
 ///
 /// Not when they play different parts in one relation, and not when it
 /// would spoil a turn restriction: joining the way turned from to the way
 /// turned to, a junction to a node that is not next to it, or anything
 /// that would leave one of its ways too short to be one.
-String? osmConnectDisabled(OsmEditor view, List<int> ids) {
+OsmDisabledReason? osmConnectDisabled(OsmEditor view, List<int> ids) {
   final survivorId = _oldest(ids);
   final seen = <int, String>{};
   final restrictions = <int>{};
@@ -1282,7 +1269,7 @@ String? osmConnectDisabled(OsmEditor view, List<int> ids) {
           .role;
       if (_hasFromViaTo(relation)) restrictions.add(relation.id);
       final had = seen[relation.id];
-      if (had != null && had != role) return 'relation';
+      if (had != null && had != role) return OsmDisabledReason.relation;
       seen[relation.id] = role;
     }
   }
@@ -1356,12 +1343,14 @@ String? osmConnectDisabled(OsmEditor view, List<int> ids) {
     final connectVia = ids.any(viaNodes.contains);
     final connectTo = ids.any(toNodes.contains);
     final connectKey = ids.any((n) => keyFrom.contains(n) || keyTo.contains(n));
-    if (connectFrom && connectTo && !uturn) return 'restriction';
-    if (connectFrom && connectVia) return 'restriction';
-    if (connectTo && connectVia) return 'restriction';
+    if (connectFrom && connectTo && !uturn) {
+      return OsmDisabledReason.restriction;
+    }
+    if (connectFrom && connectVia) return OsmDisabledReason.restriction;
+    if (connectTo && connectVia) return OsmDisabledReason.restriction;
 
     if (connectKey) {
-      if (ids.length != 2) return 'restriction';
+      if (ids.length != 2) return OsmDisabledReason.restriction;
       int? n0, n1;
       for (final way in memberWays) {
         if (way.nodeIds.contains(ids[0])) n0 = ids[0];
@@ -1379,7 +1368,7 @@ String? osmConnectDisabled(OsmEditor view, List<int> ids) {
           return false;
         }
 
-        if (!memberWays.any(adjacent)) return 'restriction';
+        if (!memberWays.any(adjacent)) return OsmDisabledReason.restriction;
       }
     }
 
@@ -1394,13 +1383,13 @@ String? osmConnectDisabled(OsmEditor view, List<int> ids) {
         way = OsmWay(
           id: way.id,
           nodeIds: adjacent
-              ? OsmEditHistory.withoutNode(way, id)
+              ? way.withoutNode(id)
               : [
                   for (final n in way.nodeIds) n == id ? survivorId : n,
                 ],
         );
       }
-      if (way.isDegenerate) return 'restriction';
+      if (way.isDegenerate) return OsmDisabledReason.restriction;
     }
   }
   return null;
@@ -1505,9 +1494,9 @@ class OsmDisconnectOperation extends OsmOperation<void> {
   /// The nodes it disconnects at, for judging how much of it is in view.
   List<int> get nodes => [for (final (id, _) in _actions) id];
 
-  /// Why it cannot be done, in iD's words for the reason, or null if it can.
+  /// Why it cannot be done, or null if it can.
   @override
-  String? get disabled {
+  OsmDisabledReason? get disabled {
     for (final (id, limit) in _actions) {
       final reason = _disabledAt(id, limit);
       if (reason != null) return reason;
@@ -1519,8 +1508,8 @@ class OsmDisconnectOperation extends OsmOperation<void> {
   /// harm: they group things rather than join them.
   static const _loose = {'associatedStreet', 'enforcement', 'site'};
 
-  String? _disabledAt(int id, List<int>? limit) {
-    if (_connections(id, limit).isEmpty) return 'not_connected';
+  OsmDisabledReason? _disabledAt(int id, List<int>? limit) {
+    if (_connections(id, limit).isEmpty) return OsmDisabledReason.notConnected;
     final seen = <int, int>{};
     for (final way in _view.waysUsing(id)) {
       for (final relation in _view.relationsUsing(OsmElementType.way, way.id)) {
@@ -1530,7 +1519,7 @@ class OsmDisconnectOperation extends OsmOperation<void> {
           if (limit == null ||
               limit.contains(way.id) ||
               limit.contains(other)) {
-            return 'relation';
+            return OsmDisabledReason.relation;
           }
         } else {
           seen[relation.id] = way.id;

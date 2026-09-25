@@ -49,17 +49,17 @@
   editors share, with the ground each layer covers, what it asks to be
   credited as, and which the index says to prefer. Layers that cannot be asked
   for a tile at a time are left out.
-* `OsmTile` and `Mercator` for the tile numbering and projection everything
+* `OsmTile` and `OsmMercator` for the tile numbering and projection everything
   served a piece at a time uses.
-* `OsmTileCache` for holding boxes of data on disk between runs, and
+* `OsmDataCache` for holding boxes of data on disk between runs, and
   `OsmImageryCache` and `OsmImageryTiles` for fetching and holding imagery
   tiles, including remembering ground a layer has nothing for.
-  `OsmImageryIndexFile` reads the editor layer index and keeps a copy.
+  `OsmImageryIndexCache` reads the editor layer index and keeps a copy.
 * `OsmEditHistory` for changes made to a dataset, kept as a list so that they can be
   undone one at a time: nodes moved, made and taken off the map, ways made,
   and the nodes a way runs through changed. Nothing it holds touches what was
   read: what has been changed is laid over the top. Deleting a node takes it
   out of the ways through it as one change, so putting it back puts them back
   with it.
-* `OsmEditHistory.combineSince` gathers a run of changes into one, so that
+* `OsmEditor.combineSince` gathers a run of changes into one, so that
   something built a piece at a time is undone as the thing it became.

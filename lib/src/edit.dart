@@ -1,4 +1,10 @@
+import 'country_coder.dart';
 import 'element.dart';
+import 'operations.dart';
+import 'presets.dart';
+import 'topology.dart';
+
+part 'editor.dart';
 
 /// One change made to a dataset.
 ///
@@ -410,7 +416,7 @@ class OsmEditHistory {
   int get nextId => _nextId;
 
   /// Makes a node at ([latitude], [longitude]).
-  OsmNode createNode({
+  OsmNode _createNode({
     required double latitude,
     required double longitude,
     Map<String, String> tags = const {},
@@ -428,7 +434,7 @@ class OsmEditHistory {
   }
 
   /// Makes a way through [nodeIds].
-  OsmWay createWay({
+  OsmWay _createWay({
     required List<int> nodeIds,
     Map<String, String> tags = const {},
   }) {
@@ -440,7 +446,7 @@ class OsmEditHistory {
   }
 
   /// Makes a relation of [members].
-  OsmRelation createRelation({
+  OsmRelation _createRelation({
     required List<OsmMember> members,
     Map<String, String> tags = const {},
   }) {
@@ -462,7 +468,7 @@ class OsmEditHistory {
   ///
   /// And out of every relation in [relations], since OpenStreetMap will not
   /// delete something a relation still lists.
-  void deleteNode(
+  void _deleteNode(
     OsmNode node, {
     Iterable<OsmWay> from = const [],
     Iterable<OsmRelation> relations = const [],
@@ -474,7 +480,7 @@ class OsmEditHistory {
       ways.add(
         _change(
           running,
-          withoutNode(running, node.id),
+          running.withoutNode(node.id),
           wasRead: !_ways.containsKey(way.id),
         ),
       );
@@ -502,7 +508,7 @@ class OsmEditHistory {
   /// Only the way. Its nodes stay unless they are deleted as well, which is
   /// for whoever deletes the way to decide: some are shared with other ways
   /// or say something of their own.
-  void deleteWay(OsmWay way, {Iterable<OsmRelation> relations = const []}) {
+  void _deleteWay(OsmWay way, {Iterable<OsmRelation> relations = const []}) {
     if (isGone(OsmElementType.way, way.id)) return;
     final members = _withoutMember(relations, OsmElementType.way, way.id);
     final wasRead = !_ways.containsKey(way.id);
@@ -517,7 +523,7 @@ class OsmEditHistory {
 
   /// Takes [relation] off the map, and out of every relation in
   /// [relations].
-  void deleteRelation(
+  void _deleteRelation(
     OsmRelation relation, {
     Iterable<OsmRelation> relations = const [],
   }) {
@@ -537,29 +543,8 @@ class OsmEditHistory {
     _changed();
   }
 
-  /// The nodes of [way] without the node [id], as they are once it is taken
-  /// out: every time the way ran through it, and any repeat that leaves.
-  ///
-  /// A way that was closed stays closed. The node a ring was drawn from is
-  /// also the one it comes back to, so taking it out would leave the ring
-  /// open, and the next node along closes it instead.
-  static List<int> withoutNode(OsmWay way, int id) {
-    final nodes = <int>[];
-    for (final node in way.nodeIds) {
-      if (node == id) continue;
-      if (nodes.isNotEmpty && nodes.last == node) continue;
-      nodes.add(node);
-    }
-    if (way.isClosed &&
-        nodes.isNotEmpty &&
-        (nodes.length == 1 || nodes.first != nodes.last)) {
-      nodes.add(nodes.first);
-    }
-    return nodes;
-  }
-
   /// Gives [relation] [members] in place of the ones it has.
-  void setRelationMembers(OsmRelation relation, List<OsmMember> members) {
+  void _setRelationMembers(OsmRelation relation, List<OsmMember> members) {
     _done.add(_changeRelation(relation, members));
     _changed();
   }
@@ -598,7 +583,7 @@ class OsmEditHistory {
   }
 
   /// Puts [way] through [nodeIds] instead of what it ran through before.
-  void setWayNodes(OsmWay way, List<int> nodeIds) {
+  void _setWayNodes(OsmWay way, List<int> nodeIds) {
     _done.add(
       _change(way, nodeIds, wasRead: !_ways.containsKey(way.id)),
     );
@@ -627,7 +612,7 @@ class OsmEditHistory {
   /// A run of moves of the same node while it is being dragged is one change
   /// rather than one a frame: [continuing] says this is more of a move that
   /// is already under way.
-  void moveNode(
+  void _moveNode(
     OsmNode node, {
     required double latitude,
     required double longitude,
@@ -666,7 +651,7 @@ class OsmEditHistory {
   ///
   /// A node or a way, as it now stands or as it was read. Everything but the
   /// tags is kept, and nothing is recorded if the tags are already these.
-  bool setTags(OsmElement element, Map<String, String> tags) {
+  bool _setTags(OsmElement element, Map<String, String> tags) {
     if (isGone(element.type, element.id)) return false;
     final OsmElement was;
     final bool wasRead;
@@ -721,7 +706,7 @@ class OsmEditHistory {
   /// [mark] is a [length] taken before the run of changes started. Nothing
   /// happens if fewer than two changes have been made since, there being
   /// nothing to gather.
-  void combineSince(int mark) {
+  void _combineSince(int mark) {
     if (mark < 0 || _done.length - mark < 2) return;
     final gathered = _done.sublist(mark);
     _done.removeRange(mark, _done.length);
@@ -742,7 +727,7 @@ class OsmEditHistory {
   /// Undoes the last change, and says whether there was one to undo.
   ///
   /// It can be made again with [redo] until another change is made.
-  bool undo() {
+  bool _undo() {
     if (_done.isEmpty) return false;
     final last = _done.removeLast();
     _undoOne(last);
@@ -752,7 +737,7 @@ class OsmEditHistory {
   }
 
   /// Makes the last change undone again, and says whether there was one.
-  bool redo() {
+  bool _redo() {
     if (_undone.isEmpty) return false;
     final next = _undone.removeLast();
     _redoOne(next);
@@ -910,7 +895,7 @@ class OsmEditHistory {
   /// line being drawn.
   ///
   /// Given up on rather than undone, so none of it can be redone.
-  void undoSince(int mark) {
+  void _undoSince(int mark) {
     if (_done.length <= mark) return;
     while (_done.length > mark) {
       _undoOne(_done.removeLast());
@@ -922,7 +907,7 @@ class OsmEditHistory {
   ///
   /// Nothing can be redone afterwards: this is for starting again, such as
   /// once everything has been uploaded.
-  void undoAll() {
+  void _undoAll() {
     if (_done.isEmpty && _undone.isEmpty) return;
     _done.clear();
     _undone.clear();
@@ -936,33 +921,6 @@ class OsmEditHistory {
     onChanged?.call();
   }
 
-  /// The elements that have been changed, along with everything that has to
-  /// be redrawn because of them.
-  ///
-  /// A moved node takes every way running through it with it, which is what
-  /// [waysUsing] is asked for.
-  Set<(OsmElementType, int)> touching(
-    List<int> Function(int nodeId) waysUsing,
-  ) {
-    final touched = <(OsmElementType, int)>{..._gone};
-    for (final id in _nodes.keys) {
-      touched.add((OsmElementType.node, id));
-      for (final way in waysUsing(id)) {
-        touched.add((OsmElementType.way, way));
-      }
-    }
-    for (final id in _ways.keys) {
-      touched.add((OsmElementType.way, id));
-    }
-    for (final id in _relations.keys) {
-      touched.add((OsmElementType.relation, id));
-    }
-    for (final (type, id) in _gone) {
-      if (type != OsmElementType.node) continue;
-      for (final way in waysUsing(id)) {
-        touched.add((OsmElementType.way, way));
-      }
-    }
-    return touched;
-  }
+  /// Every element taken off the map, whether or not it was ever uploaded.
+  Set<(OsmElementType, int)> get gone => Set.unmodifiable(_gone);
 }

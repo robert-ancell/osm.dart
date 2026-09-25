@@ -1,6 +1,8 @@
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
+import 'test_editor.dart';
+
 const _generator = 'Test Editor';
 
 /// A way as OpenStreetMap sent it, with the version an edit has to quote.
@@ -18,16 +20,16 @@ OsmNode _node(int id, double lat, double lon, {int version = 2}) => OsmNode(
       info: OsmInfo(version: version),
     );
 
-String _xml(OsmEditHistory edits) =>
-    OsmUpload.of(edits).toXml(changeset: 77, createdBy: _generator);
+String _xml(OsmEditor edits) =>
+    OsmUpload.of(edits.history).toXml(changeset: 77, createdBy: _generator);
 
 void main() {
   test('sends nothing when nothing has been changed', () {
-    expect(OsmUpload.of(OsmEditHistory()).isEmpty, isTrue);
+    expect(OsmUpload.of(editorOf().history).isEmpty, isTrue);
   });
 
   test('writes a moved node with the version it was read at', () {
-    final edits = OsmEditHistory()
+    final edits = editorOf()
       ..moveNode(_node(5, -36.85, 174.76), latitude: -36.86, longitude: 174.77);
     final xml = _xml(edits);
     expect(xml, contains('<modify>'));
@@ -40,7 +42,7 @@ void main() {
   });
 
   test('writes new elements with a version of zero', () {
-    final edits = OsmEditHistory();
+    final edits = editorOf();
     final a = edits.createNode(latitude: 1, longitude: 2);
     final b = edits.createNode(latitude: 3, longitude: 4);
     edits.createWay(nodeIds: [a.id, b.id], tags: const {'building': 'yes'});
@@ -56,7 +58,7 @@ void main() {
 
   test('writes a way without a deleted node before deleting it', () {
     final way = _way(9, [1, 2, 3]);
-    final edits = OsmEditHistory()..deleteNode(_node(2, 1, 2), from: [way]);
+    final edits = editorOf([way])..deleteNode(_node(2, 1, 2));
     final xml = _xml(edits);
     expect(xml.indexOf('<modify>'), lessThan(xml.indexOf('<delete>')));
     expect(xml, contains('<nd ref="1"/>'));
@@ -65,38 +67,38 @@ void main() {
   });
 
   test('says nothing about a node made and then taken away again', () {
-    final edits = OsmEditHistory();
+    final edits = editorOf();
     final node = edits.createNode(latitude: 1, longitude: 2);
     edits.deleteNode(node);
-    expect(OsmUpload.of(edits).isEmpty, isTrue);
+    expect(OsmUpload.of(edits.history).isEmpty, isTrue);
   });
 
   test('forgets a deletion that was undone', () {
-    final edits = OsmEditHistory()..deleteNode(_node(4, 1, 2));
-    expect(OsmUpload.of(edits).deletedNodes, hasLength(1));
+    final edits = editorOf()..deleteNode(_node(4, 1, 2));
+    expect(OsmUpload.of(edits.history).deletedNodes, hasLength(1));
     edits.undo();
-    expect(OsmUpload.of(edits).isEmpty, isTrue);
+    expect(OsmUpload.of(edits.history).isEmpty, isTrue);
   });
 
   test('refuses to write back an element read without a version', () {
-    final edits = OsmEditHistory()
+    final edits = editorOf()
       ..moveNode(const OsmNode(id: 5, latitude: 1, longitude: 2),
           latitude: 3, longitude: 4);
     expect(() => _xml(edits), throwsA(isA<OsmUploadException>()));
   });
 
   test('escapes what XML cannot hold as it stands', () {
-    final edits = OsmEditHistory()
+    final edits = editorOf()
       ..createNode(
           latitude: 1, longitude: 2, tags: const {'name': 'Bill & Ben'});
     expect(_xml(edits), contains('v="Bill &amp; Ben"'));
   });
 
   test('lists what would be sent', () {
-    final edits = OsmEditHistory();
+    final edits = editorOf();
     final node = edits.createNode(latitude: 1, longitude: 2);
     edits.createWay(nodeIds: [node.id]);
-    expect(OsmUpload.of(edits).describe(), [
+    expect(OsmUpload.of(edits.history).describe(), [
       'Create node new (-1)',
       'Create way new (-2) through 1 node(s)',
     ]);

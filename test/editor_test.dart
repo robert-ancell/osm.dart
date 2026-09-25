@@ -109,7 +109,7 @@ void main() {
     });
 
     test('takes a deleted node out of its way again', () {
-      roundTrip((e) => e.deleteNode(e.node(2)!, from: e.waysUsing(2)));
+      roundTrip((e) => e.deleteNode(e.node(2)!));
     });
 
     test('deletes a way and its nodes again', () {
@@ -130,7 +130,7 @@ void main() {
       final editor = _square();
       final mark = editor.history.length;
       editor.createNode(latitude: 1, longitude: 1);
-      editor.history.undoSince(mark);
+      editor.undoSince(mark);
       expect(editor.canRedo, isFalse);
     });
   });
@@ -142,4 +142,40 @@ void main() {
     expect(testWay(1, [1, 2, 3, 1]).isDegenerate, isFalse);
     expect(testWay(1, [1, 2, 1]).isDegenerate, isTrue);
   });
+
+  test('says which regions something is in once the borders are known', () {
+    final editor = _square();
+    expect(editor.regionsOf(editor.way(10)!), isEmpty);
+    editor.countryCoder = OsmCountryCoder.parse(_borders);
+    expect(editor.regionsOf(editor.way(10)!), contains('xa'));
+    expect(editor.regionsOf(editor.node(5)!), contains('xa'));
+  });
+
+  test('edits what was read from a file as it is', () {
+    final subset = OsmSubset(
+      matches: const [],
+      nodes: {
+        for (final id in [1, 2, 3]) id: testNode(id, 0, id / 1000)
+      },
+      ways: {
+        10: testWay(10, [1, 2, 3], {'highway': 'path'})
+      },
+      relations: {
+        20: const OsmRelation(
+          id: 20,
+          members: [OsmMember(type: OsmElementType.way, ref: 10, role: '')],
+        ),
+      },
+    );
+    final editor = OsmEditor(subset);
+    expect(editor.waysUsing(2).single.id, 10);
+    expect(editor.relationsUsing(OsmElementType.way, 10).single.id, 20);
+    editor.deleteNode(editor.node(2)!);
+    expect(editor.way(10)!.nodeIds, [1, 3]);
+  });
 }
+
+const _borders = '{"type":"FeatureCollection","features":[{"type":"Feature",'
+    '"properties":{"iso1A2":"XA","nameEn":"Examplia"},'
+    '"geometry":{"type":"Polygon","coordinates":'
+    '[[[-1,-1],[1,-1],[1,1],[-1,1],[-1,-1]]]}}]}';

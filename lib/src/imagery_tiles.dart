@@ -1,23 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'imagery.dart';
 import 'imagery_cache.dart';
 import 'tile.dart';
 import 'update/http.dart';
-
-/// Where the editor layer index publishes itself.
-const osmImageryIndexUrl =
-    'https://osmlab.github.io/editor-layer-index/imagery.geojson';
-
-/// How long a copy of the index is used before it is fetched again.
-///
-/// Layers are added and withdrawn over weeks, not hours, and a tool that
-/// cannot reach the index is better off with last week's list than none.
-const osmImageryIndexFreshness = Duration(days: 7);
 
 /// Fetches imagery tiles, keeping what it fetches.
 ///
@@ -96,83 +83,5 @@ class OsmImageryTiles {
     }
     await cache?.write(tile, body);
     return body;
-  }
-}
-
-/// Reads the editor layer index, keeping a copy between runs.
-///
-/// A megabyte of JSON describing every layer editors know about. It is parsed
-/// away from the calling isolate, because a tool with an interface should not
-/// be doing that where it draws.
-abstract final class OsmImageryIndexFile {
-  /// The index, from [file] if a recent copy is held there and from the
-  /// network otherwise.
-  ///
-  /// Never throws: an index that cannot be had at all comes back holding
-  /// [fallback], which may be empty. An old copy is used when the network
-  /// cannot be reached, because an old list beats no list.
-  static Future<OsmImageryIndex> read({
-    required File file,
-    required OsmFetch fetch,
-    List<OsmImagery> fallback = const [],
-    Uri? from,
-  }) async {
-    final held = await _held(file);
-    if (held != null) return held;
-
-    try {
-      final body = await fetch(from ?? Uri.parse(osmImageryIndexUrl));
-      if (body != null) {
-        final json = utf8.decode(body);
-        final index = await parse(json);
-        if (index.layers.isNotEmpty) {
-          await _keep(file, json);
-          return index;
-        }
-      }
-    } on IOException {
-      // No network, or the index has moved.
-    } on FormatException {
-      // Something that is not the index at all, such as a portal asking to be
-      // logged into. Not worth keeping.
-    }
-
-    return await _held(file, however: true) ?? OsmImageryIndex(fallback);
-  }
-
-  /// Parses an index away from the calling isolate.
-  static Future<OsmImageryIndex> parse(String json) =>
-      Isolate.run(() => OsmImageryIndex.parse(json));
-
-  /// The copy on disk, or null if there is none worth using.
-  ///
-  /// Set [however] to take one whatever its age, which is what happens when
-  /// the network cannot be reached.
-  static Future<OsmImageryIndex?> _held(
-    File file, {
-    bool however = false,
-  }) async {
-    try {
-      if (!file.existsSync()) return null;
-      if (!however) {
-        final age = DateTime.now().difference(await file.lastModified());
-        if (age > osmImageryIndexFreshness) return null;
-      }
-      final index = await parse(await file.readAsString());
-      return index.layers.isEmpty ? null : index;
-    } on IOException {
-      return null;
-    } on FormatException {
-      return null;
-    }
-  }
-
-  static Future<void> _keep(File file, String json) async {
-    try {
-      await file.parent.create(recursive: true);
-      await file.writeAsString(json);
-    } on IOException {
-      // Being unable to keep it costs a fetch next time, nothing more.
-    }
   }
 }

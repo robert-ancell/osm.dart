@@ -67,11 +67,14 @@ class OsmUpdateResult {
 ///
 /// The file written carries the planet's replication state, so the next
 /// update starts where this one finished.
+///
+/// The diffs are kept in [cache], as [OsmReplication.download] keeps them,
+/// so an update that stops part way does not fetch them again.
 Future<OsmUpdateResult> updateOsmSnapshot({
   required String input,
   required String output,
   required OsmReplication replication,
-  required Directory cache,
+  Directory? cache,
   OsmApi? api,
   void Function(String message)? onProgress,
 }) async {

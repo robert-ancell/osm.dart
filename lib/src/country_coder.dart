@@ -17,7 +17,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'country_coder_file.dart';
+import 'country_coder_cache.dart';
 
 /// One country, territory or larger region.
 class OsmCountry {
@@ -120,7 +120,7 @@ class OsmCountry {
 /// preset's location set may name here ([codesAt]).
 ///
 /// Made with [OsmCountryCoder.parse], usually from what
-/// [OsmCountryCoderFile.read] fetches and keeps on disk.
+/// [OsmCountryCoderCache.read] fetches and keeps on disk.
 class OsmCountryCoder {
   /// Every country, territory and region, whether or not it has land of its
   /// own. A country made of several pieces has its land in the pieces.

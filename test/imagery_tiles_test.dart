@@ -62,7 +62,7 @@ void main() {
 
     test('keeps what it fetched and does not ask twice', () async {
       final server = _Server();
-      final cache = await OsmImageryCache.open(_work);
+      final cache = await OsmImageryCache.open(directory: _work);
       final tiles = OsmImageryTiles(
         source: _source,
         fetch: server.fetch,
@@ -76,11 +76,11 @@ void main() {
 
     test('gives back what it kept on a later run', () async {
       final server = _Server();
-      final first = await OsmImageryCache.open(_work);
+      final first = await OsmImageryCache.open(directory: _work);
       await OsmImageryTiles(source: _source, fetch: server.fetch, cache: first)
           .tile(_tile);
 
-      final again = await OsmImageryCache.open(_work);
+      final again = await OsmImageryCache.open(directory: _work);
       final second = _Server();
       final body = await OsmImageryTiles(
         source: _source,
@@ -93,7 +93,7 @@ void main() {
 
     test('remembers ground the source has nothing for', () async {
       final server = _Server()..empty = true;
-      final cache = await OsmImageryCache.open(_work);
+      final cache = await OsmImageryCache.open(directory: _work);
       final tiles = OsmImageryTiles(
         source: _source,
         fetch: server.fetch,
@@ -107,7 +107,7 @@ void main() {
 
     test('hands over an old tile before fetching a newer one', () async {
       final server = _Server();
-      final cache = await OsmImageryCache.open(_work);
+      final cache = await OsmImageryCache.open(directory: _work);
       await OsmImageryTiles(source: _source, fetch: server.fetch, cache: cache)
           .tile(_tile);
 
@@ -121,7 +121,7 @@ void main() {
             .replaceAll(RegExp(r'"at":\d+'), '"at":$long'),
       );
 
-      final aged = await OsmImageryCache.open(_work);
+      final aged = await OsmImageryCache.open(directory: _work);
       final later = _Server();
       Uint8List? early;
       final body = await OsmImageryTiles(
@@ -143,19 +143,21 @@ void main() {
   });
 
   group('index', () {
-    File file() => File('${_work.path}/index.geojson');
+    File file() => File('${_work.path}/${OsmImageryIndexCache.file}');
 
     test('reads the index and keeps it', () async {
       final asked = <Uri>[];
-      final index = await OsmImageryIndexFile.read(
-        file: file(),
-        fetch: (uri, {abandon, onLate}) async {
-          asked.add(uri);
-          return Uint8List.fromList(utf8.encode(_index));
-        },
-      );
+      final index = await OsmImageryIndexCache(
+          directory: _work,
+          fetch: (uri, {abandon, onLate}) async {
+            asked.add(uri);
+            return Uint8List.fromList(utf8.encode(_index));
+          }).read();
       expect(index.layers.single.id, 'A');
-      expect(asked.single.toString(), osmImageryIndexUrl);
+      expect(
+        asked.single.toString(),
+        '$osmImageryIndexUrl${OsmImageryIndexCache.file}',
+      );
       expect(file().existsSync(), isTrue);
     });
 
@@ -167,34 +169,32 @@ void main() {
         return Uint8List.fromList(utf8.encode(_index));
       }
 
-      await OsmImageryIndexFile.read(file: file(), fetch: fetch);
-      await OsmImageryIndexFile.read(file: file(), fetch: fetch);
+      await OsmImageryIndexCache(directory: _work, fetch: fetch).read();
+      await OsmImageryIndexCache(directory: _work, fetch: fetch).read();
       expect(asked, 1);
     });
 
     test('keeps an old copy when it cannot be reached', () async {
-      await OsmImageryIndexFile.read(
-        file: file(),
-        fetch: (uri, {abandon, onLate}) async =>
-            Uint8List.fromList(utf8.encode(_index)),
-      );
+      await OsmImageryIndexCache(
+          directory: _work,
+          fetch: (uri, {abandon, onLate}) async =>
+              Uint8List.fromList(utf8.encode(_index))).read();
       await file().setLastModified(
         DateTime.now().subtract(osmImageryIndexFreshness * 2),
       );
-      final index = await OsmImageryIndexFile.read(
-        file: file(),
-        fetch: (uri, {abandon, onLate}) async =>
-            throw const SocketException('away'),
-      );
+      final index = await OsmImageryIndexCache(
+          directory: _work,
+          fetch: (uri, {abandon, onLate}) async =>
+              throw const SocketException('away')).read();
       expect(index.layers.single.id, 'A');
     });
 
     test('falls back to what it was given with nothing else', () async {
       const spare = OsmImagery(id: 'spare', name: 'Spare', url: 'https://s/');
-      final index = await OsmImageryIndexFile.read(
-        file: file(),
-        fetch: (uri, {abandon, onLate}) async =>
-            throw const SocketException('away'),
+      final index = await OsmImageryIndexCache(
+          directory: _work,
+          fetch: (uri, {abandon, onLate}) async =>
+              throw const SocketException('away')).read(
         fallback: const [spare],
       );
       expect(index.layers.single.id, 'spare');
@@ -202,11 +202,10 @@ void main() {
 
     test('falls back rather than trusting something that is not an index',
         () async {
-      final index = await OsmImageryIndexFile.read(
-        file: file(),
-        fetch: (uri, {abandon, onLate}) async =>
-            Uint8List.fromList(utf8.encode('not json')),
-      );
+      final index = await OsmImageryIndexCache(
+          directory: _work,
+          fetch: (uri, {abandon, onLate}) async =>
+              Uint8List.fromList(utf8.encode('not json'))).read();
       expect(index.layers, isEmpty);
       expect(file().existsSync(), isFalse);
     });

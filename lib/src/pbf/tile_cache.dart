@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../cache.dart';
 import '../element.dart';
 import '../pbf/file.dart';
 import '../pbf/writer.dart';
@@ -49,6 +50,9 @@ class OsmCachedTile {
 /// whole body, so nothing here can be revalidated over HTTP. What is held is
 /// checked by asking the API what has been edited over the area instead.
 class OsmTileCache {
+  /// The directory under [osmCacheDirectory] it is kept in by default.
+  static const name = 'data';
+
   /// Where the files are.
   final Directory directory;
 
@@ -59,14 +63,16 @@ class OsmTileCache {
 
   OsmTileCache._(this.directory, this.maximumBytes);
 
-  /// Opens the cache under [directory], reading what it already holds.
+  /// Opens the cache in [directory], by default [name] under
+  /// [osmCacheDirectory], reading what it already holds.
   ///
   /// A cache that cannot be read is started again rather than treated as an
   /// error. It holds nothing that cannot be read a second time.
-  static Future<OsmTileCache> open(
-    Directory directory, {
+  static Future<OsmTileCache> open({
+    Directory? directory,
     int maximumBytes = osmTileCacheBytes,
   }) async {
+    directory ??= osmCacheDirectory(name);
     final cache = OsmTileCache._(directory, maximumBytes);
     try {
       await directory.create(recursive: true);

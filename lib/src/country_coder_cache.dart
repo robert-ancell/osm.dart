@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 
+import 'cache.dart';
 import 'cached_files.dart';
 import 'country_coder.dart';
 import 'update/http.dart';
@@ -18,25 +19,39 @@ const osmCountryCoderUrl =
 const osmCountryCoderFreshness = Duration(days: 30);
 
 /// country-coder's borders, kept on disk between runs.
-abstract final class OsmCountryCoderFile {
+class OsmCountryCoderCache {
+  /// The directory under [osmCacheDirectory] it is kept in by default.
+  static const name = 'country-coder';
+
   /// The file the borders are in.
   static const file = 'borders.json';
 
-  /// The borders, from [directory] if a recent copy is held there and from
-  /// the network otherwise.
+  /// Where the borders are kept.
+  final Directory directory;
+
+  /// How they are fetched.
+  final OsmFetch fetch;
+
+  /// Where they are fetched from, [osmCountryCoderUrl] unless said
+  /// otherwise.
+  final Uri from;
+
+  /// Creates a cache in [directory], by default [name] under
+  /// [osmCacheDirectory].
+  OsmCountryCoderCache({Directory? directory, required this.fetch, Uri? from})
+      : directory = directory ?? osmCacheDirectory(name),
+        from = from ?? Uri.parse(osmCountryCoderUrl);
+
+  /// The borders, from disk if a recent copy is held there and from the
+  /// network otherwise.
   ///
   /// Never throws. An old copy is used when the network cannot be reached,
   /// and null comes back only when there is no copy of any age and nothing
   /// could be fetched.
-  static Future<OsmCountryCoder?> read({
-    required Directory directory,
-    required OsmFetch fetch,
-    Uri? from,
-  }) =>
-      readCachedFiles(
+  Future<OsmCountryCoder?> read() => readCachedFiles(
         directory: directory,
         files: const [file],
-        from: from ?? Uri.parse(osmCountryCoderUrl),
+        from: from,
         fetch: fetch,
         freshness: osmCountryCoderFreshness,
         parse: (files) =>

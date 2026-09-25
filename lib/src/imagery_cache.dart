@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+
+import 'cache.dart';
 import 'dart:typed_data';
 
 import 'tile.dart';
@@ -49,6 +51,9 @@ class OsmCachedImagery {
 /// source has nothing for is remembered too, so flying over the sea does not
 /// ask for the same empty tiles every time.
 class OsmImageryCache {
+  /// The directory under [osmCacheDirectory] it is kept in by default.
+  static const name = 'imagery';
+
   /// Where the files are.
   final Directory directory;
 
@@ -59,11 +64,13 @@ class OsmImageryCache {
 
   OsmImageryCache._(this.directory, this.maximumBytes);
 
-  /// Opens the cache under [directory], reading what it already holds.
-  static Future<OsmImageryCache> open(
-    Directory directory, {
+  /// Opens the cache in [directory], by default [name] under
+  /// [osmCacheDirectory], reading what it already holds.
+  static Future<OsmImageryCache> open({
+    Directory? directory,
     int maximumBytes = osmImageryCacheBytes,
   }) async {
+    directory ??= osmCacheDirectory(name);
     final cache = OsmImageryCache._(directory, maximumBytes);
     try {
       await directory.create(recursive: true);

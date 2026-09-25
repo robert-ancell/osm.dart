@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 
+import 'cache.dart';
 import 'cached_files.dart';
 import 'presets.dart';
 import 'update/http.dart';
@@ -20,7 +21,25 @@ const osmPresetsUrl =
 const osmPresetsFreshness = Duration(days: 7);
 
 /// iD's tagging schema, kept on disk between runs.
-abstract final class OsmPresetsFile {
+class OsmPresetsCache {
+  /// The directory under [osmCacheDirectory] it is kept in by default.
+  static const name = 'presets';
+
+  /// Where the schema is kept.
+  final Directory directory;
+
+  /// How it is fetched.
+  final OsmFetch fetch;
+
+  /// Where it is fetched from, [osmPresetsUrl] unless said otherwise.
+  final Uri from;
+
+  /// Creates a cache in [directory], by default [name] under
+  /// [osmCacheDirectory].
+  OsmPresetsCache({Directory? directory, required this.fetch, Uri? from})
+      : directory = directory ?? osmCacheDirectory(name),
+        from = from ?? Uri.parse(osmPresetsUrl);
+
   /// The files that make up the schema, for [language]. All four are asked
   /// for and kept together, so that a copy on disk is always one version of
   /// the schema rather than parts of several.
@@ -31,22 +50,16 @@ abstract final class OsmPresetsFile {
         'translations/$language.min.json',
       ];
 
-  /// The schema in [language], from [directory] if a recent copy is held
-  /// there and from the network otherwise.
+  /// The schema in [language], from disk if a recent copy is held there and
+  /// from the network otherwise.
   ///
   /// Never throws. An old copy is used when the network cannot be reached,
   /// because old names beat none, and null comes back only when there is no
   /// copy of any age and nothing could be fetched.
-  static Future<OsmPresets?> read({
-    required Directory directory,
-    required OsmFetch fetch,
-    String language = 'en',
-    Uri? from,
-  }) =>
-      readCachedFiles(
+  Future<OsmPresets?> read({String language = 'en'}) => readCachedFiles(
         directory: directory,
         files: filesFor(language),
-        from: from ?? Uri.parse(osmPresetsUrl),
+        from: from,
         fetch: fetch,
         freshness: osmPresetsFreshness,
         parse: (files) => Isolate.run(

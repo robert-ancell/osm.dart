@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import '../cache.dart';
 import '../exception.dart';
 import 'http.dart';
 
@@ -247,18 +248,36 @@ class OsmReplication {
     return kept;
   }
 
+  /// The directory under [osmCacheDirectory] diffs are kept in by default.
+  static const cacheName = 'replication';
+
+  /// Where under a cache directory this feed's diffs go: the server and the
+  /// path of [base], such as `planet.openstreetmap.org/replication`, so that
+  /// the diffs of different feeds, numbered alike, are kept apart.
+  String get cachePath => [
+        base.host,
+        for (final segment in base.pathSegments)
+          if (segment.isNotEmpty) segment,
+      ].join('/');
+
   /// Fetches diff [sequence] of [period] into [cache], unless it is already
   /// there, and gives back where it is.
+  ///
+  /// The diff goes under [cachePath] in [cache], by default [cacheName] under
+  /// [osmCacheDirectory], so that one directory can hold the diffs of any
+  /// number of feeds.
   ///
   /// Written to a side file and renamed, so an interrupted fetch never leaves
   /// something that looks like a whole diff.
   Future<File> download(
     OsmReplicationPeriod period,
-    int sequence,
-    Directory cache,
-  ) async {
+    int sequence, [
+    Directory? cache,
+  ]) async {
+    final root = cache ?? osmCacheDirectory(cacheName);
     final file = File(
-      '${cache.path}/${period.name}/${sequencePath(sequence)}.osc.gz',
+      '${root.path}/$cachePath/${period.name}/'
+      '${sequencePath(sequence)}.osc.gz',
     );
     if (await file.exists() && await file.length() > 0) return file;
 

@@ -47,14 +47,14 @@ void main() {
       };
 
   Future<OsmPresets?> read(Map<String, String>? files) =>
-      OsmPresetsFile.read(directory: directory, fetch: server(files));
+      OsmPresetsCache(directory: directory, fetch: server(files)).read();
 
   test('fetches the schema and keeps it', () async {
     final presets = await read(_served);
     expect(presets!.byId['amenity/cafe']!.name, 'Cafe');
     expect(asked, hasLength(4));
     expect(asked.first.toString(), startsWith(osmPresetsUrl));
-    for (final file in OsmPresetsFile.filesFor('en')) {
+    for (final file in OsmPresetsCache.filesFor('en')) {
       expect(File('${directory.path}/$file').existsSync(), isTrue,
           reason: file);
     }

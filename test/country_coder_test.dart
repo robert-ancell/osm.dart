@@ -157,12 +157,12 @@ void main() {
     }
 
     final read =
-        await OsmCountryCoderFile.read(directory: directory, fetch: fetch);
+        await OsmCountryCoderCache(directory: directory, fetch: fetch).read();
     expect(read!.countryAt(1, 1)!.name, 'Examplia');
     expect(asked.single.toString(), '${osmCountryCoderUrl}borders.json');
 
     asked.clear();
-    await OsmCountryCoderFile.read(directory: directory, fetch: fetch);
+    await OsmCountryCoderCache(directory: directory, fetch: fetch).read();
     expect(asked, isEmpty);
   });
 }

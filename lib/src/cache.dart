@@ -79,9 +79,9 @@ class OsmCache {
   /// [updateOsmSnapshot]. Each feed's are kept apart inside it.
   final Directory replicationDirectory;
 
-  Future<OsmCountryCoder?>? _countryCoder;
-  Future<OsmImageryIndex>? _imageryIndex;
-  final _presets = <String, Future<OsmPresets?>>{};
+  OsmCountryCoder? _countryCoder;
+  OsmImageryIndex? _imageryIndex;
+  final _presets = <String, OsmPresets>{};
 
   OsmCache._({
     required this.directory,
@@ -127,41 +127,36 @@ class OsmCache {
 
   /// country-coder's borders, which say which country a place is in.
   ///
-  /// Read once and shared by everything that asks. Null only when there is
+  /// Read the first time it is asked for and kept. Null only when there is
   /// no copy on disk and none could be fetched, in which case the next ask
   /// tries again.
-  Future<OsmCountryCoder?> get countryCoder =>
-      _countryCoder ??= _retrying(countryCoderCache.read(), () {
-        _countryCoder = null;
-      });
+  Future<OsmCountryCoder?> get countryCoder async =>
+      _countryCoder ??= await countryCoderCache.read();
 
   /// iD's tagging schema in [language], which says what kinds of thing there
   /// are.
   ///
-  /// Read once for each language and shared by everything that asks. Null
-  /// only when there is no copy on disk and none could be fetched, in which
-  /// case the next ask tries again.
-  Future<OsmPresets?> presets({String language = 'en'}) =>
-      _presets[language] ??= _retrying(
-        presetsCache.read(language: language),
-        () => _presets.remove(language),
-      );
+  /// Read the first time each language is asked for and kept. Null only when
+  /// there is no copy on disk and none could be fetched, in which case the
+  /// next ask tries again.
+  Future<OsmPresets?> presets({String language = 'en'}) async {
+    final held = _presets[language];
+    if (held != null) return held;
+    final read = await presetsCache.read(language: language);
+    if (read != null) _presets[language] = read;
+    return read;
+  }
 
   /// The editor layer index, which says what imagery there is.
   ///
-  /// Read once and shared by everything that asks. Empty only when there is
+  /// Read the first time it is asked for and kept. Empty only when there is
   /// no copy on disk and none could be fetched, in which case the next ask
   /// tries again.
-  Future<OsmImageryIndex> get imageryIndex =>
-      _imageryIndex ??= imageryIndexCache.read().then((index) {
-        if (index.layers.isEmpty) _imageryIndex = null;
-        return index;
-      });
-
-  /// [reading], forgetting it with [forget] if it comes to nothing.
-  static Future<T?> _retrying<T>(Future<T?> reading, void Function() forget) =>
-      reading.then((read) {
-        if (read == null) forget();
-        return read;
-      });
+  Future<OsmImageryIndex> get imageryIndex async {
+    final held = _imageryIndex;
+    if (held != null) return held;
+    final read = await imageryIndexCache.read();
+    if (read.layers.isNotEmpty) _imageryIndex = read;
+    return read;
+  }
 }

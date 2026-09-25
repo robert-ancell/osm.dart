@@ -44,7 +44,7 @@ export 'src/update/auth.dart';
 export 'src/update/change_filter.dart' show OsmUpdateEdges;
 export 'src/update/http.dart' hide httpFetch;
 export 'src/update/replication.dart';
-export 'src/update/upload.dart';
+export 'src/update/upload.dart' hide changesetTagXml;
 export 'src/update/updater.dart';
 export 'src/version.g.dart';
 export 'src/xml/change.dart';

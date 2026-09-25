@@ -1,4 +1,5 @@
-/// Writing changes back to OpenStreetMap.
+/// What an upload sends back to OpenStreetMap, which [OsmApiClient.upload]
+/// sends.
 ///
 /// Reads can be JSON, but writes have to be XML: `changeset/create` and
 /// `changeset/upload` accept nothing else. Building it is a page of
@@ -11,15 +12,9 @@
 /// change and asked for it to go.
 library;
 
-import 'dart:convert';
-import 'dart:io';
-
 import '../edit.dart';
 import '../exception.dart';
 import '../element.dart';
-
-/// Where the API that takes edits lives.
-final osmApiBase = Uri.parse('https://api.openstreetmap.org/api/0.6/');
 
 /// Thrown when edits cannot be uploaded to OpenStreetMap: there is nothing
 /// to send or no comment to send it with, or OpenStreetMap would not take
@@ -299,7 +294,7 @@ class OsmUpload {
 
   static void _tags(StringBuffer out, Map<String, String> tags) {
     for (final key in tags.keys.toList()..sort()) {
-      out.writeln('      ${_tag(key, tags[key]!)}');
+      out.writeln('      ${changesetTagXml(key, tags[key]!)}');
     }
   }
 
@@ -320,153 +315,8 @@ class OsmUpload {
   }
 }
 
-/// Opens a changeset, writes to it, and closes it again.
-///
-/// Holds one [HttpClient] rather than making one per call: an upload is
-/// three requests in a row to the same host, and a changeset left open
-/// because the second one opened a fresh connection and failed is a mess to
-/// clean up by hand.
-class OsmUploader {
-  /// Where the API is.
-  final Uri base;
-
-  /// The bearer token of whoever the edit is made as.
-  final String token;
-
-  /// What the program calls itself, in the User-Agent and in the
-  /// changeset's `created_by`.
-  final String generator;
-
-  final HttpClient _client;
-
-  /// Creates an uploader signed in as the holder of [token].
-  OsmUploader({
-    required this.token,
-    required this.generator,
-    Uri? base,
-    HttpClient? client,
-  })  : base = base ?? osmApiBase,
-        _client = client ?? HttpClient();
-
-  /// Lets go of the connection.
-  void close() => _client.close(force: true);
-
-  /// Sends [upload] as one changeset, and gives back its number.
-  ///
-  /// One changeset for the lot, which is what it is: somebody sat down and
-  /// made a set of changes. Closed in a `finally`, so a failure part way
-  /// through does not leave one open on the account — an open changeset
-  /// picks up the next hour of anybody's edits.
-  Future<int> send(
-    OsmUpload upload, {
-    required String comment,
-    Map<String, String> tags = const {},
-  }) async {
-    if (upload.isEmpty) {
-      throw const OsmUploadException('Nothing has been changed.');
-    }
-    if (comment.trim().isEmpty) {
-      // Asked for by the API and by everybody who will read the changeset
-      // afterwards wondering what it was for.
-      throw const OsmUploadException('A changeset needs a comment.');
-    }
-    final changeset = await _open(comment: comment.trim(), tags: tags);
-    try {
-      await _write(
-        base.resolve('changeset/$changeset/upload'),
-        upload.toXml(changeset: changeset, generator: generator),
-        method: 'POST',
-      );
-    } finally {
-      await _write(base.resolve('changeset/$changeset/close'), '');
-    }
-    return changeset;
-  }
-
-  /// Who the token belongs to, for the line saying who is signed in.
-  Future<String> whoAmI() async {
-    final request = await _client.getUrl(base.resolve('user/details.json'));
-    request.headers.set(HttpHeaders.userAgentHeader, generator);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    final response = await request.close();
-    final body = await response
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .join();
-    if (response.statusCode != HttpStatus.ok) {
-      throw OsmUploadException(_said(body), status: response.statusCode);
-    }
-    Object? answer;
-    try {
-      answer = jsonDecode(body);
-    } on FormatException {
-      answer = null;
-    }
-    final name = answer is Map && answer['user'] is Map
-        ? (answer['user'] as Map)['display_name']
-        : null;
-    if (name is! String) {
-      throw const OsmUploadException(
-        'OpenStreetMap did not say who is signed in.',
-      );
-    }
-    return name;
-  }
-
-  Future<int> _open({
-    required String comment,
-    required Map<String, String> tags,
-  }) async {
-    final xml = StringBuffer()
-      ..writeln('<osm>')
-      ..writeln('  <changeset>')
-      ..writeln('    ${_tag('comment', comment)}')
-      ..writeln('    ${_tag('created_by', generator)}');
-    for (final key in tags.keys.toList()..sort()) {
-      if (key == 'comment' || key == 'created_by') continue;
-      xml.writeln('    ${_tag(key, tags[key]!)}');
-    }
-    xml
-      ..writeln('  </changeset>')
-      ..writeln('</osm>');
-    final body = await _write(
-      base.resolve('changeset/create'),
-      xml.toString(),
-    );
-    final id = int.tryParse(body.trim());
-    if (id == null) {
-      throw OsmUploadException(
-        'OpenStreetMap did not give a changeset number: ${body.trim()}',
-      );
-    }
-    return id;
-  }
-
-  Future<String> _write(Uri url, String body, {String method = 'PUT'}) async {
-    final request = await _client.openUrl(method, url);
-    request.headers.set(HttpHeaders.userAgentHeader, generator);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    request.headers.contentType = ContentType('text', 'xml', charset: 'utf-8');
-    request.add(utf8.encode(body));
-    final response = await request.close();
-    final said = await response
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .join();
-    if (response.statusCode != HttpStatus.ok) {
-      throw OsmUploadException(_said(said), status: response.statusCode);
-    }
-    return said;
-  }
-
-  /// What the API said went wrong, which is a plain sentence in the body, or
-  /// the status on its own.
-  static String _said(String body) {
-    final said = body.trim();
-    if (said.isEmpty) return 'OpenStreetMap refused the request.';
-    return said.length > 400 ? '${said.substring(0, 400)}…' : said;
-  }
-}
-
-String _tag(String key, String value) =>
+/// A changeset tag written as XML.
+String changesetTagXml(String key, String value) =>
     '<tag k="${_escaped(key)}" v="${_escaped(value)}"/>';
 
 /// XML's five, which a name like "Bill & Ben" needs and a number never will.

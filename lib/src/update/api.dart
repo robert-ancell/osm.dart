@@ -8,7 +8,9 @@ import '../xml/change.dart';
 import '../xml/osm_xml.dart';
 import '../xml/reader.dart';
 import '../exception.dart';
+import '../version.g.dart';
 import 'http.dart';
+import 'upload.dart';
 
 /// A changeset, as the API lists one.
 class OsmChangeset {
@@ -137,22 +139,189 @@ class OsmApiClient {
 
   final OsmFetch _fetch;
 
-  /// How many requests have been made.
+  /// How many reads have been made.
   int requests = 0;
 
-  /// Creates a client for the API at [base], making no more than
-  /// [concurrency] requests at once.
+  /// The bearer token of whoever is signed in, from [OsmAuthenticator], or
+  /// null for nobody.
+  ///
+  /// Reading needs nobody signed in. Writing — [upload] — and asking who is
+  /// signed in — [displayName] — need somebody. Set it when somebody signs
+  /// in and clear it when they sign out.
+  String? token;
+
+  /// What a changeset says made it, in its `created_by` tag: the program's
+  /// name and version, as editors give theirs.
+  final String createdBy;
+
+  final String _userAgent;
+
+  /// Writes go over one connection held for them, rather than through the
+  /// fetch every read shares: an upload is three requests in a row to the
+  /// same host, and a changeset left open because the second one opened a
+  /// fresh connection and failed is a mess to clean up by hand.
+  late final HttpClient _writer = HttpClient();
+
+  /// Creates a client for the API at [base], reading no more than
+  /// [concurrency] at once.
   ///
   /// [contact] says who is asking, as OpenStreetMap's servers ask: a name
-  /// and a way to reach whoever runs the program. [fetch] replaces fetching
+  /// and a way to reach whoever runs the program. [fetch] replaces reading
   /// over HTTP altogether, for tests or a transport of the caller's own.
+  /// [token] signs somebody in from the start, and [createdBy] names the
+  /// program in what it uploads, `osm.dart/<version>` unless given.
   OsmApiClient({
     Uri? base,
     String? contact,
     int concurrency = 2,
     OsmFetch? fetch,
+    this.token,
+    String? createdBy,
   })  : base = base ?? openStreetMap,
+        createdBy = createdBy ?? 'osm.dart/$packageVersion',
+        _userAgent = contact == null
+            ? 'osm.dart/$packageVersion'
+            : 'osm.dart/$packageVersion ($contact)',
         _fetch = fetch ?? httpFetch(contact: contact, concurrency: concurrency);
+
+  /// Lets go of the connection writes are made over, if one was opened.
+  void close() => _writer.close(force: true);
+
+  String _signedIn() {
+    final token = this.token;
+    if (token == null) {
+      throw StateError('Nobody is signed in: set OsmApiClient.token first.');
+    }
+    return token;
+  }
+
+  /// Sends [upload] as one changeset in the name of whoever [token]
+  /// belongs to, and gives back the changeset's number.
+  ///
+  /// One changeset for the lot, which is what it is: somebody sat down and
+  /// made a set of changes. Closed in a `finally`, so a failure part way
+  /// through does not leave one open on the account — an open changeset
+  /// picks up the next hour of anybody's edits.
+  ///
+  /// Throws an [OsmUploadException] for nothing to send, no [comment], or a
+  /// change OpenStreetMap will not take.
+  Future<int> upload(
+    OsmUpload upload, {
+    required String comment,
+    Map<String, String> tags = const {},
+  }) async {
+    final token = _signedIn();
+    if (upload.isEmpty) {
+      throw const OsmUploadException('Nothing has been changed.');
+    }
+    if (comment.trim().isEmpty) {
+      // Asked for by the API and by everybody who will read the changeset
+      // afterwards wondering what it was for.
+      throw const OsmUploadException('A changeset needs a comment.');
+    }
+    final changeset = await _open(token, comment: comment.trim(), tags: tags);
+    try {
+      await _write(
+        token,
+        base.resolve('changeset/$changeset/upload'),
+        upload.toXml(changeset: changeset, generator: createdBy),
+        method: 'POST',
+      );
+    } finally {
+      await _write(token, base.resolve('changeset/$changeset/close'), '');
+    }
+    return changeset;
+  }
+
+  /// The name of whoever [token] belongs to, for saying who is signed in.
+  Future<String> displayName() async {
+    final token = _signedIn();
+    final request = await _writer.getUrl(base.resolve('user/details.json'));
+    request.headers.set(HttpHeaders.userAgentHeader, _userAgent);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    final response = await request.close();
+    final body = await response
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .join();
+    if (response.statusCode != HttpStatus.ok) {
+      throw OsmUploadException(_said(body), status: response.statusCode);
+    }
+    Object? answer;
+    try {
+      answer = jsonDecode(body);
+    } on FormatException {
+      answer = null;
+    }
+    final name = answer is Map && answer['user'] is Map
+        ? (answer['user'] as Map)['display_name']
+        : null;
+    if (name is! String) {
+      throw const OsmUploadException(
+        'OpenStreetMap did not say who is signed in.',
+      );
+    }
+    return name;
+  }
+
+  Future<int> _open(
+    String token, {
+    required String comment,
+    required Map<String, String> tags,
+  }) async {
+    final xml = StringBuffer()
+      ..writeln('<osm>')
+      ..writeln('  <changeset>')
+      ..writeln('    ${changesetTagXml('comment', comment)}')
+      ..writeln('    ${changesetTagXml('created_by', createdBy)}');
+    for (final key in tags.keys.toList()..sort()) {
+      if (key == 'comment' || key == 'created_by') continue;
+      xml.writeln('    ${changesetTagXml(key, tags[key]!)}');
+    }
+    xml
+      ..writeln('  </changeset>')
+      ..writeln('</osm>');
+    final body = await _write(
+      token,
+      base.resolve('changeset/create'),
+      xml.toString(),
+    );
+    final id = int.tryParse(body.trim());
+    if (id == null) {
+      throw OsmUploadException(
+        'OpenStreetMap did not give a changeset number: ${body.trim()}',
+      );
+    }
+    return id;
+  }
+
+  Future<String> _write(
+    String token,
+    Uri url,
+    String body, {
+    String method = 'PUT',
+  }) async {
+    final request = await _writer.openUrl(method, url);
+    request.headers.set(HttpHeaders.userAgentHeader, _userAgent);
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    request.headers.contentType = ContentType('text', 'xml', charset: 'utf-8');
+    request.add(utf8.encode(body));
+    final response = await request.close();
+    final said = await response
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .join();
+    if (response.statusCode != HttpStatus.ok) {
+      throw OsmUploadException(_said(said), status: response.statusCode);
+    }
+    return said;
+  }
+
+  /// What the API said went wrong, which is a plain sentence in the body, or
+  /// the status on its own.
+  static String _said(String body) {
+    final said = body.trim();
+    if (said.isEmpty) return 'OpenStreetMap refused the request.';
+    return said.length > 400 ? '${said.substring(0, 400)}…' : said;
+  }
 
   /// Everything OpenStreetMap holds inside [bounds].
   ///

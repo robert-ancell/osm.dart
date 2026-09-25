@@ -55,17 +55,16 @@ final editor = OsmEditor(OsmEditorData.of(elements));
 final cafe = editor.node(4061287113)!;
 editor.setTags(cafe, {...cafe.tags, 'opening_hours': 'Mo-Fr 07:00-15:00'});
 
-final token = await OsmAuthenticator(clientId: 'your-client-id').tokenFromBrowser();
-final uploader = OsmUploader(token: token.token, generator: 'my-editor/1.0');
-try {
-  final changeset = await uploader.send(
-    OsmUpload.of(editor.history),
-    comment: 'Add opening hours',
-  );
-  print('Uploaded as changeset $changeset');
-} finally {
-  uploader.close();
-}
+final signedIn =
+    await OsmAuthenticator(clientId: 'your-client-id').tokenFromBrowser();
+client.token = signedIn.token;
+print('Signed in as ${await client.displayName()}');
+
+final changeset = await client.upload(
+  OsmUpload.of(editor.history),
+  comment: 'Add opening hours',
+);
+print('Uploaded as changeset $changeset');
 ```
 
 An `OsmEditor` lays every change over the data it was given, which it never
@@ -80,8 +79,9 @@ rules, each saying first whether it applies and, if it cannot be done, why.
 `OsmAuthenticator` signs in through the browser with OAuth 2, for an application
 registered on openstreetmap.org with a redirect URI of
 `http://127.0.0.1:8642/`; its documentation says what to register. `OsmUpload`
-can say what is about to be sent, a line to an element, before `send` opens a
-changeset, uploads the lot and closes it again.
+can say what is about to be sent, a line to an element, before the client's
+`upload` opens a changeset, sends the lot and closes it again. Give the client
+a `createdBy` to name your program in the changesets it makes.
 
 ## Taking part of a file
 

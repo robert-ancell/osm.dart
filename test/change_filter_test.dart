@@ -4,7 +4,7 @@ import 'package:osm/src/update/change_filter.dart';
 import 'package:osm/src/update/snapshot_index.dart';
 import 'package:test/test.dart';
 
-/// A snapshot of Wellington: nodes 1 to 3, way 10 through them, relation 20
+/// A snapshot of a small town: nodes 1 to 3, way 10 through them, relation 20
 /// with way 10 in it.
 OsmChangeFilter _filter() {
   final nodes = SortedIdSetBuilder()
@@ -23,7 +23,7 @@ OsmChangeFilter _filter() {
   );
 }
 
-// Inside Wellington, and in London.
+// Inside the town, and far away in London.
 const _inside = (-41.28, 174.77);
 const _outside = (51.5, -0.12);
 

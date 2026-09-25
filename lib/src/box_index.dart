@@ -7,7 +7,7 @@ const int _maxCellsPerBox = 4096;
 /// A set of rectangles, with a quick test for whether a point is in any.
 ///
 /// Testing every box against every node of a country is not affordable: four
-/// hundred courses against fifty-six million nodes is twenty-two billion
+/// hundred boxes against fifty-six million nodes is twenty-two billion
 /// comparisons. The boxes go into a grid of cells instead, so a node looks at
 /// the handful of boxes near it and nothing else.
 class BoxIndex {

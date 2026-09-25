@@ -3,7 +3,7 @@ import 'dart:typed_data';
 /// A set of element ids, for the hot membership tests a read does.
 ///
 /// Reading an area asks "is this way's node one I kept" for every node id of
-/// every way in the file — forty million times over New Zealand — and a
+/// every way in the file — forty million times over a mid-sized country — and a
 /// `Map<int, OsmNode>` answering it spends the whole time in the hash map that
 /// is there to hold the nodes, not to be asked about them.
 ///

@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:osm/osm.dart';
 
-/// Lists the golf courses in a PBF file.
+/// Lists the parks in a PBF file.
 ///
 /// ```
-/// dart run example/example.dart new-zealand-latest.osm.pbf
+/// dart run example/example.dart extract.osm.pbf
 /// ```
 Future<void> main(List<String> arguments) async {
   if (arguments.length != 1) {
@@ -19,10 +19,10 @@ Future<void> main(List<String> arguments) async {
 
   // Asking for the tag, rather than reading everything and checking as it goes
   // by, is what makes this take a second or two rather than half a minute.
-  final courses = file.elements(
-    filter: const OsmFilter.tag('leisure', 'golf_course'),
+  final parks = file.elements(
+    filter: const OsmFilter.tag('leisure', 'park'),
   );
-  await for (final course in courses) {
-    print('${course.type.name} ${course.id}: ${course.tags['name']}');
+  await for (final park in parks) {
+    print('${park.type.name} ${park.id}: ${park.tags['name']}');
   }
 }

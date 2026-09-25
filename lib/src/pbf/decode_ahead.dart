@@ -21,8 +21,8 @@ import 'block.dart';
 /// the caller already has, so it takes a small part of the file and a batch
 /// of it is small. A read that takes most of the file is the opposite: at
 /// sixty-four blobs a job and thirty-two jobs in flight, reading the area
-/// around New Zealand's golf courses held two thousand blocks of elements at
-/// once and went from 36s to 184s.
+/// around a few hundred places in a country extract held two thousand blocks
+/// of elements at once and went from 36s to 184s.
 const int _blobsPerJob = 64;
 
 /// How many blobs to give a worker for [plan].

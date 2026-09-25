@@ -22,7 +22,7 @@ Future<OsmImageryCache> _aged(Duration age) async {
 
 void main() {
   setUp(() async {
-    _work = await Directory.systemTemp.createTemp('kupe_imagery_cache');
+    _work = await Directory.systemTemp.createTemp('osm_imagery_cache');
   });
 
   tearDown(() async {

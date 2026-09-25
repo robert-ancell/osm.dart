@@ -64,12 +64,11 @@ void main() {
 
   test('keeps the diffs of different feeds apart', () {
     final planet = OsmReplication(fetch: _offline);
-    final region = OsmReplication.geofabrik('australia-oceania/new-zealand',
-        fetch: _offline);
+    final region = OsmReplication.geofabrik('europe/monaco', fetch: _offline);
     expect(planet.cachePath, 'planet.openstreetmap.org/replication');
     expect(
       region.cachePath,
-      'download.geofabrik.de/australia-oceania/new-zealand-updates',
+      'download.geofabrik.de/europe/monaco-updates',
     );
   });
 

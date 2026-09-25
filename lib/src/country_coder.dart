@@ -7,8 +7,8 @@
 /// the answer can be the neighbour's.
 ///
 /// A place's regions are named every way the borders name them, so that
-/// whatever a caller holds — `NZ`, `NZL`, `554`, `Q664`, or `Q538` for
-/// Oceania — can be looked for among them. That is the form iD's tagging
+/// whatever a caller holds — `FR`, `FRA`, `250`, `Q142`, or `Q46` for
+/// Europe — can be looked for among them. That is the form iD's tagging
 /// schema says where a preset applies in.
 ///
 /// The borders are © country-coder contributors, under the ISC licence.

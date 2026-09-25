@@ -7,7 +7,7 @@ Read and process OpenStreetMap data in Dart, with no native dependencies.
 ```dart
 import 'package:osm/osm.dart';
 
-final file = await OsmPbfFile.open('new-zealand-latest.osm.pbf');
+final file = await OsmPbfFile.open('extract.osm.pbf');
 
 await for (final element in file.elements()) {
   print('${element.type.name} ${element.id}');
@@ -25,8 +25,8 @@ Say what you want with an [OsmFilter] rather than filtering the stream
 afterwards:
 
 ```dart
-final courses = file.elements(
-  filter: const OsmFilter.tag('leisure', 'golf_course'),
+final parks = file.elements(
+  filter: const OsmFilter.tag('leisure', 'park'),
 );
 ```
 
@@ -36,8 +36,8 @@ element, elements of a type that cannot match are never decoded, and an element
 without the key is never built into an object. What is left is decoded across
 every core.
 
-Finding the 416 golf courses in the 434 MB New Zealand extract takes 1.7s,
-against 25s to read the same file end to end. Filters combine with `&`, `|` and
+Finding the few hundred elements with a tag in a 434 MB country extract takes
+1.7s, against 25s to read the same file end to end. Filters combine with `&`, `|` and
 [OsmFilter.not], and [OsmFilter.where] takes a test written as code for
 anything they cannot say.
 
@@ -47,22 +47,21 @@ A way names its nodes by id, so matching it is only half of what it takes to
 draw it. `subset` reads the matches and everything they refer to:
 
 ```dart
-final courses = await file.subset(
-  const OsmFilter.tag('leisure', 'golf_course'),
+final parks = await file.subset(
+  const OsmFilter.tag('leisure', 'park'),
 );
 
-for (final course in courses.matches) {
-  if (course is! OsmWay) continue;
-  final outline = courses.nodesOf(course);
+for (final park in parks.matches) {
+  if (park is! OsmWay) continue;
+  final outline = parks.nodesOf(park);
   if (outline == null) continue; // Runs off the edge of the file.
-  print('${course.tags['name']}: ${outline.length} points');
+  print('${park.tags['name']}: ${outline.length} points');
 }
 ```
 
-This is what `osmium tags-filter` does when it is not told to leave referenced
-elements out, and it holds the same elements: the nodes of matching ways, the
-members of matching relations, and so on down. Pulling the golf courses and
-their 17,690 nodes out of a 434 MB country extract takes 7.4s.
+It holds the matches made complete: the nodes of matching ways, the members of
+matching relations, and so on down. Pulling a few hundred areas and their
+17,690 nodes out of a 434 MB country extract takes 7.4s.
 
 Everything read is held in memory, so filter to what is wanted. `elements()`
 is there for reads too big to keep.
@@ -73,7 +72,7 @@ A closed way, or a relation whose member ways make up rings, covers ground.
 `areaOf` works out which, wound the way GeoJSON and most triangulators want:
 
 ```dart
-final area = courses.areaOf(course);
+final area = parks.areaOf(park);
 for (final polygon in area?.polygons ?? const <OsmPolygon>[]) {
   draw(polygon.outer, holes: polygon.inners);
 }
@@ -93,10 +92,10 @@ All 81 of the multipolygon tests from
 ```dart
 final inside = await file.within([
   const OsmBounds(
-    minLatitude: -41.33,
-    minLongitude: 174.76,
-    maxLatitude: -41.31,
-    maxLongitude: 174.79,
+    minLatitude: 48.85,
+    minLongitude: 2.33,
+    maxLatitude: 48.87,
+    maxLongitude: 2.36,
   ),
 ]);
 ```
@@ -107,9 +106,6 @@ a member. What a kept relation refers to is not read: a relation is kept
 because it has something here, not because it belongs here, and reading the
 rest of a bus route that happens to pass by would pull in the country around
 it.
-
-That is what `osmium extract --strategy complete_ways` gives, element for
-element.
 
 ## Reading a change file
 
@@ -151,21 +147,20 @@ file cannot quietly come out claiming an order its elements do not have.
 final transformer = OsmPbfTransformer(
     [for (final path in diffs) ...await OsmChangeFile.read(path)]);
 final counts = await transformer.transform(
-  input: 'new-zealand.osm.pbf',
+  input: 'extract.osm.pbf',
   output: 'updated.osm.pbf',
   header: file.header.copyWith(replicationSequenceNumber: 4906),
 );
 ```
 
-The equivalent of `osmium apply-changes`. Changes are taken in the order given,
-so hand the diffs over in the order OpenStreetMap published them. Move the
-replication state on in the header, because a file that loses it can never be
-brought up to date again.
+Changes are taken in the order given, so hand the diffs over in the order
+OpenStreetMap published them. Move the replication state on in the header,
+because a file that loses it can never be brought up to date again.
 
 ## Keeping a snapshot up to date
 
 ```
-dart run osm:osm_update new-zealand.osm.pbf --contact "Your Name <you@example.com>"
+dart run osm:osm_update extract.osm.pbf --contact "Your Name <you@example.com>"
 ```
 
 Reads the planet's replication diffs published since the snapshot's own
@@ -190,7 +185,7 @@ a day rather than the planet's gigabytes, and nothing in it needs deciding: it
 already holds what entered or left the extract.
 
 ```dart
-final feed = OsmReplication.geofabrik('australia-oceania/new-zealand',
+final feed = OsmReplication.geofabrik('europe/monaco',
     contact: 'Your Name <you@example.com>');
 const day = OsmReplicationPeriod.day;
 final first = await feed.firstAfter(day, file.header.replicationTimestamp!);
@@ -210,7 +205,7 @@ mapper's changesets since a moment and gives back what each one changed, a few
 kilobytes apiece, to apply the same way:
 
 ```dart
-final client = OsmApiClient(fetch: fetch);
+final client = OsmApiClient(contact: 'Your Name <you@example.com>');
 final since = file.header.replicationTimestamp!;
 final changes = [
   for (final changeset in (await client.changesetsBy('Your Name', since: since))

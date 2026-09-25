@@ -9,15 +9,15 @@ const _index = '''
     {
       "type": "Feature",
       "properties": {
-        "id": "LINZ_NZ_Aerial_Imagery",
-        "name": "LINZ NZ Aerial Imagery",
+        "id": "Example_Aerial_Imagery",
+        "name": "Example Aerial Imagery",
         "type": "tms",
         "category": "photo",
         "best": true,
         "max_zoom": 21,
-        "url": "https://linz.test/{zoom}/{x}/{y}.webp",
-        "attribution": {"required": true, "text": "Sourced from LINZ CC-BY 4.0",
-          "url": "https://linz.test/licence"}
+        "url": "https://aerial.test/{zoom}/{x}/{y}.webp",
+        "attribution": {"required": true, "text": "Sourced from Example CC-BY 4.0",
+          "url": "https://aerial.test/licence"}
       },
       "geometry": {
         "type": "Polygon",
@@ -28,7 +28,7 @@ const _index = '''
     {
       "type": "Feature",
       "properties": {
-        "id": "NZ_Older",
+        "id": "Older_Imagery",
         "name": "Something older",
         "type": "tms",
         "category": "photo",
@@ -85,7 +85,7 @@ void main() {
   test('reads the layers it can ask for by tile', () {
     expect(
       index.layers.map((layer) => layer.id),
-      ['LINZ_NZ_Aerial_Imagery', 'NZ_Older', 'Everywhere', 'Labels'],
+      ['Example_Aerial_Imagery', 'Older_Imagery', 'Everywhere', 'Labels'],
     );
   });
 
@@ -94,20 +94,20 @@ void main() {
   });
 
   test('reads what a layer says about itself', () {
-    final linz = index.layers.first;
-    expect(linz.name, 'LINZ NZ Aerial Imagery');
-    expect(linz.category, OsmImageryCategory.photo);
-    expect(linz.maximumZoom, 21);
-    expect(linz.best, isTrue);
-    expect(linz.overlay, isFalse);
-    expect(linz.attribution, 'Sourced from LINZ CC-BY 4.0');
-    expect(linz.attributionUrl, 'https://linz.test/licence');
+    final aerial = index.layers.first;
+    expect(aerial.name, 'Example Aerial Imagery');
+    expect(aerial.category, OsmImageryCategory.photo);
+    expect(aerial.maximumZoom, 21);
+    expect(aerial.best, isTrue);
+    expect(aerial.overlay, isFalse);
+    expect(aerial.attribution, 'Sourced from Example CC-BY 4.0');
+    expect(aerial.attributionUrl, 'https://aerial.test/licence');
   });
 
   test('offers only what covers the place asked about', () {
-    final auckland = index.at(-36.85, 174.76);
-    expect(auckland.map((layer) => layer.id),
-        ['LINZ_NZ_Aerial_Imagery', 'Everywhere', 'NZ_Older']);
+    final inside = index.at(-36.85, 174.76);
+    expect(inside.map((layer) => layer.id),
+        ['Example_Aerial_Imagery', 'Everywhere', 'Older_Imagery']);
 
     final london = index.at(51.5, -0.12);
     expect(london.map((layer) => layer.id), ['Everywhere']);
@@ -151,7 +151,7 @@ void main() {
   test('fills a tile into the address', () {
     expect(
       index.layers.first.tileUrl(17, 129167, 79983),
-      'https://linz.test/17/129167/79983.webp',
+      'https://aerial.test/17/129167/79983.webp',
     );
   });
 

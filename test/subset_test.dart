@@ -1,14 +1,14 @@
 import 'package:osm/osm.dart';
 import 'package:test/test.dart';
 
-/// The osm-testdata grid, and the same file through
-/// `osmium tags-filter building=yes`, which keeps the matching elements and
-/// everything they refer to. See test/data/README.md.
+/// The osm-testdata grid, and the same file filtered to `building=yes` by
+/// another implementation, keeping the matching elements and everything they
+/// refer to. See test/data/README.md.
 const _gridPath = 'test/data/grid.osm.pbf';
 const _gridBuildingsPath = 'test/data/grid-buildings.osm.pbf';
 
-/// The grid through `osmium extract -b 7.0,1.0,7.5,1.5`, which all three of
-/// its strategies agree on, to check reading an area against it.
+/// The grid cut to the box below by another implementation, with ways kept
+/// whole, to check reading an area against it.
 const _gridBoxPath = 'test/data/grid-box.osm.pbf';
 
 /// The box that extract was taken with.
@@ -19,8 +19,8 @@ const _box = OsmBounds(
   maxLongitude: 7.5,
 );
 
-/// Data written for this package, and the same file through
-/// `osmium tags-filter type=site`. The site relation has a relation of its
+/// Data written for this package, and the same file filtered to `type=site`
+/// by another implementation. The site relation has a relation of its
 /// own in it, so completing it means following one relation into another.
 const _elementsPath = 'test/data/elements.osm.pbf';
 const _elementsSitesPath = 'test/data/elements-sites.osm.pbf';
@@ -34,7 +34,7 @@ Future<Map<OsmElementType, List<int>>> _idsOf(String path) async {
   return ids;
 }
 
-Future<void> _expectSameAsOsmium(
+Future<void> _expectSameAsReference(
   String path,
   OsmFilter filter,
   String expectedPath,
@@ -54,23 +54,23 @@ Future<void> _expectSameAsOsmium(
 }
 
 void main() {
-  test('holds what osmium tags-filter holds', () async {
-    await _expectSameAsOsmium(
+  test('holds what another implementation holds', () async {
+    await _expectSameAsReference(
       _gridPath,
       const OsmFilter.tag('building', 'yes'),
       _gridBuildingsPath,
     );
   });
 
-  test('follows a relation into a relation, as osmium does', () async {
-    await _expectSameAsOsmium(
+  test('follows a relation into a relation', () async {
+    await _expectSameAsReference(
       _elementsPath,
       const OsmFilter.tag('type', 'site'),
       _elementsSitesPath,
     );
   });
 
-  test('reads an area the way osmium extract does', () async {
+  test('reads an area the way another implementation does', () async {
     final file = await OsmPbfFile.open(_gridPath);
     final subset = await file.within(const [_box]);
     final expected = await _idsOf(_gridBoxPath);

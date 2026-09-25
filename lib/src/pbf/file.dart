@@ -15,12 +15,12 @@ import 'header.dart';
 /// An OpenStreetMap PBF file, opened for reading.
 ///
 /// ```dart
-/// final file = await OsmPbfFile.open('new-zealand-latest.osm.pbf');
-/// final courses = file.elements(
-///   filter: const OsmFilter.tag('leisure', 'golf_course'),
+/// final file = await OsmPbfFile.open('extract.osm.pbf');
+/// final parks = file.elements(
+///   filter: const OsmFilter.tag('leisure', 'park'),
 /// );
-/// await for (final course in courses) {
-///   print(course.tags['name']);
+/// await for (final park in parks) {
+///   print(park.tags['name']);
 /// }
 /// ```
 ///
@@ -93,13 +93,13 @@ class OsmPbfFile {
   ///
   /// One for a read with no filter: everything crossing an isolate boundary
   /// has to be handed over, and with no filter that is every element of the
-  /// file. Reading the New Zealand extract end to end takes 25s here against
+  /// file. Reading a 434 MB country extract end to end takes 25s here against
   /// 31s on 32 isolates.
   ///
   /// Everything else goes to the workers, including the reads that name ids.
   /// Those used to come back here too, because the ids go the other way and a
   /// filter naming hundreds of thousands of them was handed over once per
-  /// blob: 864,414 node ids over New Zealand took 10.9s on the calling
+  /// blob: 864,414 node ids over a country extract took 10.9s on the calling
   /// isolate and 64s on sixteen workers. They are handed over once per batch
   /// of blobs now — see `_blobsPerJob` — which is 3.4s on sixteen.
   static int defaultIsolates(OsmFilterPlan plan) =>
@@ -111,14 +111,14 @@ class OsmPbfFile {
   /// to build its geometry. This reads the file again for the nodes of the
   /// ways that matched, the members of the relations that matched, and so on
   /// down: a relation that is a member of a matching relation is read, and so
-  /// are its own members. What comes back is what `osmium tags-filter` gives
-  /// when it is not told to leave referenced elements out.
+  /// are its own members: the matches made complete, with every element they
+  /// refer to.
   ///
   /// A relation that is a member of itself, however far around, is read once
   /// and not chased again.
   ///
   /// Everything read is held in memory, so filter to what is actually wanted:
-  /// this is for pulling a few courses out of a country, not for loading one.
+  /// this is for pulling a few things out of a country, not for loading one.
   ///
   /// Each read is decoded on [isolates] worker isolates, by default as many as
   /// [defaultIsolates] says, which for the reads by id depends on how many ids
@@ -131,8 +131,7 @@ class OsmPbfFile {
 
   /// Everything standing inside [bounds], with the ways kept whole.
   ///
-  /// The equivalent of `osmium extract --strategy complete_ways`: the nodes
-  /// inside the boxes, the ways using any of those nodes along with the rest
+  /// The nodes inside the boxes, the ways using any of those nodes along with the rest
   /// of their nodes wherever those are, and the relations with any of those as
   /// a member. A way crossing the edge of a box keeps the nodes that fall
   /// outside it and can still be drawn.
@@ -140,8 +139,8 @@ class OsmPbfFile {
   /// What a kept relation refers to is not read. A relation is kept because it
   /// has something here, not because it belongs here, and reading the rest of
   /// a bus route or a coastline that happens to pass by would pull in the
-  /// country around it: on New Zealand that is the difference between five and
-  /// a half million nodes and thirteen million. Pass the relations to [subset]
+  /// country around it: on a country extract that can be the difference
+  /// between five and a half million nodes and thirteen million. Pass the relations to [subset]
   /// if their whole geometry is wanted.
   ///
   /// Everything inside is taken. There is no filter here on purpose: what is

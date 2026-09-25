@@ -126,7 +126,7 @@ class OsmReplication {
         only = period;
 
   /// The feed of the extract Geofabrik publishes at [extract], such as
-  /// `australia-oceania/new-zealand`.
+  /// `europe/monaco`.
   ///
   /// [contact] and [fetch] are as for [OsmReplication.single].
   factory OsmReplication.geofabrik(

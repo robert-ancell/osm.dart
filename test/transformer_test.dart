@@ -125,8 +125,8 @@ void main() {
   test('deletes what a delete of the same version names', () async {
     // An extract's own diffs are made by comparing one day's extract with
     // the next, and say a delete with the version of what went. Read as
-    // no newer than the file, four deleted golf courses stayed in a
-    // country's extract for good.
+    // no newer than the file, deleted elements stayed in a country's
+    // extract for good.
     final output = '${_work.path}/deleted.osm.pbf';
     final counts = await OsmPbfTransformer(const [
       OsmChange(

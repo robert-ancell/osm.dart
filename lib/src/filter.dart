@@ -12,7 +12,7 @@ import 'element.dart';
 /// decoded, and an element without the key is never built into an object.
 ///
 /// ```dart
-/// final courses = OsmFilter.tag('leisure', 'golf_course');
+/// final parks = OsmFilter.tag('leisure', 'park');
 /// final namedWays = OsmFilter.type(OsmElementType.way) & OsmFilter.tag('name');
 /// ```
 sealed class OsmFilter {

@@ -161,7 +161,7 @@ Uint8List decodeBlob(Uint8List body, {int offset = 0}) {
   } else if (unsupported != null) {
     throw OsmPbfException(
       'Blob is $unsupported compressed, which is not supported. Recompress '
-      'the file with zlib, for example with `osmium cat -o out.osm.pbf`.',
+      'the file with zlib.',
       offset: offset,
     );
   } else {

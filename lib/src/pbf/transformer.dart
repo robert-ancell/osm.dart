@@ -51,8 +51,7 @@ class OsmChangeCounts {
       'deleted, $unchanged unchanged, $missed missed, $stale stale)';
 }
 
-/// Applies a set of changes to `.osm.pbf` files: the equivalent of
-/// `osmium apply-changes`.
+/// Applies a set of changes, such as replication diffs, to `.osm.pbf` files.
 ///
 /// When one element is changed more than once, the change with the highest
 /// version wins, and a change no newer than the version the file already

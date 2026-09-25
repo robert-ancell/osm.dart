@@ -28,7 +28,7 @@ List<OsmElement> _tile(int from, {int nodes = 4}) => [
 
 void main() {
   setUp(() async {
-    _work = await Directory.systemTemp.createTemp('kupe_cache_test');
+    _work = await Directory.systemTemp.createTemp('osm_tile_cache');
   });
 
   tearDown(() async {

@@ -28,8 +28,8 @@ class OsmChangeset {
   /// The ground the changeset touched, or null if it touched nothing.
   ///
   /// This is the box around everything it changed, so a changeset that moved
-  /// one node in Auckland and fixed a typo in Dunedin covers the whole
-  /// country. Useful for ruling areas out, not for ruling them in.
+  /// one node at one end of a country and fixed a typo at the other covers
+  /// the whole country. Useful for ruling areas out, not for ruling them in.
   final OsmBounds? bounds;
 
   /// Creates a changeset.

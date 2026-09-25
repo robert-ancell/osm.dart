@@ -11,9 +11,9 @@ const int _maxOffset = 0xffffffff;
 ///
 /// The ids of a sorted file arrive in order, so nothing has to be hashed or
 /// sorted: each block holds one full id as its base and the rest as 32 bit
-/// offsets from it. Every node of New Zealand is 56 million ids, about 225 MB
-/// here against over a gigabyte in [IdSet], whose open addressing wants twice
-/// the slots it has ids. Built once and only asked afterwards, which is what
+/// offsets from it. Every node of a mid-sized country is 56 million ids,
+/// about 225 MB here against over a gigabyte in [IdSet], whose open
+/// addressing wants twice the slots it has ids. Built once and only asked afterwards, which is what
 /// knowing what a snapshot holds needs.
 class SortedIdSet {
   final Int64List _bases;

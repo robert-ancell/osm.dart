@@ -185,9 +185,9 @@ Uint8List _headerBlock(OsmPbfHeader header) {
     block.writeString(HeaderBlockField.optionalFeatures, feature);
   }
 
-  // What wrote the file, in the shape everything else states it: osmium
-  // writes `osmium/1.19.0`, and a file should say which version of what made
-  // it rather than only what kind of thing did.
+  // What wrote the file, in the shape other writers state it, a name and a
+  // version: a file should say which version of what made it rather than
+  // only what kind of thing did.
   block.writeString(HeaderBlockField.writingProgram,
       header.writingProgram ?? 'osm/$packageVersion');
   final source = header.source;

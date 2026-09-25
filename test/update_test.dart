@@ -206,7 +206,7 @@ void main() {
       void Function(Uint8List body)? onLate,
     }) async {
       final path = uri.path;
-      if (!path.startsWith('/australia-oceania/new-zealand-updates/')) {
+      if (!path.startsWith('/europe/monaco-updates/')) {
         return null;
       }
       if (path.endsWith('-updates/state.txt')) {
@@ -226,15 +226,14 @@ void main() {
               gzip.encode(utf8.encode('<osmChange version="0.6"/>')));
     }
 
-    final replication =
-        OsmReplication.geofabrik('australia-oceania/new-zealand', fetch: fetch);
+    final replication = OsmReplication.geofabrik('europe/monaco', fetch: fetch);
     const day = OsmReplicationPeriod.day;
 
     test('is laid out under its own directory', () {
       expect(
         replication.diff(day, 4911).toString(),
-        'https://download.geofabrik.de/australia-oceania/'
-        'new-zealand-updates/000/004/911.osc.gz',
+        'https://download.geofabrik.de/europe/'
+        'monaco-updates/000/004/911.osc.gz',
       );
     });
 

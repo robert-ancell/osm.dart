@@ -14,8 +14,8 @@ const osmImageryCacheBytes = 200 * 1024 * 1024;
 
 /// How long a tile is used without asking whether it has changed.
 ///
-/// The LINZ tile server says `max-age=604800`, so a week is what it considers
-/// its own answers good for. Aerial imagery is reflown in years, not days.
+/// Imagery servers commonly say `max-age=604800`, so a week is what they
+/// consider their own answers good for. Aerial imagery is reflown in years, not days.
 const osmImageryFreshness = Duration(days: 7);
 
 /// What is known about one tile held on disk.

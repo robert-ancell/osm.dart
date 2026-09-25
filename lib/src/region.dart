@@ -9,9 +9,9 @@ const int _offset = 1 << 30;
 
 /// The ground a snapshot covers, as the cells of a grid its nodes stand in.
 ///
-/// A country is not a box. New Zealand's header gives one from 179.99°W to
-/// 179.99°E, because the Chatham Islands sit across the antimeridian, and
-/// that box takes in a band around the whole planet. The cells its nodes
+/// A country is not a box. One with islands either side of the antimeridian
+/// has a header box from nearly 180°W to nearly 180°E, and that box takes in
+/// a band around the whole planet. The cells its nodes
 /// actually stand in follow the coast and the islands and ignore the line.
 ///
 /// A cell with no node in it is outside, so something new mapped on ground

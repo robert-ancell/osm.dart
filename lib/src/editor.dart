@@ -201,8 +201,11 @@ class OsmEditor {
   void setRelationMembers(OsmRelation relation, List<OsmMember> members) =>
       history._setRelationMembers(relation, members);
 
-  /// Moves [node] to ([latitude], [longitude]); see
-  /// [OsmEditHistory.moveNode] for [continuing].
+  /// Moves [node] to ([latitude], [longitude]).
+  ///
+  /// A run of moves of the same node while it is being dragged is one change
+  /// rather than one a frame: [continuing] says this is more of a move that
+  /// is already under way.
   void moveNode(
     OsmNode node, {
     required double latitude,

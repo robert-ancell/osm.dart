@@ -1,8 +1,7 @@
 /// Tags as text, one `key=value` to a line, for one element or several.
 ///
-/// The way iD's text view shows them, and for the same reason: a text box is
-/// the quickest thing there is to read a set of tags in, paste a set into,
-/// and change several of at once.
+/// A text box is the quickest thing there is to read a set of tags in, paste a
+/// set into, and change several of at once.
 ///
 /// Several elements are shown as one set. A tag every one of them has with
 /// the same value is shown as it is; one they disagree on, or that only some
@@ -14,10 +13,10 @@
 /// Anywhere else it is a value like any other: OpenStreetMap allows it, so
 /// it can be shown and it can be set.
 ///
-/// A key or value that could not be told apart from the text around it —
-/// one holding an `=`, a quote, a backslash or a line break — is written in
-/// double quotes with JSON's escapes, as iD writes it, so that whatever is
-/// on the map comes back out of the text exactly as it went in.
+/// A key or value that could not be told apart from the text around it — one
+/// holding an `=`, a quote, a backslash or a line break — is written in double
+/// quotes with JSON's escapes, so that whatever is on the map comes back out of
+/// the text exactly as it went in.
 library;
 
 import 'dart:convert';

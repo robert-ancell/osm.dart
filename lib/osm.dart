@@ -4,8 +4,8 @@
 /// The rest of the package is in libraries of their own, for what not every
 /// program needs:
 ///
-/// * `package:osm/editor.dart` — editing elements the way iD does, and the
-///   tagging schema it works by;
+/// * `package:osm/editor.dart` — editing elements, and the tagging schema
+///   that says what kind of thing each one is;
 /// * `package:osm/country_coder.dart` — which country a place is in;
 /// * `package:osm/pbf.dart` — reading, writing and updating `.osm.pbf`
 ///   files;

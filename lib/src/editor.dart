@@ -42,42 +42,21 @@ class OsmEditor {
   /// Every change made, in order.
   final OsmEditHistory history;
 
-  /// The kinds of thing there are, if they are known: what decides whether
-  /// a closed way is an area, and whether a point can be pulled out of
-  /// something.
+  /// What tags mean: whether a closed way is an area, what turns round
+  /// when a way does, what goes where when things are split and joined.
   ///
-  /// Can be set once they arrive, which may be after editing has started.
-  OsmPresets? presets;
-
-  /// Which country and regions a place is in, if that is known: what
-  /// decides which kinds of thing that only exist in some places apply,
-  /// through [regionsOf].
-  ///
-  /// Can be set once the borders arrive, as [presets] can.
-  OsmCountryCoder? countryCoder;
-
-  /// Whether a closed way with these tags is an area, for when there are no
-  /// [presets] to say.
-  final bool Function(Map<String, String> tags) isArea;
+  /// The editor knows nothing of tags itself. [OsmPlainTagRules] unless
+  /// given others, such as [OsmStandardTagRules].
+  final OsmTagRules rules;
 
   /// Creates an editor over [data], keeping its changes in [history], or in
-  /// a new history if none is given.
-  ///
-  /// [isArea] decides what a closed way is while there are no [presets]; by
-  /// default one is an area if it is a building or says `area=yes`, and not
-  /// if it says `area=no`.
+  /// a new history if none is given, and deciding what tags mean by
+  /// [rules].
   OsmEditor(
     this.data, {
     OsmEditHistory? history,
-    this.presets,
-    this.countryCoder,
-    bool Function(Map<String, String> tags)? isArea,
-  })  : history = history ?? OsmEditHistory(),
-        isArea = isArea ?? _isArea;
-
-  static bool _isArea(Map<String, String> tags) =>
-      tags['area'] != 'no' &&
-      (tags.containsKey('building') || tags['area'] == 'yes');
+    this.rules = const OsmPlainTagRules(),
+  }) : history = history ?? OsmEditHistory();
 
   // The data as it now stands.
 
@@ -118,37 +97,17 @@ class OsmEditor {
             relation,
       ];
 
-  /// Every code of every region [element] is in, by where it now is: a node
-  /// where it stands, and a way where it starts. What [OsmPresets.match] and
-  /// [OsmPreset.appliesAt] take as `here`.
-  ///
-  /// Empty while [countryCoder] is not known, or for something with nowhere
-  /// to stand, which leaves only what is meant for everywhere.
-  Set<String> regionsOf(OsmElement element) {
-    final coder = countryCoder;
-    if (coder == null) return const {};
-    final standing = switch (element) {
-      OsmNode() => node(element.id) ?? element,
-      OsmWay() when element.nodeIds.isNotEmpty => node(element.nodeIds.first),
-      _ => null,
-    };
-    if (standing == null) return const {};
-    return coder.codesAt(standing.latitude, standing.longitude);
-  }
-
   /// The shape [element] now takes, as far as what it can be is concerned.
   ///
-  /// A node is a vertex when it is in a way and a point when it stands
-  /// alone. A way is an area when it is closed and its tags say so, by the
-  /// [presets] once they are known and by [isArea] until then, and a line
-  /// otherwise. A multipolygon is an area and any other relation is a
+  /// A node is a vertex when it is in a way and a point when it stands alone. A
+  /// way is an area when it is closed and [rules] say its tags make it one, and
+  /// a line otherwise. A multipolygon is an area and any other relation is a
   /// relation.
   OsmGeometry geometryOf(OsmElement element) => switch (element) {
         OsmNode() => waysUsing(element.id).isEmpty
             ? OsmGeometry.point
             : OsmGeometry.vertex,
-        OsmWay() => element.isClosed &&
-                (presets?.isArea(element.tags) ?? isArea(element.tags))
+        OsmWay() => element.isClosed && rules.isArea(element.tags)
             ? OsmGeometry.area
             : OsmGeometry.line,
         OsmRelation() => element.tags['type'] == 'multipolygon'
@@ -237,7 +196,7 @@ class OsmEditor {
   ///
   /// Only the way. Its nodes stay unless they are deleted as well, which is
   /// for whoever deletes the way to decide: some are shared with other ways
-  /// or say something of their own. [delete] decides it as iD does.
+  /// or say something of their own. [delete] decides it by [rules].
   void deleteWay(OsmWay way) => history._deleteWay(
         way,
         relations: relationsUsing(OsmElementType.way, way.id),
@@ -277,7 +236,7 @@ class OsmEditor {
   bool setTags(OsmElement element, Map<String, String> tags) =>
       history._setTags(element, tags);
 
-  // What can be done to what is selected, as iD offers it.
+  // What can be done to what is selected.
 
   /// Deleting [selected].
   OsmDeleteOperation delete(List<OsmElement> selected) =>
@@ -287,14 +246,9 @@ class OsmEditor {
   OsmReverseOperation reverse(List<OsmElement> selected) =>
       OsmReverseOperation(this, selected);
 
-  /// Pulling points out of [selected], by the kinds of thing that apply
-  /// where the first of them is.
-  OsmExtractOperation extract(List<OsmElement> selected) => OsmExtractOperation(
-        this,
-        selected,
-        presets: presets,
-        here: selected.isEmpty ? const {} : regionsOf(selected.first),
-      );
+  /// Pulling points out of [selected].
+  OsmExtractOperation extract(List<OsmElement> selected) =>
+      OsmExtractOperation(this, selected);
 
   /// Splitting lines at the nodes in [selected].
   OsmSplitOperation split(List<OsmElement> selected) =>

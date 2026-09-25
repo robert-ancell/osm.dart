@@ -1,14 +1,14 @@
 /// What kinds of thing there are on the map, and which kind an element is.
 ///
-/// Read from iD's tagging schema, <https://github.com/openstreetmap/id-tagging-schema>,
-/// which is what iD and a good many other editors describe OpenStreetMap's
-/// tagging with. A preset is one kind of thing — a cafe, a residential road,
-/// a house — with the tags that say an element is one, the shapes it can
-/// take, and the words it goes by. Matching an element to its preset is
-/// scored as iD scores it, so an element is called the same thing here as
-/// it is in iD.
+/// Read from the OpenStreetMap tagging schema,
+/// <https://github.com/openstreetmap/id-tagging-schema>, which a good many
+/// editors describe OpenStreetMap's tagging with. A preset is one kind of thing
+/// — a cafe, a residential road, a house — with the tags that say an element is
+/// one, the shapes it can take, and the words it goes by. Matching an element
+/// to its preset is scored as the schema's own editor scores it, so an element
+/// is called the same thing here as it is there.
 ///
-/// The schema is © iD contributors, under the ISC licence.
+/// The schema is © its contributors, under the ISC licence.
 library;
 
 import 'json_exception.dart';
@@ -210,7 +210,7 @@ class OsmPreset {
           presets._areaKeys.containsKey(key)) {
         return true;
       }
-      // Any value it lists, either way, as iD counts it.
+      // Any value it lists, either way.
       if (_areaExceptions[key]?.containsKey(value) ?? false) return true;
     }
     return false;
@@ -243,8 +243,7 @@ class OsmPresetCategory {
 }
 
 /// Keys whose tags usually make a line but make an area with these values,
-/// and values of `emergency` that are not an emergency feature at all. As
-/// iD has them.
+/// and values of `emergency` that are not an emergency feature at all.
 const _areaExceptions = <String, Map<String, bool>>{
   'highway': {'elevator': true, 'rest_area': true, 'services': true},
   'public_transport': {'platform': true},
@@ -480,7 +479,7 @@ class OsmPresets {
   /// Whether a closed way tagged [tags] encloses an area rather than being a
   /// line that happens to come back to where it started.
   ///
-  /// As iD decides it: `area=yes` and `area=no` say so outright; otherwise
+  /// `area=yes` and `area=no` say so outright; otherwise
   /// it is an area if any of its keys is one there are area presets for and
   /// its value is not one that makes that key a line. A key with a
   /// lifecycle prefix, such as `disused:amenity`, counts as the key.
@@ -562,8 +561,7 @@ class OsmPresets {
   }
 
   /// The keys that make a closed way an area, and for each the values that
-  /// make it a line after all, worked out from the presets as iD works them
-  /// out.
+  /// make it a line after all, worked out from the presets.
   static Map<String, Set<String>> _findAreaKeys(Iterable<OsmPreset> presets) {
     final keys = <String, Set<String>>{};
     final current = [

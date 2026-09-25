@@ -6,13 +6,12 @@ import 'cached_files.dart';
 import 'presets.dart';
 import 'update/http.dart';
 
-/// iD's tagging schema, kept on disk between runs.
+/// The tagging schema, kept on disk between runs.
 class OsmPresetsCache {
-  /// Where iD's tagging schema is published.
+  /// Where the tagging schema is published.
   ///
   /// The major version is pinned: a new one can change the shape of the files,
-  /// and within one they only gain presets and lose mistakes. It is where iD
-  /// itself loads the schema from.
+  /// and within one they only gain presets and lose mistakes.
   static const defaultUrl =
       'https://cdn.jsdelivr.net/npm/@openstreetmap/id-tagging-schema@6/dist/';
 
@@ -31,7 +30,8 @@ class OsmPresetsCache {
   /// How it is fetched.
   final OsmFetch fetch;
 
-  /// Where it is fetched from, [OsmPresetsCache.defaultUrl] unless said otherwise.
+  /// Where it is fetched from, [OsmPresetsCache.defaultUrl] unless said
+  /// otherwise.
   final Uri from;
 
   /// Creates a cache in [directory], by default [name] under

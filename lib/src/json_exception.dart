@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'exception.dart';
 
-/// Thrown when a JSON resource cannot be read: the editor layer index, iD's
+/// Thrown when a JSON resource cannot be read: the editor layer index, the
 /// tagging schema or country-coder's borders is not JSON at all, such as a
 /// page from a portal asking to be logged into.
 ///

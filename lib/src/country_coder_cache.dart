@@ -10,7 +10,7 @@ import 'update/http.dart';
 class OsmCountryCoderCache {
   /// Where country-coder's borders are published.
   ///
-  /// The major version is pinned, as for iD's tagging schema: a new one can
+  /// The major version is pinned, as for the tagging schema: a new one can
   /// change the shape of the file, and within one borders only get better.
   static const defaultUrl =
       'https://cdn.jsdelivr.net/gh/rapideditor/country-coder@5/src/data/';

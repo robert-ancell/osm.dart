@@ -1,8 +1,8 @@
 /// Splitting, merging and disconnecting: the operations that change what is
 /// joined to what, and so what every relation over it holds.
 ///
-/// As iD does them, rule for rule. Each works on an [OsmEditor] and
-/// records what it does in its edits as one change to undo.
+/// Each works on an [OsmEditor] and records what it does in its edits as one
+/// change to undo.
 library;
 
 import 'dart:math' as math;
@@ -11,6 +11,7 @@ import 'edit.dart';
 import 'element.dart';
 import 'operations.dart';
 import 'presets.dart';
+import 'tag_rules.dart';
 
 /// Which of two ids belongs to the older element: anything already on the
 /// map is older than anything made here, a lower id is older on the map,
@@ -26,109 +27,24 @@ int _oldest(Iterable<int> ids) => ids.reduce(
       (a, b) => _compareAge(a, b) <= 0 ? a : b,
     );
 
-/// [into] with [tags] merged in, as iD merges them: a key only one has is
-/// kept, and two different values become both, separated by semicolons.
-/// Keys in [set] are set outright.
-Map<String, String> _mergeTags(
-  Map<String, String> into,
-  Map<String, String> tags, {
-  Map<String, String> set = const {},
-}) {
-  final merged = Map.of(into);
-  for (final MapEntry(:key, :value) in tags.entries) {
-    if (set.containsKey(key)) continue;
-    final had = into[key];
-    if (had == null || had.isEmpty) {
-      merged[key] = value;
-    } else if (had != value) {
-      final parts = <String>[
-        ...had.split(RegExp(r';\s*')),
-        for (final part in value.split(RegExp(r';\s*')))
-          if (!had.split(RegExp(r';\s*')).contains(part)) part,
-      ];
-      final joined = parts.join(';');
-      merged[key] = joined.length > 255 ? joined.substring(0, 255) : joined;
-    }
-  }
-  merged.addAll(set);
-  return merged;
-}
-
-/// Keys whose values add up when two ways become one, and split between
-/// them when one becomes two.
-const _summable = {
-  'step_count',
-  'parking:both:capacity',
-  'parking:left:capacity',
-  'parking:right:capacity',
-};
-
-bool _canSum(String key, Map<String, String> a, Map<String, String> b) =>
-    _summable.contains(key) &&
-    num.tryParse(a[key] ?? '') != null &&
-    num.tryParse(b[key] ?? '') != null;
-
-/// Tags that stay on a way rather than going to the multipolygon it
-/// becomes part of.
-const _wayOnly = {
-  'natural': {'coastline'},
-};
-
-/// Features with a right side and a wrong side — a cliff, a kerb, a coast —
-/// whose direction says which is which.
-const _sided = {
-  'natural': {'cliff', 'coastline'},
-  'barrier': {'retaining_wall', 'kerb', 'guard_rail', 'city_wall'},
-  'man_made': {'embankment', 'quay'},
-  'waterway': {'weir'},
-  'cutting': {'yes', 'both', 'left', 'right'},
-  'embankment': {'yes', 'dyke', 'both', 'left', 'right'},
-};
-
-const _lifecycle = {
-  'proposed',
-  'planned',
-  'construction',
-  'disused',
-  'abandoned',
-  'was',
-  'dismantled',
-  'razed',
-  'demolished',
-  'destroyed',
-  'removed',
-  'intermittent',
-};
-
-bool _isSided(Map<String, String> tags) {
-  if (tags['two_sided'] == 'yes') return false;
-  for (final MapEntry(key: raw, :value) in tags.entries) {
-    final colon = raw.indexOf(':');
-    final key = colon > 0 && _lifecycle.contains(raw.substring(0, colon))
-        ? raw.substring(colon + 1)
-        : raw;
-    if (_sided[key]?.contains(value) ?? false) return true;
-  }
-  return false;
-}
-
-bool _hasFromViaTo(OsmRelation relation) =>
+bool _hasFromViaTo(OsmEditor view, OsmRelation relation) =>
     relation.members.any((m) => m.role == 'from') &&
     relation.members.any(
       (m) =>
           m.role == 'via' ||
           (m.role == 'intersection' &&
-              relation.tags['type'] == 'destination_sign'),
+              view.rules.kindOf(relation) == OsmRelationKind.destinationSign),
     ) &&
     relation.members.any((m) => m.role == 'to');
 
-bool _isRestriction(OsmRelation r) =>
-    RegExp(r'^restriction:?').hasMatch(r.tags['type'] ?? '');
+bool _isRestriction(OsmEditor view, OsmRelation r) =>
+    view.rules.kindOf(r) == OsmRelationKind.restriction;
 
-bool _isConnectivity(OsmRelation r) =>
-    RegExp(r'^connectivity:?').hasMatch(r.tags['type'] ?? '');
+bool _isConnectivity(OsmEditor view, OsmRelation r) =>
+    view.rules.kindOf(r) == OsmRelationKind.connectivity;
 
-bool _isMultipolygon(OsmRelation r) => r.tags['type'] == 'multipolygon';
+bool _isMultipolygon(OsmEditor view, OsmRelation r) =>
+    view.rules.kindOf(r) == OsmRelationKind.multipolygon;
 
 /// [relation]'s members with every membership of one element given to
 /// another instead, keeping its role; one that would repeat a membership the
@@ -210,7 +126,7 @@ class _Sequence {
   final nodes = <int>[];
 }
 
-/// [ways] joined into as few runs as they make, as iD joins them.
+/// [ways] joined into as few runs as they make.
 List<_Sequence> _joinWays(List<OsmWay> ways) {
   final remaining = [...ways];
   final sequences = <_Sequence>[];
@@ -374,7 +290,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
     }
     for (final way in candidates) {
       for (final relation in _view.relationsUsing(OsmElementType.way, way.id)) {
-        if (_hasFromViaTo(relation)) {
+        if (_hasFromViaTo(_view, relation)) {
           final vias = relation.members.where(
             (m) => m.role == 'via' || m.role == 'intersection',
           );
@@ -488,15 +404,8 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
 
     // What is counted along the way is divided between the pieces by
     // length.
-    final tagsA = Map.of(way.tags), tagsB = Map.of(way.tags);
-    for (final key in way.tags.keys) {
-      if (!_summable.contains(key)) continue;
-      final count = num.tryParse(way.tags[key]!);
-      if (count == null || count <= 0 || count != count.round()) continue;
-      final countA = (count * lengthA / (lengthA + lengthB)).round();
-      tagsA[key] = '$countA';
-      tagsB[key] = '${count.round() - countA}';
-    }
+    final (tagsA, tagsB) =
+        view.rules.divided(way.tags, lengthA / (lengthA + lengthB));
 
     view.setWayNodes(way, nodesA);
     view.setTags(view.way(way.id)!, tagsA);
@@ -504,7 +413,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
     final wayB = view.createWay(nodeIds: nodesB, tags: tagsB);
 
     for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
-      if (_hasFromViaTo(relation)) {
+      if (_hasFromViaTo(view, relation)) {
         _splitRestriction(relation, wayA, wayB);
       } else if (!isArea) {
         _insertBeside(relation, wayA, wayB);
@@ -513,14 +422,9 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
 
     if (isArea) {
       // An area in two pieces is a multipolygon of them.
-      final areaTags = {...wayA.tags, 'type': 'multipolygon'};
-      final lineTags = <String, String>{};
-      for (final MapEntry(:key, :value) in wayA.tags.entries) {
-        if (_wayOnly[key]?.contains(value) ?? false) {
-          lineTags[key] = value;
-          areaTags.remove(key);
-        }
-      }
+      final (relation: areaTags, way: lineTags) =
+          view.rules.intoMultipolygon(wayA.tags);
+      areaTags['type'] = 'multipolygon';
       final multipolygon = view.createRelation(
         members: [
           OsmMember(type: OsmElementType.way, ref: wayA.id, role: 'outer'),
@@ -626,8 +530,7 @@ class OsmSplitOperation extends OsmOperation<List<OsmWay>> {
   }
 
   /// Adds [wayB] to [relation] next to [wayA], before it or after it,
-  /// whichever keeps the relation's ways running on from each other, as
-  /// iD judges it.
+  /// whichever keeps the relation's ways running on from each other.
   void _insertBeside(OsmRelation relation, OsmWay wayA, OsmWay wayB) {
     bool connects(OsmWay one, OsmWay two) {
       if (one.nodeIds.length < 2 || two.nodeIds.length < 2) return false;
@@ -776,7 +679,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     if (left.length > 1) {
       final interesting = [
         for (final element in left)
-          if (osmHasInterestingTags(element.tags)) element,
+          if (_view.rules.isDescriptive(element.tags)) element,
       ];
       if (interesting.isNotEmpty) return interesting;
     }
@@ -793,7 +696,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
 
   List<OsmRelation> _parents(OsmWay way) => [
         for (final r in _view.relationsUsing(OsmElementType.way, way.id))
-          if (!_isRestriction(r) && !_isConnectivity(r)) r,
+          if (!_isRestriction(_view, r) && !_isConnectivity(_view, r)) r,
       ];
 
   OsmDisabledReason? get _joinDisabled {
@@ -825,32 +728,26 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     final joined = sequences.single.nodes;
     final inner = joined.sublist(1, joined.length - 1).toSet();
     OsmRelation? restricting;
-    final tags = <String, String>{};
+    Map<String, String>? tags;
     var conflicting = false;
     for (final way in ways) {
       for (final parent in _view.relationsUsing(OsmElementType.way, way.id)) {
-        if ((_isRestriction(parent) || _isConnectivity(parent)) &&
+        if ((_isRestriction(_view, parent) || _isConnectivity(_view, parent)) &&
             parent.members.any(
               (m) => m.type == OsmElementType.node && inner.contains(m.ref),
             )) {
           restricting = parent;
         }
       }
-      for (final MapEntry(:key, :value) in way.tags.entries) {
-        final had = tags[key];
-        if (had == null) {
-          tags[key] = value;
-        } else if (_canSum(key, tags, way.tags)) {
-          tags[key] = '${num.parse(had) + num.parse(value)}';
-        } else if (had.isNotEmpty &&
-            osmHasInterestingTags({key: had}) &&
-            had != value) {
-          conflicting = true;
-        }
+      if (tags == null) {
+        tags = way.tags;
+      } else {
+        if (_view.rules.conflicts(tags, way.tags)) conflicting = true;
+        tags = _view.rules.joined(tags, way.tags);
       }
     }
     if (restricting != null) {
-      return _isRestriction(restricting)
+      return _isRestriction(_view, restricting)
           ? OsmDisabledReason.restriction
           : OsmDisabledReason.connectivity;
     }
@@ -868,10 +765,10 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     // lines were selected in is what decides which way the joined one runs.
     final sided = [
       for (final way in ways)
-        if (_isSided(way.tags)) way
+        if (view.rules.isSided(way.tags)) way
     ];
     ways
-      ..removeWhere((way) => _isSided(way.tags))
+      ..removeWhere((way) => view.rules.isSided(way.tags))
       ..insertAll(0, sided);
     final sequence = _joinWays(ways).single;
     for (final (way, reversed) in sequence.ways) {
@@ -890,16 +787,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
         survivorId,
       );
       final survivor = view.way(survivorId)!;
-      final summed = <String, String>{
-        for (final key in gone.tags.keys)
-          if (_canSum(key, gone.tags, survivor.tags))
-            key:
-                '${num.parse(gone.tags[key]!) + num.parse(survivor.tags[key]!)}',
-      };
-      view.setTags(
-        survivor,
-        _mergeTags(survivor.tags, gone.tags, set: summed),
-      );
+      view.setTags(survivor, view.rules.joined(survivor.tags, gone.tags));
       view.deleteWay(gone);
     }
     _collapseMultipolygon(survivorId);
@@ -913,7 +801,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     if (!survivor.isClosed) return;
     final multipolygons = [
       for (final r in view.relationsUsing(OsmElementType.way, survivorId))
-        if (_isMultipolygon(r) && r.members.length == 1) r,
+        if (_isMultipolygon(view, r) && r.members.length == 1) r,
     ];
     if (multipolygons.length != 1) return;
     final multipolygon = multipolygons.single;
@@ -921,7 +809,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       final had = multipolygon.tags[key];
       if (had != null && had != value) return;
     }
-    final tags = _mergeTags(survivor.tags, multipolygon.tags);
+    final tags = view.rules.combined(survivor.tags, multipolygon.tags);
     _giveMembership(
       view,
       OsmElementType.relation,
@@ -931,11 +819,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     );
     view.deleteRelation(view.relation(multipolygon.id)!);
     tags.remove('type');
-    final area = view.geometryOf(
-      OsmWay(id: survivorId, nodeIds: survivor.nodeIds, tags: tags),
-    );
-    if (area != OsmGeometry.area) tags['area'] = 'yes';
-    view.setTags(view.way(survivorId)!, tags);
+    view.setTags(view.way(survivorId)!, view.rules.asArea(tags));
   }
 
   // Points into a line or an area.
@@ -958,7 +842,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     for (final element in _of(OsmGeometry.point)) {
       final point = view.node(element.id)!;
       var target = view.way(targetId)!;
-      view.setTags(target, _mergeTags(target.tags, point.tags));
+      view.setTags(target, view.rules.combined(target.tags, point.tags));
       _giveMembership(
         view,
         OsmElementType.node,
@@ -981,10 +865,10 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
         ];
         OsmNode? replacing =
             nodes.where((n) => replaceable(n) && n.id < 0).firstOrNull;
-        if (replacing == null && osmHasInterestingTags(point.tags)) {
+        if (replacing == null && view.rules.isDescriptive(point.tags)) {
           replacing = nodes
                   .where(
-                    (n) => replaceable(n) && !osmHasInterestingTags(n.tags),
+                    (n) => replaceable(n) && !view.rules.isDescriptive(n.tags),
                   )
                   .firstOrNull ??
               nodes
@@ -1010,13 +894,8 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     }
     // An area tag that the rest of the tags now make needless goes.
     final target = view.way(targetId)!;
-    if (target.tags['area'] == 'yes') {
-      final tags = Map.of(target.tags)..remove('area');
-      final without =
-          OsmWay(id: target.id, nodeIds: target.nodeIds, tags: tags);
-      if (target.isClosed && view.geometryOf(without) == OsmGeometry.area) {
-        view.setTags(target, tags);
-      }
+    if (target.isClosed && view.geometryOf(target) == OsmGeometry.area) {
+      view.setTags(target, view.rules.asArea(target.tags));
     }
   }
 
@@ -1029,7 +908,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
 
   List<OsmRelation> get _multipolygons => [
         for (final r in _relations)
-          if (_isMultipolygon(r)) r,
+          if (_isMultipolygon(_view, r)) r,
       ];
 
   OsmDisabledReason? get _polygonDisabled {
@@ -1050,7 +929,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
       for (final way in closed) {
         final ids = {
           for (final r in _view.relationsUsing(OsmElementType.way, way.id))
-            if (_isMultipolygon(r)) r.id,
+            if (_isMultipolygon(_view, r)) r.id,
         };
         shared = shared == null ? ids : shared.intersection(ids);
       }
@@ -1130,23 +1009,17 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     }
     for (final m in multipolygons) {
       if (m.id == keep?.id) continue;
-      tags = _mergeTags(tags, m.tags);
+      tags = view.rules.combined(tags, m.tags);
       view.deleteRelation(view.relation(m.id)!);
     }
     for (final way in closed) {
       if (!members.any((m) => m.ref == way.id && m.role != 'inner')) continue;
-      final areaTags = Map.of(way.tags);
-      final lineTags = <String, String>{};
-      for (final MapEntry(:key, :value) in way.tags.entries) {
-        if (_wayOnly[key]?.contains(value) ?? false) {
-          lineTags[key] = value;
-          areaTags.remove(key);
-        }
-      }
-      tags = _mergeTags(tags, areaTags);
+      final (relation: areaTags, way: lineTags) =
+          view.rules.intoMultipolygon(way.tags);
+      tags = view.rules.combined(tags, areaTags);
       view.setTags(view.way(way.id)!, lineTags);
     }
-    tags.remove('area');
+    tags = {...view.rules.intoMultipolygon(tags).relation};
     if (keep != null) {
       view.setRelationMembers(view.relation(keep.id)!, members);
       view.setTags(view.relation(keep.id)!, tags);
@@ -1190,7 +1063,7 @@ class OsmMergeOperation extends OsmOperation<List<OsmElement>> {
     // Where the one node saying something is, or the middle of them all.
     final interesting = [
       for (final node in nodes)
-        if (osmHasInterestingTags(node.tags)) node,
+        if (view.rules.isDescriptive(node.tags)) node,
     ];
     final double latitude, longitude;
     if (interesting.length == 1) {
@@ -1225,7 +1098,7 @@ void osmConnect(OsmEditor view, List<int> ids) {
   final order = ids.reversed.toList();
   final interesting = [
     for (final id in order)
-      if (id > 0 && osmHasInterestingTags(view.node(id)!.tags)) id,
+      if (id > 0 && view.rules.isDescriptive(view.node(id)!.tags)) id,
   ];
   final survivorId = _oldest(interesting.isNotEmpty ? interesting : order);
   var tags = view.node(survivorId)!.tags;
@@ -1243,7 +1116,7 @@ void osmConnect(OsmEditor view, List<int> ids) {
       OsmElementType.node,
       survivorId,
     );
-    tags = _mergeTags(tags, node.tags);
+    tags = view.rules.combined(tags, node.tags);
     view.deleteNode(view.node(id)!);
   }
   view.setTags(view.node(survivorId)!, tags);
@@ -1267,7 +1140,7 @@ OsmDisabledReason? osmConnectDisabled(OsmEditor view, List<int> ids) {
       final role = relation.members
           .firstWhere((m) => m.type == OsmElementType.node && m.ref == id)
           .role;
-      if (_hasFromViaTo(relation)) restrictions.add(relation.id);
+      if (_hasFromViaTo(view, relation)) restrictions.add(relation.id);
       final had = seen[relation.id];
       if (had != null && had != role) return OsmDisabledReason.relation;
       seen[relation.id] = role;
@@ -1276,7 +1149,7 @@ OsmDisabledReason? osmConnectDisabled(OsmEditor view, List<int> ids) {
   for (final id in ids) {
     for (final way in view.waysUsing(id)) {
       for (final relation in view.relationsUsing(OsmElementType.way, way.id)) {
-        if (_hasFromViaTo(relation)) restrictions.add(relation.id);
+        if (_hasFromViaTo(view, relation)) restrictions.add(relation.id);
       }
     }
   }
@@ -1464,9 +1337,8 @@ class OsmDisconnectOperation extends OsmOperation<void> {
     return true;
   }
 
-  /// What is disconnected, for choosing how to describe it, as iD names
-  /// its descriptions: `single_point.no_ways`, `no_points.multiple_ways.
-  /// conjoined` and so on.
+  /// What is disconnected, for choosing how to describe it:
+  /// `single_point.no_ways`, `no_points.multiple_ways. conjoined` and so on.
   String get kind {
     final buffer = StringBuffer();
     if (_vertices.isNotEmpty) {
@@ -1506,14 +1378,15 @@ class OsmDisconnectOperation extends OsmOperation<void> {
 
   /// Relations whose members can be disconnected from each other without
   /// harm: they group things rather than join them.
-  static const _loose = {'associatedStreet', 'enforcement', 'site'};
 
   OsmDisabledReason? _disabledAt(int id, List<int>? limit) {
     if (_connections(id, limit).isEmpty) return OsmDisabledReason.notConnected;
     final seen = <int, int>{};
     for (final way in _view.waysUsing(id)) {
       for (final relation in _view.relationsUsing(OsmElementType.way, way.id)) {
-        if (_loose.contains(relation.tags['type'])) continue;
+        if (_view.rules.kindOf(relation) == OsmRelationKind.grouping) {
+          continue;
+        }
         final other = seen[relation.id];
         if (other != null) {
           if (limit == null ||

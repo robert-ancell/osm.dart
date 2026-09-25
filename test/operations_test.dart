@@ -301,10 +301,7 @@ void main() {
           'name': 'Crust',
           'addr:street': 'Queen Street',
         });
-        final point =
-            OsmExtractOperation(view, [view.way(10)!], presets: presets)
-                .apply()
-                .single;
+        final point = _extract(view, presets).apply().single;
         expect(point.tags, {
           'shop': 'bakery',
           'name': 'Crust',
@@ -321,15 +318,14 @@ void main() {
 
       test('keeps an area that is not a building an area', () {
         final view = shop({'shop': 'bakery', 'area': 'yes'});
-        OsmExtractOperation(view, [view.way(10)!], presets: presets).apply();
+        _extract(view, presets).apply();
         expect(view.way(10)!.tags, {'area': 'yes'});
       });
 
       test('takes nothing out of what can only be an area', () {
         final view = shop({'building': 'yes'});
         expect(
-          OsmExtractOperation(view, [view.way(10)!], presets: presets)
-              .available,
+          _extract(view, presets).available,
           isFalse,
         );
       });
@@ -439,16 +435,15 @@ void main() {
   });
 
   group('across the antimeridian', () {
-    OsmEditor across() => testEditor(
-          nodes: [
+    OsmEditor across() => OsmEditor(
+          OsmEditorData.of([
             testNode(1, 0, 179.999),
             testNode(2, 0, -179.999),
             testNode(3, 0.002, -179.999),
             testNode(4, 0.002, 179.999),
-          ],
-          ways: [
             testWay(10, [1, 2, 3, 4, 1], {'building': 'yes', 'shop': 'bakery'}),
-          ],
+          ]),
+          rules: const _EverythingToThePoint(),
         );
 
     test('puts what is extracted on the antimeridian, not half a world off',
@@ -473,4 +468,23 @@ void main() {
       }
     });
   });
+}
+
+/// Pulling a point out of way 10 of [view], by [presets].
+OsmExtractOperation _extract(OsmEditor view, OsmPresets presets) {
+  (view.rules as OsmStandardTagRules).presets = presets;
+  return view.extract([view.way(10)!]);
+}
+
+/// Rules a tool might make of its own: whatever a way says goes to a point
+/// pulled out of it.
+class _EverythingToThePoint extends OsmPlainTagRules {
+  const _EverythingToThePoint();
+
+  @override
+  ({Map<String, String> point, Map<String, String> way})? extracted(
+    OsmWay way,
+    OsmEditor editor,
+  ) =>
+      (point: way.tags, way: const {});
 }

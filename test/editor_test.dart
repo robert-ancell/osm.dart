@@ -38,10 +38,21 @@ void main() {
     expect(editor.geometryOf(editor.node(5)!), OsmGeometry.vertex);
   });
 
+  test('knows nothing of tags with the plain rules', () {
+    final editor = OsmEditor(_square().data);
+    expect(editor.geometryOf(editor.way(10)!), OsmGeometry.line);
+    final reverse = editor.reverse([editor.way(10)!]);
+    expect(reverse.available, isTrue);
+    expect(editor.delete([editor.way(10)!]).disabled, isNull);
+  });
+
   test('says a closed building is an area without any presets', () {
     final editor = _square();
     expect(editor.geometryOf(editor.way(10)!), OsmGeometry.area);
-    final other = OsmEditor(editor.data, isArea: (tags) => false);
+    final other = OsmEditor(
+      editor.data,
+      rules: OsmStandardTagRules(isAreaWithoutPresets: (tags) => false),
+    );
     expect(other.geometryOf(other.way(10)!), OsmGeometry.line);
   });
 
@@ -147,10 +158,11 @@ void main() {
 
   test('says which regions something is in once the borders are known', () {
     final editor = _square();
-    expect(editor.regionsOf(editor.way(10)!), isEmpty);
-    editor.countryCoder = OsmCountryCoder.parse(_borders);
-    expect(editor.regionsOf(editor.way(10)!), contains('xa'));
-    expect(editor.regionsOf(editor.node(5)!), contains('xa'));
+    final rules = editor.rules as OsmStandardTagRules;
+    expect(rules.regionsOf(editor.way(10)!, editor), isEmpty);
+    rules.countryCoder = OsmCountryCoder.parse(_borders);
+    expect(rules.regionsOf(editor.way(10)!, editor), contains('xa'));
+    expect(rules.regionsOf(editor.node(5)!, editor), contains('xa'));
   });
 
   test('edits what was read from a file as it is', () {

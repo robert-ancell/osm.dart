@@ -1,14 +1,15 @@
 /// Which country a place is in, and every larger region it is in as well.
 ///
-/// Read from country-coder's borders, <https://github.com/rapideditor/country-coder>,
-/// which is what iD finds out where it is with. The borders are coarse on
-/// purpose — a few hundred kilobytes for the whole world — and are for
-/// saying which country a place is in, not for drawing: close to a border
-/// the answer can be the neighbour's.
+/// Read from country-coder's borders,
+/// <https://github.com/rapideditor/country-coder>, which OpenStreetMap editors
+/// find out where they are with. The borders are coarse on purpose — a few
+/// hundred kilobytes for the whole world — and are for saying which country a
+/// place is in, not for drawing: close to a border the answer can be the
+/// neighbour's.
 ///
 /// A place's regions are named every way the borders name them, so that
 /// whatever a caller holds — `FR`, `FRA`, `250`, `Q142`, or `Q46` for
-/// Europe — can be looked for among them. That is the form iD's tagging
+/// Europe — can be looked for among them. That is the form the tagging
 /// schema says where a preset applies in.
 ///
 /// The borders are © country-coder contributors, under the ISC licence.
@@ -112,12 +113,12 @@ class OsmCountry {
 /// [country-coder](https://github.com/rapideditor/country-coder).
 ///
 /// Not a general list of the world's countries: it holds exactly what
-/// country-coder publishes — its countries, territories, and the larger
-/// regions such as continents and the EU that it groups them into, each with
-/// the codes it goes by and coarse land borders — and answers the questions
-/// iD asks of it: what goes by this code ([byCode]), what land is here
-/// ([landAt]), what country is this ([countryAt]) and which regions a
-/// preset's location set may name here ([codesAt]).
+/// country-coder publishes — its countries, territories, and the larger regions
+/// such as continents and the EU that it groups them into, each with the codes
+/// it goes by and coarse land borders — and answers the questions an editor
+/// asks of it: what goes by this code ([byCode]), what land is here ([landAt]),
+/// what country is this ([countryAt]) and which regions a preset's location set
+/// may name here ([codesAt]).
 ///
 /// Made with [OsmCountryCoder.parse], usually from what
 /// [OsmCountryCoderCache.read] fetches and keeps on disk.

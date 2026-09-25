@@ -144,7 +144,7 @@ class OsmCache {
     return read;
   }
 
-  /// iD's tagging schema in [language], which says what kinds of thing there
+  /// The tagging schema in [language], which says what kinds of thing there
   /// are.
   ///
   /// Read the first time each language is asked for and kept. Empty only

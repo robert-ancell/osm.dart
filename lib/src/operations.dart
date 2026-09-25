@@ -2,10 +2,9 @@
 /// reversing it, pulling a point out of it, knowing what line it would
 /// continue, copying and pasting it, and moving it.
 ///
-/// As iD does them, rule for rule, so that an edit made here is the edit
-/// someone who knows iD expects. Each works on an [OsmEditor] — what was
-/// read with what has been changed laid over it — and records what it does
-/// in its [OsmEditor.history], gathered into one change to undo.
+/// Each works on an [OsmEditor] — what was read with what has been changed laid
+/// over it — and records what it does in its [OsmEditor.history], gathered into
+/// one change to undo.
 library;
 
 import 'dart:math' as math;
@@ -14,95 +13,9 @@ import 'edit.dart';
 import 'element.dart';
 import 'mercator.dart';
 import 'presets.dart';
+import 'tag_rules.dart';
 
-/// Keys that say nothing about what a thing is: where the data came from,
-/// and ids in other databases.
-const _uninterestingKeys = {
-  'attribution',
-  'created_by',
-  'import_uuid',
-  'lat',
-  'latitude',
-  'lon',
-  'longitude',
-  'source',
-  'source_ref',
-  'odbl',
-  'odbl:note',
-};
-
-final _uninterestingKey = RegExp(
-  r'^(source(_ref)?|at_bev|geobase|hcpaogis|KSJ2|mvdgis|nvdb|nysgissam|tiger):'
-  r'|:(identifier|ref|ref_id|id)$',
-);
-
-/// Whether [tags] say something about what a thing is, rather than only
-/// where the data came from. As iD judges it.
-///
-/// What the operations decide by: an untagged node goes with its way, but
-/// one that says something is kept, extracted or copied in its own right.
-bool osmHasInterestingTags(Map<String, String> tags) => tags.keys.any(
-      (key) =>
-          !_uninterestingKeys.contains(key) && !_uninterestingKey.hasMatch(key),
-    );
-
-/// Why an [OsmOperation] cannot be done, as iD gives the reason.
-///
-/// [id] is iD's own name for it, which is what iD's translations of the
-/// messages it shows are keyed by.
-enum OsmDisabledReason {
-  /// Nothing selected is something it can be done to, or not all of it is.
-  notEligible('not_eligible'),
-
-  /// A way that is part of a route or a boundary, or the outside of a multipolygon, which deleting would leave a hole in.
-  partOfRelation('part_of_relation'),
-
-  /// Something linked from Wikidata, which is not deleted by accident.
-  hasWikidataTag('has_wikidata_tag'),
-
-  /// A relation it is part of has not been read in full, so what the change does to it cannot be worked out.
-  parentIncomplete('parent_incomplete'),
-
-  /// A roundabout that is part of a larger relation, which splitting would break.
-  simpleRoundabout('simple_roundabout'),
-
-  /// The result would have more nodes than a way may.
-  tooManyVertices('too_many_vertices'),
-
-  /// The lines do not meet end to end.
-  notAdjacent('not_adjacent'),
-
-  /// The lines are in different relations.
-  conflictingRelations('conflicting_relations'),
-
-  /// The lines cross, so joining them would make a line that crosses itself.
-  pathsIntersect('paths_intersect'),
-
-  /// It would break a turn restriction.
-  restriction('restriction'),
-
-  /// It would break a lane connectivity relation.
-  connectivity('connectivity'),
-
-  /// The things say different things about the same tag.
-  conflictingTags('conflicting_tags'),
-
-  /// A multipolygon it involves has not been read in full.
-  incompleteRelation('incomplete_relation'),
-
-  /// It would break a relation, whose members it joins or separates.
-  relation('relation'),
-
-  /// Nothing is joined here to be disconnected.
-  notConnected('not_connected');
-
-  /// iD's name for the reason.
-  final String id;
-
-  const OsmDisabledReason(this.id);
-}
-
-/// Something done to what is selected, as iD offers it: deleting,
+/// Something done to what is selected: deleting,
 /// reversing, extracting, splitting, merging or disconnecting.
 ///
 /// Each is made over the map as it now stands and the selection, says
@@ -152,31 +65,11 @@ class OsmDeleteOperation extends OsmOperation<void> {
   /// careful work, linked from elsewhere, and is not deleted by accident.
   @override
   OsmDisabledReason? get disabled {
-    if (selected.any(_protected)) return OsmDisabledReason.partOfRelation;
-    if (selected.any((e) => (e.tags['wikidata'] ?? '').trim().isNotEmpty)) {
-      return OsmDisabledReason.hasWikidataTag;
+    for (final element in selected) {
+      final reason = _view.rules.protects(element, _view);
+      if (reason != null) return reason;
     }
     return null;
-  }
-
-  bool _protected(OsmElement element) {
-    if (element is! OsmWay) return false;
-    for (final relation
-        in _view.relationsUsing(OsmElementType.way, element.id)) {
-      final type = relation.tags['type'];
-      for (final member in relation.members) {
-        if (member.type != OsmElementType.way || member.ref != element.id) {
-          continue;
-        }
-        final role = member.role.isEmpty ? 'outer' : member.role;
-        if (type == 'route' ||
-            type == 'boundary' ||
-            (type == 'multipolygon' && role == 'outer')) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   /// Deletes it all, as one change.
@@ -218,7 +111,7 @@ class OsmDeleteOperation extends OsmOperation<void> {
       if (node == null) continue;
       if (_view.waysUsing(id).isNotEmpty) continue;
       if (_view.relationsUsing(OsmElementType.node, id).isNotEmpty) continue;
-      if (osmHasInterestingTags(node.tags)) continue;
+      if (_view.rules.isDescriptive(node.tags)) continue;
       _view.deleteNode(node);
     }
   }
@@ -301,11 +194,11 @@ class OsmReverseOperation extends OsmOperation<void> {
   void _reverseNode(int id, {required bool absolute}) {
     final node = _view.node(id);
     if (node == null || node.tags.isEmpty) return;
-    _view.setTags(node, osmReversedTags(node.tags, absolute: absolute));
+    _view.setTags(node, _view.rules.reversed(node.tags, standalone: absolute));
   }
 
-  static bool _hasDirection(Map<String, String> tags) {
-    final reversed = osmReversedTags(tags, absolute: true);
+  bool _hasDirection(Map<String, String> tags) {
+    final reversed = _view.rules.reversed(tags, standalone: true);
     if (reversed.length != tags.length) return true;
     return tags.entries.any((e) => reversed[e.key] != e.value);
   }
@@ -326,9 +219,12 @@ void osmReverseWay(OsmEditor view, OsmWay way, {bool oneway = false}) {
       for (final member in relation.members)
         if (member.type == OsmElementType.way &&
             member.ref == way.id &&
-            _roles[member.role] != null)
+            view.rules.reversedRole(member.role) != member.role)
           OsmMember(
-              type: member.type, ref: member.ref, role: _roles[member.role]!)
+            type: member.type,
+            ref: member.ref,
+            role: view.rules.reversedRole(member.role),
+          )
         else
           member,
     ];
@@ -341,159 +237,14 @@ void osmReverseWay(OsmEditor view, OsmWay way, {bool oneway = false}) {
   for (final id in nodes.toSet()) {
     final node = view.node(id);
     if (node == null || node.tags.isEmpty) continue;
-    view.setTags(node, osmReversedTags(node.tags, absolute: false));
+    view.setTags(node, view.rules.reversed(node.tags, standalone: false));
   }
   view.setWayNodes(way, nodes);
   view.setTags(
     view.way(way.id) ?? way,
-    osmReversedTags(way.tags, absolute: false, oneway: oneway),
+    view.rules.reversed(way.tags, standalone: false, oneway: oneway),
   );
 }
-
-const _roles = {
-  'forward': 'backward',
-  'backward': 'forward',
-  'forwards': 'backward',
-  'backwards': 'forward',
-};
-
-/// [tags] turned round for something that now faces the other way, as iD
-/// turns them.
-///
-/// Keys ending or containing `:left`, `:right`, `:forward` and `:backward`
-/// swap, as do those words as values, and `up` and `down`. A numeric
-/// `incline` changes sign. With [absolute], a key ending in `direction` has
-/// its compass point or bearing turned half way round as well, which is
-/// right for a node standing on its own and wrong for one along a line.
-/// Names, notes and the like are left as they are whatever words are in
-/// them, as are turn lanes, which are left and right of the lane.
-Map<String, String> osmReversedTags(
-  Map<String, String> tags, {
-  required bool absolute,
-  bool oneway = false,
-}) =>
-    {
-      for (final MapEntry(:key, :value) in tags.entries)
-        _reverseKey(key): oneway && key == 'oneway'
-            ? (_onewayReplacements[value] ?? value)
-            : _reverseValue(key, value, absolute, tags),
-    };
-
-const _onewayReplacements = {'yes': '-1', '1': '-1', '-1': 'yes'};
-
-final _keyReplacements = [
-  (RegExp(r':right$'), ':left'),
-  (RegExp(r':left$'), ':right'),
-  (RegExp(r':forward$'), ':backward'),
-  (RegExp(r':backward$'), ':forward'),
-  (RegExp(r':right:'), ':left:'),
-  (RegExp(r':left:'), ':right:'),
-  (RegExp(r':forward:'), ':backward:'),
-  (RegExp(r':backward:'), ':forward:'),
-];
-
-final _keysToKeep = [RegExp(r'^red_turn:(right|left):?')];
-
-final _valuesToKeep = [
-  (
-    RegExp(
-      r'^.*(_|:)?(description|name|note|website|ref|source|comment|watch|attribution)(_|:)?',
-    ),
-    const <Map<String, String>>[{}],
-  ),
-  (RegExp(r'^turn:lanes:?'), const <Map<String, String>>[{}]),
-  (
-    RegExp(r'^side$'),
-    const <Map<String, String>>[
-      {'highway': 'cyclist_waiting_aid'},
-    ],
-  ),
-  (RegExp(r'^railway:turnout_side$'), const <Map<String, String>>[{}]),
-];
-
-const _valueReplacements = {
-  'left': 'right',
-  'right': 'left',
-  'up': 'down',
-  'down': 'up',
-  'forward': 'backward',
-  'backward': 'forward',
-  'forwards': 'backward',
-  'backwards': 'forward',
-};
-
-const _compass = {
-  'N': 'S',
-  'NNE': 'SSW',
-  'NE': 'SW',
-  'ENE': 'WSW',
-  'E': 'W',
-  'ESE': 'WNW',
-  'SE': 'NW',
-  'SSE': 'NNW',
-  'S': 'N',
-  'SSW': 'NNE',
-  'SW': 'NE',
-  'WSW': 'ENE',
-  'W': 'E',
-  'WNW': 'ESE',
-  'NW': 'SE',
-  'NNW': 'SSE',
-};
-
-final _numeric = RegExp(r'^([+\-]?)(?=[\d.])');
-
-String _reverseKey(String key) {
-  if (_keysToKeep.any((keep) => keep.hasMatch(key))) return key;
-  for (final (pattern, replacement) in _keyReplacements) {
-    if (pattern.hasMatch(key)) return key.replaceFirst(pattern, replacement);
-  }
-  return key;
-}
-
-String _reverseValue(
-  String key,
-  String value,
-  bool absolute,
-  Map<String, String> tags,
-) {
-  for (final (pattern, contexts) in _valuesToKeep) {
-    if (pattern.hasMatch(key) &&
-        contexts.any(
-          (needed) => needed.entries.every(
-            (e) =>
-                tags[e.key] != null &&
-                (e.value == '*' || tags[e.key] == e.value),
-          ),
-        )) {
-      return value;
-    }
-  }
-  if (key == 'incline' && _numeric.hasMatch(value)) {
-    return value.replaceFirstMapped(
-      _numeric,
-      (match) => match[1] == '-' ? '' : '-',
-    );
-  }
-  if (absolute && key.endsWith('direction')) {
-    return value.split(';').map((part) {
-      final compass = _compass[part];
-      if (compass != null) return compass;
-      final degrees = num.tryParse(part);
-      if (degrees != null && degrees.isFinite) {
-        final turned = degrees < 180 ? degrees + 180 : degrees - 180;
-        return _number(turned);
-      }
-      return _valueReplacements[part] ?? part;
-    }).join(';');
-  }
-  return _valueReplacements[value] ?? value;
-}
-
-/// [value] as JavaScript writes a number, which is how iD writes a turned
-/// bearing: no `.0` on a whole number.
-String _number(num value) =>
-    value == value.truncate() ? value.truncate().toString() : value.toString();
 
 /// Pulling a point out of what is selected.
 class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
@@ -503,29 +254,15 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
   @override
   final List<OsmElement> selected;
 
-  /// The kinds of thing there are, which say whether what a way is could
-  /// also be a point. Without them, nothing is pulled out of a way.
-  final OsmPresets? presets;
-
-  /// Where it is, for choosing among kinds that only exist in some places.
-  final Set<String> here;
-
   /// Creates the operation.
-  OsmExtractOperation(this._view, this.selected,
-      {this.presets, this.here = const {}});
+  OsmExtractOperation(this._view, this.selected);
 
-  bool _extractable(OsmElement element) {
-    if (!osmHasInterestingTags(element.tags)) return false;
-    if (element is OsmNode) return _view.waysUsing(element.id).isNotEmpty;
-    final presets = this.presets;
-    if (presets == null) return false;
-    final preset = presets.match(
-      element.tags,
-      _view.geometryOf(element),
-      here: here,
-    );
-    return preset.geometry.contains(OsmGeometry.point);
-  }
+  bool _extractable(OsmElement element) => switch (element) {
+        OsmNode() => _view.rules.isDescriptive(element.tags) &&
+            _view.waysUsing(element.id).isNotEmpty,
+        OsmWay() => _view.rules.extracted(element, _view) != null,
+        OsmRelation() => false,
+      };
 
   /// Whether it can be done: everything selected has a point in it to pull
   /// out.
@@ -550,7 +287,7 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
           case OsmNode():
             points.add(_fromNode(element));
           case OsmWay():
-            points.add(_fromWay(element));
+            if (_fromWay(element) case final point?) points.add(point);
           case OsmRelation():
             break;
         }
@@ -573,58 +310,23 @@ class OsmExtractOperation extends OsmOperation<List<OsmNode>> {
     return _view.node(node.id) ?? node;
   }
 
-  OsmNode _fromWay(OsmWay way) {
+  OsmNode? _fromWay(OsmWay way) {
     final geometry = _view.geometryOf(way);
-    final tags = Map.of(way.tags);
-    final point = <String, String>{};
-    final building = _isYes(tags['building']) || _isYes(tags['building:part']);
-    final indoor =
-        geometry == OsmGeometry.area && _indoorAreas.contains(tags['indoor']);
-    for (final MapEntry(:key, :value) in way.tags.entries) {
-      if (key == 'area') continue;
-      if (building &&
-          (_buildingKeys.contains(key) ||
-              key.startsWith('building:') ||
-              key.startsWith('roof:'))) {
-        continue;
-      }
-      if (indoor && key == 'indoor') continue;
-      point[key] = value;
-      final shared = key == 'source' ||
-          key == 'wheelchair' ||
-          key.startsWith('addr:') ||
-          (indoor && key == 'level');
-      if (!shared) tags.remove(key);
-    }
-    if (!building && !indoor && geometry == OsmGeometry.area) {
-      tags['area'] = 'yes';
-    }
+    final extracted = _view.rules.extracted(way, _view);
+    if (extracted == null) return null;
+    final (:point, way: tags) = extracted;
     final (latitude, longitude) = _middleOf(way, geometry);
-    final extracted = _view.createNode(
+    final made = _view.createNode(
       latitude: latitude,
       longitude: longitude,
       tags: point,
     );
     _view.setTags(way, tags);
-    return extracted;
+    return made;
   }
 
-  static bool _isYes(String? value) => value != null && value != 'no';
-
-  static const _indoorAreas = {'area', 'corridor', 'elevator', 'level', 'room'};
-
-  static const _buildingKeys = {
-    'architect',
-    'building',
-    'height',
-    'layer',
-    'nycdoitt:bin',
-    'ref:GB:uprn',
-    'ref:linz:building_id',
-  };
-
   /// The middle of [way]: the centre of the area it encloses, or the point
-  /// half way along it by length. Worked out on the map, as iD does, and
+  /// half way along it by length. Worked out on the map, and
   /// the middle of its nodes if that comes to nothing.
   (double, double) _middleOf(OsmWay way, OsmGeometry geometry) {
     final xs = <double>[];
@@ -753,8 +455,7 @@ class OsmCopied {
   }
 }
 
-/// Copies [selected], as iD copies it, or null if there is nothing in it to
-/// copy.
+/// Copies [selected], or null if there is nothing in it to copy.
 ///
 /// A node along a way that says nothing of its own is part of the way, not
 /// something to copy on its own; a way is copied with its nodes. [anchor]
@@ -767,7 +468,7 @@ OsmCopied? osmCopy(
 }) {
   final chosen = [
     for (final element in selected)
-      if (osmHasInterestingTags(element.tags) ||
+      if (view.rules.isDescriptive(element.tags) ||
           view.geometryOf(element) != OsmGeometry.vertex)
         element,
   ];

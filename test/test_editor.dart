@@ -7,11 +7,14 @@ OsmEditor testEditor({
   List<OsmWay> ways = const [],
   List<OsmRelation> relations = const [],
 }) =>
-    OsmEditor(OsmEditorData.of([...nodes, ...ways, ...relations]));
+    OsmEditor(
+      OsmEditorData.of([...nodes, ...ways, ...relations]),
+      rules: OsmStandardTagRules(),
+    );
 
 /// An editor over [read], by default nothing at all.
 OsmEditor editorOf([Iterable<OsmElement> read = const []]) =>
-    OsmEditor(OsmEditorData.of(read));
+    OsmEditor(OsmEditorData.of(read), rules: OsmStandardTagRules());
 
 OsmNode testNode(int id, double latitude, double longitude,
         [Map<String, String> tags = const {}]) =>

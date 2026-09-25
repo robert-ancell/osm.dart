@@ -158,11 +158,24 @@ void main() {
 
     final read =
         await OsmCountryCoderCache(directory: directory, fetch: fetch).read();
-    expect(read!.countryAt(1, 1)!.name, 'Examplia');
+    expect(read.countryAt(1, 1)!.name, 'Examplia');
     expect(asked.single.toString(), '${osmCountryCoderUrl}borders.json');
 
     asked.clear();
     await OsmCountryCoderCache(directory: directory, fetch: fetch).read();
     expect(asked, isEmpty);
+  });
+
+  test('knows of no country with nothing to read the borders from', () async {
+    final directory = Directory.systemTemp.createTempSync('countries');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final read = await OsmCountryCoderCache(
+      directory: directory,
+      fetch: (uri, {abandon, onLate}) async =>
+          throw const SocketException('offline'),
+    ).read();
+    expect(read.all, isEmpty);
+    expect(read.countryAt(1, 1), isNull);
+    expect(read.codesAt(1, 1), isEmpty);
   });
 }

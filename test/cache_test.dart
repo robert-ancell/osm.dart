@@ -89,10 +89,10 @@ void main() {
     }
 
     final cache = await OsmCache.open(directory: root, fetch: fetch);
-    expect(await cache.countryCoder, isNull);
+    expect((await cache.countryCoder).all, isEmpty);
     online = true;
     final coder = await cache.countryCoder;
-    expect(coder!.byCode('XA')!.name, 'Examplia');
+    expect(coder.byCode('XA')!.name, 'Examplia');
     final before = asked;
     expect(await cache.countryCoder, same(coder));
     expect(asked, before);

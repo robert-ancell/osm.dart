@@ -127,11 +127,16 @@ class OsmCache {
 
   /// country-coder's borders, which say which country a place is in.
   ///
-  /// Read the first time it is asked for and kept. Null only when there is
-  /// no copy on disk and none could be fetched, in which case the next ask
-  /// tries again.
-  Future<OsmCountryCoder?> get countryCoder async =>
-      _countryCoder ??= await countryCoderCache.read();
+  /// Read the first time they are asked for and kept. Empty only when there
+  /// is no copy on disk and none could be fetched, in which case the next
+  /// ask tries again.
+  Future<OsmCountryCoder> get countryCoder async {
+    final held = _countryCoder;
+    if (held != null) return held;
+    final read = await countryCoderCache.read();
+    if (read.all.isNotEmpty) _countryCoder = read;
+    return read;
+  }
 
   /// iD's tagging schema in [language], which says what kinds of thing there
   /// are.

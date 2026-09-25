@@ -139,6 +139,10 @@ class OsmCountryCoder {
             if (country.polygons.isNotEmpty) country,
         ];
 
+  /// No countries at all, so that every place is in none: what there is
+  /// before the borders have been read.
+  OsmCountryCoder.empty() : this._(const []);
+
   /// The countries and regions in [json], the text of country-coder's
   /// `borders.json`.
   ///

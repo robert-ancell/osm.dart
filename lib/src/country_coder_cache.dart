@@ -46,9 +46,11 @@ class OsmCountryCoderCache {
   /// network otherwise.
   ///
   /// Never throws. An old copy is used when the network cannot be reached,
-  /// and null comes back only when there is no copy of any age and nothing
-  /// could be fetched.
-  Future<OsmCountryCoder?> read() => readCachedFiles(
+  /// and when there is no copy of any age and nothing could be fetched, the
+  /// borders come back empty, [OsmCountryCoder.empty], knowing of no
+  /// country anywhere.
+  Future<OsmCountryCoder> read() async =>
+      await readCachedFiles(
         directory: directory,
         files: const [file],
         from: from,
@@ -57,5 +59,6 @@ class OsmCountryCoderCache {
         parse: (files) =>
             Isolate.run(() => OsmCountryCoder.parse(files.single)),
         isEmpty: (countries) => countries.all.isEmpty,
-      );
+      ) ??
+      OsmCountryCoder.empty();
 }

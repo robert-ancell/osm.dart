@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'cache.dart';
@@ -6,6 +5,7 @@ import 'element.dart';
 import 'pbf/file.dart';
 import 'pbf/writer.dart';
 import 'tile.dart';
+import 'tile_store.dart';
 
 /// What is known about one box held on disk.
 class OsmCachedData {
@@ -53,15 +53,15 @@ class OsmDataCache {
   /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'data';
 
+  final TileStore _store;
+
+  OsmDataCache._(this._store);
+
   /// Where the files are.
-  final Directory directory;
+  Directory get directory => _store.directory;
 
   /// The most disk the cache may take.
-  final int maximumBytes;
-
-  final _held = <OsmTile, OsmCachedData>{};
-
-  OsmDataCache._(this.directory, this.maximumBytes);
+  int get maximumBytes => _store.maximumBytes;
 
   /// Opens the cache in [directory], by default [name] under
   /// [OsmCache.defaultDirectory], reading what it already holds.
@@ -71,40 +71,38 @@ class OsmDataCache {
   static Future<OsmDataCache> open({
     Directory? directory,
     int maximumBytes = OsmDataCache.defaultMaximumBytes,
-  }) async {
-    directory ??= OsmCache.defaultDirectory(name);
-    final cache = OsmDataCache._(directory, maximumBytes);
-    try {
-      await directory.create(recursive: true);
-      await cache._readIndex();
-    } on Exception {
-      // Half written, or written by something else entirely. Nothing here
-      // cannot be read again, so starting over costs only the reading.
-      cache._held.clear();
-    }
-    return cache;
-  }
+  }) async =>
+      OsmDataCache._(
+        await TileStore.open(
+          directory ?? OsmCache.defaultDirectory(name),
+          maximumBytes: maximumBytes,
+          extension: '.osm.pbf',
+        ),
+      );
+
+  static OsmCachedData _of(TileRecord record) =>
+      OsmCachedData(id: record.id, at: record.at, bytes: record.bytes);
 
   /// Every box held, oldest read first.
-  List<OsmCachedData> get tiles {
-    final all = _held.values.toList()..sort((a, b) => a.at.compareTo(b.at));
-    return all;
-  }
+  List<OsmCachedData> get tiles => [for (final r in _store.records) _of(r)];
 
   /// How much disk the cache is taking.
-  int get bytes => _held.values.fold(0, (total, tile) => total + tile.bytes);
+  int get bytes => _store.bytes;
 
   /// What is known about [tile], or null if it is not held.
-  OsmCachedData? entry(OsmTile tile) => _held[tile];
+  OsmCachedData? entry(OsmTile tile) => switch (_store[tile]) {
+        final record? => _of(record),
+        null => null,
+      };
 
   /// Whether [tile] is held.
-  bool holds(OsmTile tile) => _held.containsKey(tile);
+  bool holds(OsmTile tile) => _store[tile] != null;
 
   /// The elements held for [tile], or null if it is not held or unreadable.
   Future<List<OsmElement>?> read(OsmTile tile) async {
-    if (!_held.containsKey(tile)) return null;
+    if (!holds(tile)) return null;
     try {
-      final file = await OsmPbfFile.open(_pathOf(tile));
+      final file = await OsmPbfFile.open(_store.pathOf(tile));
       return await file.elements(isolates: 1).toList();
     } on Exception {
       // A file written by an older version, or a half written one left by a
@@ -115,128 +113,26 @@ class OsmDataCache {
   }
 
   /// Writes [elements] as the contents of [tile], replacing what was held.
-  Future<void> write(OsmTile tile, List<OsmElement> elements) async {
-    final path = _pathOf(tile);
-    try {
-      await Directory(File(path).parent.path).create(recursive: true);
-      final writer = await OsmPbfWriter.create(path);
-      // A block holds one kind of element, so grouping them saves the writer
-      // from starting a new block on every change of kind.
-      for (final type in OsmElementType.values) {
-        for (final element in elements) {
-          if (element.type == type) writer.add(element);
+  ///
+  /// The boxes read longest ago are thrown away to make room, never the one
+  /// just written.
+  Future<void> write(OsmTile tile, List<OsmElement> elements) =>
+      _store.keep(tile, (path) async {
+        final writer = await OsmPbfWriter.create(path);
+        // A block holds one kind of element, so grouping them saves the
+        // writer from starting a new block on every change of kind.
+        for (final type in OsmElementType.values) {
+          for (final element in elements) {
+            if (element.type == type) writer.add(element);
+          }
         }
-      }
-      await writer.close();
-      _held[tile] = OsmCachedData(
-        id: tile,
-        at: DateTime.now(),
-        bytes: await File(path).length(),
-      );
-      await _evict(keeping: tile);
-      await _writeIndex();
-    } on IOException {
-      // Not being able to write to the disk is not a reason to stop drawing
-      // the map, so the box is simply not held.
-      _held.remove(tile);
-    }
-  }
+        await writer.close();
+      });
 
   /// Records that [tile] was checked for edits and found current, so it is
   /// not asked about again until it has aged.
-  Future<void> markChecked(OsmTile tile) async {
-    final held = _held[tile];
-    if (held == null) return;
-    _held[tile] =
-        OsmCachedData(id: tile, at: DateTime.now(), bytes: held.bytes);
-    await _writeIndex();
-  }
+  Future<void> markChecked(OsmTile tile) => _store.markCurrent(tile);
 
   /// Drops [tile] from the cache.
-  Future<void> forget(OsmTile tile) async {
-    _held.remove(tile);
-    try {
-      final file = File(_pathOf(tile));
-      if (file.existsSync()) await file.delete();
-    } on IOException {
-      // Already gone, which is what was wanted.
-    }
-  }
-
-  /// Throws away the boxes read longest ago until the cache is inside its
-  /// limit.
-  ///
-  /// The box just written is never one of them. A single box larger than the
-  /// whole cache would otherwise be thrown away the moment it arrived, which
-  /// would make writing it pointless; it goes when the next one comes.
-  Future<void> _evict({required OsmTile keeping}) async {
-    var total = bytes;
-    if (total <= maximumBytes) return;
-    for (final tile in tiles) {
-      if (total <= maximumBytes) break;
-      if (tile.id == keeping) continue;
-      total -= tile.bytes;
-      await forget(tile.id);
-    }
-  }
-
-  String _pathOf(OsmTile tile) =>
-      '${directory.path}/${tile.zoom}/${tile.x}/${tile.y}.osm.pbf';
-
-  File get _indexFile => File('${directory.path}/index.json');
-
-  Future<void> _readIndex() async {
-    if (!_indexFile.existsSync()) return;
-    final parsed = jsonDecode(await _indexFile.readAsString());
-    if (parsed is! Map<String, dynamic>) return;
-    if (parsed['version'] != _indexVersion) return;
-
-    final tiles = parsed['tiles'];
-    if (tiles is! List) return;
-    for (final entry in tiles) {
-      if (entry is! Map<String, dynamic>) continue;
-      final zoom = entry['z'];
-      final x = entry['x'];
-      final y = entry['y'];
-      final read = entry['at'];
-      final size = entry['bytes'];
-      if (zoom is! int || x is! int || y is! int) continue;
-      if (read is! int || size is! int) continue;
-      final id = OsmTile(zoom, x, y);
-      // A file that has gone, because something else cleared the directory
-      // or a write never finished, is not held however the index reads.
-      if (!File(_pathOf(id)).existsSync()) continue;
-      _held[id] = OsmCachedData(
-        id: id,
-        at: DateTime.fromMillisecondsSinceEpoch(read),
-        bytes: size,
-      );
-    }
-  }
-
-  Future<void> _writeIndex() async {
-    try {
-      await _indexFile.writeAsString(
-        jsonEncode({
-          'version': _indexVersion,
-          'tiles': [
-            for (final tile in _held.values)
-              {
-                'z': tile.id.zoom,
-                'x': tile.id.x,
-                'y': tile.id.y,
-                'at': tile.at.millisecondsSinceEpoch,
-                'bytes': tile.bytes,
-              },
-          ],
-        }),
-      );
-    } on IOException {
-      // The cache is a convenience. Losing the index costs a re-read.
-    }
-  }
-
-  /// What the index looks like. An index written by anything else is
-  /// ignored, which starts the cache again rather than misreading it.
-  static const _indexVersion = 1;
+  Future<void> forget(OsmTile tile) => _store.forget(tile);
 }

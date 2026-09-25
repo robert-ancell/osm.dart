@@ -1,10 +1,9 @@
-import 'dart:convert';
 import 'dart:io';
-
-import 'cache.dart';
 import 'dart:typed_data';
 
+import 'cache.dart';
 import 'tile.dart';
+import 'tile_store.dart';
 
 /// What is known about one tile held on disk.
 class OsmCachedImagery {
@@ -48,179 +47,77 @@ class OsmImageryCache {
   /// How long a tile is used without asking whether it has changed.
   ///
   /// Imagery servers commonly say `max-age=604800`, so a week is what they
-  /// consider their own answers good for. Aerial imagery is reflown in years, not
-  /// days.
+  /// consider their own answers good for. Aerial imagery is reflown in
+  /// years, not days.
   static const freshness = Duration(days: 7);
 
   /// The directory under [OsmCache.defaultDirectory] it is kept in by default.
   static const name = 'imagery';
 
+  final TileStore _store;
+
+  OsmImageryCache._(this._store);
+
   /// Where the files are.
-  final Directory directory;
+  Directory get directory => _store.directory;
 
   /// The most disk they may take.
-  final int maximumBytes;
-
-  final _held = <OsmTile, OsmCachedImagery>{};
-
-  OsmImageryCache._(this.directory, this.maximumBytes);
+  int get maximumBytes => _store.maximumBytes;
 
   /// Opens the cache in [directory], by default [name] under
   /// [OsmCache.defaultDirectory], reading what it already holds.
   static Future<OsmImageryCache> open({
     Directory? directory,
     int maximumBytes = OsmImageryCache.defaultMaximumBytes,
-  }) async {
-    directory ??= OsmCache.defaultDirectory(name);
-    final cache = OsmImageryCache._(directory, maximumBytes);
-    try {
-      await directory.create(recursive: true);
-      await cache._readIndex();
-    } on Exception {
-      // Half written, or written by something else. Nothing here cannot be
-      // fetched again.
-      cache._held.clear();
-    }
-    return cache;
-  }
+  }) async =>
+      OsmImageryCache._(
+        await TileStore.open(
+          directory ?? OsmCache.defaultDirectory(name),
+          maximumBytes: maximumBytes,
+        ),
+      );
+
+  static OsmCachedImagery _of(TileRecord record) => OsmCachedImagery(
+        id: record.id,
+        at: record.at,
+        bytes: record.bytes,
+        missing: record.missing,
+      );
 
   /// Every tile held, oldest fetched first.
-  List<OsmCachedImagery> get tiles {
-    final all = _held.values.toList()..sort((a, b) => a.at.compareTo(b.at));
-    return all;
-  }
+  List<OsmCachedImagery> get tiles => [for (final r in _store.records) _of(r)];
 
   /// How much disk is being taken.
-  int get bytes => _held.values.fold(0, (total, tile) => total + tile.bytes);
+  int get bytes => _store.bytes;
 
   /// What is known about [tile], or null if nothing is.
-  OsmCachedImagery? entry(OsmTile tile) => _held[tile];
+  OsmCachedImagery? entry(OsmTile tile) => switch (_store[tile]) {
+        final record? => _of(record),
+        null => null,
+      };
 
   /// The tile as it arrived, or null if it is not held or will not read.
   Future<Uint8List?> read(OsmTile tile) async {
-    final held = _held[tile];
+    final held = _store[tile];
     if (held == null || held.missing) return null;
     try {
-      return await File(_pathOf(tile)).readAsBytes();
+      return await File(_store.pathOf(tile)).readAsBytes();
     } on IOException {
-      _held.remove(tile);
+      await forget(tile);
       return null;
     }
   }
 
   /// Keeps [body] as the contents of [tile].
-  Future<void> write(OsmTile tile, Uint8List body) async {
-    final path = _pathOf(tile);
-    try {
-      await Directory(File(path).parent.path).create(recursive: true);
-      await File(path).writeAsBytes(body);
-      _held[tile] = OsmCachedImagery(
-        id: tile,
-        at: DateTime.now(),
-        bytes: body.length,
-      );
-      await _evict(keeping: tile);
-      await _writeIndex();
-    } on IOException {
-      // Not being able to write is no reason to stop drawing the map.
-      _held.remove(tile);
-    }
-  }
+  ///
+  /// The tiles fetched longest ago are thrown away to make room, never the
+  /// one just written.
+  Future<void> write(OsmTile tile, Uint8List body) =>
+      _store.keep(tile, (path) => File(path).writeAsBytes(body));
 
   /// Remembers that the source has nothing for [tile].
-  Future<void> markMissing(OsmTile tile) async {
-    _held[tile] = OsmCachedImagery(
-      id: tile,
-      at: DateTime.now(),
-      bytes: 0,
-      missing: true,
-    );
-    await _writeIndex();
-  }
+  Future<void> markMissing(OsmTile tile) => _store.markMissing(tile);
 
   /// Drops [tile].
-  Future<void> forget(OsmTile tile) async {
-    final held = _held.remove(tile);
-    if (held == null || held.missing) return;
-    try {
-      final file = File(_pathOf(tile));
-      if (file.existsSync()) await file.delete();
-    } on IOException {
-      // Already gone, which is what was wanted.
-    }
-  }
-
-  /// Throws away the tiles fetched longest ago until the cache is inside its
-  /// limit, never the one just written.
-  Future<void> _evict({required OsmTile keeping}) async {
-    var total = bytes;
-    if (total <= maximumBytes) return;
-    for (final tile in tiles) {
-      if (total <= maximumBytes) break;
-      if (tile.id == keeping) continue;
-      total -= tile.bytes;
-      await forget(tile.id);
-    }
-  }
-
-  String _pathOf(OsmTile tile) =>
-      '${directory.path}/${tile.zoom}/${tile.x}/${tile.y}';
-
-  File get _indexFile => File('${directory.path}/index.json');
-
-  Future<void> _readIndex() async {
-    if (!_indexFile.existsSync()) return;
-    final parsed = jsonDecode(await _indexFile.readAsString());
-    if (parsed is! Map<String, dynamic>) return;
-    if (parsed['version'] != _indexVersion) return;
-    final tiles = parsed['tiles'];
-    if (tiles is! List) return;
-
-    for (final entry in tiles) {
-      if (entry is! Map<String, dynamic>) continue;
-      final zoom = entry['z'];
-      final x = entry['x'];
-      final y = entry['y'];
-      final at = entry['at'];
-      final size = entry['bytes'];
-      if (zoom is! int || x is! int || y is! int) continue;
-      if (at is! int || size is! int) continue;
-      final missing = entry['missing'] == true;
-      final id = OsmTile(zoom, x, y);
-      if (!missing && !File(_pathOf(id)).existsSync()) continue;
-      _held[id] = OsmCachedImagery(
-        id: id,
-        at: DateTime.fromMillisecondsSinceEpoch(at),
-        bytes: size,
-        missing: missing,
-      );
-    }
-  }
-
-  Future<void> _writeIndex() async {
-    try {
-      await _indexFile.writeAsString(
-        jsonEncode({
-          'version': _indexVersion,
-          'tiles': [
-            for (final tile in _held.values)
-              {
-                'z': tile.id.zoom,
-                'x': tile.id.x,
-                'y': tile.id.y,
-                'at': tile.at.millisecondsSinceEpoch,
-                'bytes': tile.bytes,
-                if (tile.missing) 'missing': true,
-              },
-          ],
-        }),
-      );
-    } on IOException {
-      // The cache is a convenience. Losing the index costs a re-fetch.
-    }
-  }
-
-  /// What the index looks like. One written by anything else is ignored,
-  /// which starts the cache again rather than misreading it.
-  static const _indexVersion = 1;
+  Future<void> forget(OsmTile tile) => _store.forget(tile);
 }

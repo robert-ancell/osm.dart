@@ -15,7 +15,7 @@
 * `OsmPbfWriter` for writing `.osm.pbf` files, and `OsmPbfTransformer` for
   rolling replication diffs into one. A file written says `osm/<version>`
   wrote it, unless the header says otherwise.
-* `osm_update` and `updateOsmSnapshot` for bringing a snapshot up to date from
+* `osm_update` and `OsmPbfUpdater` for bringing a snapshot up to date from
   the planet's replication diffs, keeping only what touches it.
 * `OsmPbfTransformer` skips changes no newer than what the file holds, so diffs
   that overlap can be applied over each other — a delete only when it is

@@ -175,7 +175,7 @@ no trouble. A way reaching past the edge, or a node moved in from outside, is
 looked up through the OpenStreetMap API; with `--no-lookups` it is listed
 instead, and the tool exits with 2 to say a fresh snapshot is due.
 
-The same thing from code is `updateOsmSnapshot`.
+The same thing from code is `OsmPbfUpdater`.
 
 ### From an extract's own diffs
 

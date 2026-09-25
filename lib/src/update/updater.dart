@@ -5,6 +5,7 @@ import '../pbf/transformer.dart';
 import '../pbf/file.dart';
 import '../version.g.dart';
 import '../xml/change.dart';
+import '../cache.dart';
 import 'api.dart';
 import 'change_filter.dart';
 import 'replication.dart';
@@ -54,9 +55,9 @@ class OsmUpdateResult {
       (edges.missingNodes.isNotEmpty || edges.movedInNodes.isNotEmpty);
 }
 
-/// Brings the snapshot at [input] up to date and writes it to [output].
+/// Brings `.osm.pbf` snapshots up to date from a replication feed.
 ///
-/// Reads the replication diffs published since the snapshot's own timestamp,
+/// Reads the replication diffs published since a snapshot's own timestamp,
 /// hours first and then minutes, keeps the changes that touch what the
 /// snapshot holds, and applies them.
 ///
@@ -67,109 +68,133 @@ class OsmUpdateResult {
 ///
 /// The file written carries the planet's replication state, so the next
 /// update starts where this one finished.
-///
-/// The diffs are kept in [cache], as [OsmReplication.download] keeps them,
-/// so an update that stops part way does not fetch them again.
-Future<OsmUpdateResult> updateOsmSnapshot({
-  required String input,
-  required String output,
-  required OsmReplication replication,
-  Directory? cache,
-  OsmApiClient? client,
-  void Function(String message)? onProgress,
-}) async {
-  void say(String message) => onProgress?.call(message);
+class OsmPbfUpdater {
+  /// The feed the diffs are read from.
+  final OsmReplication replication;
 
-  final file = await OsmPbfFile.open(input);
-  final since = file.header.replicationTimestamp;
-  if (since == null) {
-    throw OsmReplicationException(
-      '$input does not say when its data is from, so there is no knowing '
-      'which changes it is missing',
+  /// Where the diffs are kept, as [OsmReplication.download] keeps them, so
+  /// an update that stops part way does not fetch them again; by default
+  /// under [osmCacheDirectory].
+  final Directory? cache;
+
+  /// What looks up what the changes cannot settle, if anything.
+  final OsmApiClient? client;
+
+  /// Told what is happening, a line at a time, if anything is listening.
+  final void Function(String message)? onProgress;
+
+  /// Creates an updater reading diffs from [replication].
+  const OsmPbfUpdater({
+    required this.replication,
+    this.cache,
+    this.client,
+    this.onProgress,
+  });
+
+  /// Brings the snapshot at [input] up to date and writes it to [output],
+  /// and says what that took.
+  ///
+  /// Throws an [OsmReplicationException] if [input] does not say when its
+  /// data is from, since there is then no knowing which changes it is
+  /// missing.
+  Future<OsmUpdateResult> update({
+    required String input,
+    required String output,
+  }) async {
+    final client = this.client;
+    void say(String message) => onProgress?.call(message);
+
+    final file = await OsmPbfFile.open(input);
+    final since = file.header.replicationTimestamp;
+    if (since == null) {
+      throw OsmReplicationException(
+        '$input does not say when its data is from, so there is no knowing '
+        'which changes it is missing',
+      );
+    }
+
+    say('Reading what $input holds...');
+    final index = await OsmSnapshotIndex.read(file);
+    say('  ${index.nodes.length} nodes, ${index.ways.length} ways, '
+        '${index.relations.length} relations, over ${index.region}');
+
+    final filter = OsmChangeFilter(index);
+    final diffs = <(OsmReplicationPeriod, int)>[];
+    var from = since;
+    OsmReplicationState? reached;
+
+    for (final period in [
+      OsmReplicationPeriod.hour,
+      OsmReplicationPeriod.minute
+    ]) {
+      final first = await replication.firstAfter(period, from);
+      final newest = await replication.latest(period);
+      if (first > newest.sequence) continue;
+
+      say('Reading ${newest.sequence - first + 1} ${period.name} diff(s), '
+          '$first to ${newest.sequence}...');
+      for (var sequence = first; sequence <= newest.sequence; sequence++) {
+        final diff = await replication.download(period, sequence, cache);
+        await _decide(filter, diff.path);
+        diffs.add((period, sequence));
+      }
+      from = newest.timestamp;
+      reached = period == OsmReplicationPeriod.minute ? newest : reached;
+    }
+    say('  kept ${filter.kept.length} of ${filter.seen} changes');
+
+    final edges = filter.edges;
+    final lookedUp = <OsmChange>[];
+    var lookedUpNodes = 0, lookedUpWays = 0;
+    if (client != null && !edges.isEmpty) {
+      // The ways of a node that moved in were never in the changes, if they
+      // were not themselves changed.
+      final wanted = {...edges.missingNodes};
+      for (final node in edges.movedInNodes) {
+        for (final way in await client.waysOf(node)) {
+          if (index.ways.contains(way.id)) continue;
+          lookedUp.add(_create(way));
+          lookedUpWays++;
+          wanted.addAll(way.nodeIds.where((id) => !index.nodes.contains(id)));
+        }
+      }
+      if (wanted.isNotEmpty) {
+        say('Looking up ${wanted.length} node(s) past the edge...');
+        for (final node in await client.nodes(wanted)) {
+          lookedUp.add(_create(node));
+          lookedUpNodes++;
+        }
+      }
+    }
+
+    say('Writing $output...');
+    final counts =
+        await OsmPbfTransformer([...filter.kept, ...lookedUp]).transform(
+      input: input,
+      output: output,
+      header: file.header.copyWith(
+        replicationBaseUrl: reached == null
+            ? null
+            : replication.feed(OsmReplicationPeriod.minute).toString(),
+        replicationSequenceNumber: reached?.sequence,
+        replicationTimestamp: reached?.timestamp,
+        writingProgram: 'osm/$packageVersion',
+      ),
+    );
+
+    return OsmUpdateResult(
+      diffs: diffs,
+      seen: filter.seen,
+      kept: filter.kept.length,
+      counts: counts,
+      edges: edges,
+      lookedUpNodes: lookedUpNodes,
+      lookedUpWays: lookedUpWays,
+      requests: client?.requests ?? 0,
+      lookedUp: client != null,
+      state: reached,
     );
   }
-
-  say('Reading what $input holds...');
-  final index = await OsmSnapshotIndex.read(file);
-  say('  ${index.nodes.length} nodes, ${index.ways.length} ways, '
-      '${index.relations.length} relations, over ${index.region}');
-
-  final filter = OsmChangeFilter(index);
-  final diffs = <(OsmReplicationPeriod, int)>[];
-  var from = since;
-  OsmReplicationState? reached;
-
-  for (final period in [
-    OsmReplicationPeriod.hour,
-    OsmReplicationPeriod.minute
-  ]) {
-    final first = await replication.firstAfter(period, from);
-    final newest = await replication.latest(period);
-    if (first > newest.sequence) continue;
-
-    say('Reading ${newest.sequence - first + 1} ${period.name} diff(s), '
-        '$first to ${newest.sequence}...');
-    for (var sequence = first; sequence <= newest.sequence; sequence++) {
-      final diff = await replication.download(period, sequence, cache);
-      await _decide(filter, diff.path);
-      diffs.add((period, sequence));
-    }
-    from = newest.timestamp;
-    reached = period == OsmReplicationPeriod.minute ? newest : reached;
-  }
-  say('  kept ${filter.kept.length} of ${filter.seen} changes');
-
-  final edges = filter.edges;
-  final lookedUp = <OsmChange>[];
-  var lookedUpNodes = 0, lookedUpWays = 0;
-  if (client != null && !edges.isEmpty) {
-    // The ways of a node that moved in were never in the changes, if they
-    // were not themselves changed.
-    final wanted = {...edges.missingNodes};
-    for (final node in edges.movedInNodes) {
-      for (final way in await client.waysOf(node)) {
-        if (index.ways.contains(way.id)) continue;
-        lookedUp.add(_create(way));
-        lookedUpWays++;
-        wanted.addAll(way.nodeIds.where((id) => !index.nodes.contains(id)));
-      }
-    }
-    if (wanted.isNotEmpty) {
-      say('Looking up ${wanted.length} node(s) past the edge...');
-      for (final node in await client.nodes(wanted)) {
-        lookedUp.add(_create(node));
-        lookedUpNodes++;
-      }
-    }
-  }
-
-  say('Writing $output...');
-  final counts =
-      await OsmPbfTransformer([...filter.kept, ...lookedUp]).transform(
-    input: input,
-    output: output,
-    header: file.header.copyWith(
-      replicationBaseUrl: reached == null
-          ? null
-          : replication.feed(OsmReplicationPeriod.minute).toString(),
-      replicationSequenceNumber: reached?.sequence,
-      replicationTimestamp: reached?.timestamp,
-      writingProgram: 'osm/$packageVersion',
-    ),
-  );
-
-  return OsmUpdateResult(
-    diffs: diffs,
-    seen: filter.seen,
-    kept: filter.kept.length,
-    counts: counts,
-    edges: edges,
-    lookedUpNodes: lookedUpNodes,
-    lookedUpWays: lookedUpWays,
-    requests: client?.requests ?? 0,
-    lookedUp: client != null,
-    state: reached,
-  );
 }
 
 /// Decides the changes of the diff at [path] without holding it.

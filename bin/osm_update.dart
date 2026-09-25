@@ -62,13 +62,14 @@ Future<void> main(List<String> arguments) async {
   final writing = '$target.updating';
 
   try {
-    final result = await updateOsmSnapshot(
-      input: snapshot,
-      output: writing,
+    final result = await OsmPbfUpdater(
       replication: OsmReplication(contact: contact),
       cache: Directory(cache ?? '$snapshot.diffs'),
       client: lookups ? OsmApiClient(contact: contact) : null,
       onProgress: stdout.writeln,
+    ).update(
+      input: snapshot,
+      output: writing,
     );
     await File(writing).rename(target);
     _report(result, target);

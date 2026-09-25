@@ -422,11 +422,12 @@ void main() {
       );
       final output = '${_work.path}/updated.osm.pbf';
 
-      final result = await updateOsmSnapshot(
-        input: input,
-        output: output,
+      final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
         cache: Directory('${_work.path}/cache'),
+      ).update(
+        input: input,
+        output: output,
       );
 
       expect(result.diffs, [
@@ -479,11 +480,12 @@ void main() {
       );
       final output = '${_work.path}/updated.osm.pbf';
 
-      final result = await updateOsmSnapshot(
-        input: input,
-        output: output,
+      final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
         cache: Directory('${_work.path}/cache'),
+      ).update(
+        input: input,
+        output: output,
       );
       expect(result.seen, 3, reason: 'counted once, not once per read');
       expect(result.kept, 3);
@@ -516,11 +518,12 @@ void main() {
         },
       );
 
-      final result = await updateOsmSnapshot(
-        input: input,
-        output: '${_work.path}/updated.osm.pbf',
+      final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
         cache: Directory('${_work.path}/cache'),
+      ).update(
+        input: input,
+        output: '${_work.path}/updated.osm.pbf',
       );
       expect(result.edges.incompleteWays, {42000804});
       expect(result.edges.missingNodes, {77000001});
@@ -556,12 +559,13 @@ void main() {
       );
       final output = '${_work.path}/updated.osm.pbf';
 
-      final result = await updateOsmSnapshot(
-        input: input,
-        output: output,
+      final result = await OsmPbfUpdater(
         replication: OsmReplication(fetch: feed.fetch),
         cache: Directory('${_work.path}/cache'),
         client: client,
+      ).update(
+        input: input,
+        output: output,
       );
       expect(result.lookedUpNodes, 1);
       expect(result.incomplete, isFalse);
@@ -583,12 +587,13 @@ void main() {
       ))
           .close();
       await expectLater(
-        updateOsmSnapshot(
-          input: path,
-          output: '${_work.path}/out.osm.pbf',
+        OsmPbfUpdater(
           replication:
               OsmReplication(fetch: (_, {abandon, onLate}) async => null),
           cache: _work,
+        ).update(
+          input: path,
+          output: '${_work.path}/out.osm.pbf',
         ),
         throwsA(isA<OsmReplicationException>()),
       );

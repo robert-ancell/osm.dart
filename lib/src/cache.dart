@@ -76,7 +76,7 @@ class OsmCache {
   final OsmCountryCoderCache countryCoderCache;
 
   /// Where replication diffs go, for [OsmReplication.download] and
-  /// [updateOsmSnapshot]. Each feed's are kept apart inside it.
+  /// [OsmPbfUpdater]. Each feed's are kept apart inside it.
   final Directory replicationDirectory;
 
   OsmCountryCoder? _countryCoder;

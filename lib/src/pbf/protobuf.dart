@@ -1,5 +1,7 @@
-import 'dart:convert';
 import 'dart:typed_data';
+
+import '../utf8.dart';
+import 'exception.dart';
 
 /// How a field's value is laid out, which is the low three bits of its tag.
 ///
@@ -31,12 +33,6 @@ enum ProtobufWireType {
   }
 }
 
-/// Thrown when a buffer does not contain well formed protobuf data.
-class ProtobufFormatException extends FormatException {
-  /// Creates an exception describing why decoding failed.
-  ProtobufFormatException(super.message, [super.source, super.offset]);
-}
-
 /// A reader for the protobuf binary wire format.
 ///
 /// The OSM PBF messages are decoded directly into their final representation
@@ -63,7 +59,7 @@ class ProtobufReader {
   int readTag() {
     final tag = readVarint();
     if (tag == 0 || wireTypeOf(tag) == ProtobufWireType.endGroup) {
-      throw ProtobufFormatException('Invalid field tag $tag', _bytes, _offset);
+      throw OsmPbfException('Invalid field tag $tag', offset: _offset);
     }
     return tag;
   }
@@ -88,14 +84,14 @@ class ProtobufReader {
     var shift = 0;
     while (shift < 64) {
       if (_offset >= _end) {
-        throw ProtobufFormatException('Truncated varint', _bytes, _offset);
+        throw OsmPbfException('Truncated varint', offset: _offset);
       }
       final byte = _bytes[_offset++];
       result |= (byte & 0x7f) << shift;
       if (byte < 0x80) return result;
       shift += 7;
     }
-    throw ProtobufFormatException('Varint too long', _bytes, _offset);
+    throw OsmPbfException('Varint too long', offset: _offset);
   }
 
   /// Reads a zigzag encoded signed integer (protobuf `sint32`/`sint64`).
@@ -108,7 +104,10 @@ class ProtobufReader {
   String readString() {
     final length = readVarint();
     final start = _checkedAdvance(length);
-    return utf8.decode(Uint8List.sublistView(_bytes, start, _offset));
+    return decodeUtf8(
+      Uint8List.sublistView(_bytes, start, _offset),
+      (message) => OsmPbfException(message, offset: start),
+    );
   }
 
   /// Reads a length delimited field as a copy of its bytes.
@@ -175,24 +174,20 @@ class ProtobufReader {
       case ProtobufWireType.startGroup:
         _skipGroup(fieldOf(tag));
       case ProtobufWireType.endGroup || null:
-        throw ProtobufFormatException(
-          'Unsupported wire type in tag $tag',
-          _bytes,
-          _offset,
-        );
+        throw OsmPbfException('Unsupported wire type in tag $tag',
+            offset: _offset);
     }
   }
 
   void _skipGroup(int field) {
     while (true) {
       if (isAtEnd) {
-        throw ProtobufFormatException('Unterminated group', _bytes, _offset);
+        throw OsmPbfException('Unterminated group', offset: _offset);
       }
       final tag = readVarint();
       if (wireTypeOf(tag) == ProtobufWireType.endGroup) {
         if (fieldOf(tag) != field) {
-          throw ProtobufFormatException(
-              'Mismatched group end', _bytes, _offset);
+          throw OsmPbfException('Mismatched group end', offset: _offset);
         }
         return;
       }
@@ -202,11 +197,8 @@ class ProtobufReader {
 
   int _checkedAdvance(int length) {
     if (length < 0 || _offset + length > _end) {
-      throw ProtobufFormatException(
-        'Field of $length bytes overruns the message',
-        _bytes,
-        _offset,
-      );
+      throw OsmPbfException('Field of $length bytes overruns the message',
+          offset: _offset);
     }
     final start = _offset;
     _offset += length;

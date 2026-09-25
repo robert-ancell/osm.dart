@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'exception.dart';
 import '../element.dart';
 import 'elements.dart';
 
@@ -92,7 +93,17 @@ abstract final class OsmChangeFile {
 
     Stream<List<int>> bytes = file.openRead();
     if (gzipped) bytes = bytes.transform(gzip.decoder);
-    yield* parseStream(bytes.transform(utf8.decoder));
+    // Damaged gzip and text that is not UTF-8 both come as a FormatException
+    // from dart:convert, which is said here as what it means: the file
+    // cannot be read.
+    yield* parseStream(
+      bytes.transform(utf8.decoder).handleError(
+            (Object e) => throw OsmXmlException(
+              '$path cannot be read: ${(e as FormatException).message}',
+            ),
+            test: (e) => e is FormatException,
+          ),
+    );
   }
 
   /// The changes in XML handed over a piece at a time.

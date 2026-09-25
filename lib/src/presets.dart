@@ -11,7 +11,7 @@
 /// The schema is © iD contributors, under the ISC licence.
 library;
 
-import 'dart:convert';
+import 'json_exception.dart';
 
 /// The shape an element takes, as far as what it can be is concerned.
 enum OsmGeometry {
@@ -334,17 +334,20 @@ class OsmPresets {
   /// such as `translations/en.json`, which is where every name and search
   /// word is. [categories] and [defaults] are `preset_categories.json` and
   /// `preset_defaults.json`, and can be left out.
+  ///
+  /// Throws an [OsmJsonException] if any of them is not JSON.
   factory OsmPresets.parse({
     required String presets,
     required String translations,
     String? categories,
     String? defaults,
   }) {
-    final words = _wordsOf(jsonDecode(translations));
+    final words =
+        _wordsOf(OsmJsonException.decode(translations, 'The translations'));
     final presetWords = _map(words['presets']);
     final categoryWords = _map(words['categories']);
 
-    final raw = _map(jsonDecode(presets));
+    final raw = _map(OsmJsonException.decode(presets, 'The presets'));
 
     /// The words for [id]. A preset can borrow another's by being named
     /// `{other/id}` — the same thing drawn another way, or found in another
@@ -388,7 +391,8 @@ class OsmPresets {
     final groups = <String, OsmPresetCategory>{};
     if (categories != null) {
       for (final MapEntry(:key, :value)
-          in _map(jsonDecode(categories)).entries) {
+          in _map(OsmJsonException.decode(categories, 'The categories'))
+              .entries) {
         if (value is! Map) continue;
         groups[key] = OsmPresetCategory(
           id: key,
@@ -403,7 +407,8 @@ class OsmPresets {
 
     final offered = <OsmGeometry, List<String>>{};
     if (defaults != null) {
-      for (final MapEntry(:key, :value) in _map(jsonDecode(defaults)).entries) {
+      for (final MapEntry(:key, :value)
+          in _map(OsmJsonException.decode(defaults, 'The defaults')).entries) {
         final shape = OsmGeometry.values.asNameMap()[key];
         if (shape == null) continue;
         offered[shape] = [

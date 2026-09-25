@@ -1,7 +1,7 @@
 import '../exception.dart';
 
-/// Thrown when a file is not a valid OSM PBF file, or uses a feature this
-/// package cannot decode.
+/// Thrown when an `.osm.pbf` file cannot be decoded: it is not one, it is
+/// cut short or damaged, or it uses a feature this package cannot decode.
 class OsmPbfException implements OsmException {
   /// A description of what could not be decoded.
   @override

@@ -4,9 +4,12 @@ import 'dart:math' as math;
 
 import '../cache.dart';
 import '../exception.dart';
+import '../utf8.dart';
 import 'http.dart';
 
-/// Thrown when a replication feed cannot bring a snapshot up to date.
+/// Thrown when a replication feed cannot bring a snapshot up to date: the
+/// feed does not reach back as far as the snapshot, its state cannot be
+/// read, or the snapshot does not say how old it is.
 class OsmReplicationException implements OsmException {
   @override
   final String message;
@@ -49,6 +52,8 @@ class OsmReplicationState {
 
   /// Reads a `state.txt`.
   ///
+  /// Throws an [OsmReplicationException] for anything that is not one.
+  ///
   /// It is a Java properties file, so the colons in the timestamp come
   /// escaped.
   static OsmReplicationState parse(String text) {
@@ -63,7 +68,7 @@ class OsmReplicationState {
     final sequence = int.tryParse(values['sequenceNumber'] ?? '');
     final timestamp = DateTime.tryParse(values['timestamp'] ?? '');
     if (sequence == null || timestamp == null) {
-      throw FormatException('Not a replication state', text);
+      throw const OsmReplicationException('Not a replication state');
     }
     return OsmReplicationState(sequence, timestamp.toUtc());
   }
@@ -160,7 +165,8 @@ class OsmReplication {
   Future<OsmReplicationState> _state(Uri uri) async {
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return OsmReplicationState.parse(utf8.decode(body));
+    return OsmReplicationState.parse(
+        decodeUtf8(body, OsmReplicationException.new));
   }
 
   /// The first diff holding any edit after [after].
@@ -227,7 +233,10 @@ class OsmReplication {
     final body = await _fetch(
       feed(period).resolve('${sequencePath(sequence)}.state.txt'),
     );
-    return body == null ? null : OsmReplicationState.parse(utf8.decode(body));
+    return body == null
+        ? null
+        : OsmReplicationState.parse(
+            decodeUtf8(body, OsmReplicationException.new));
   }
 
   /// The oldest diff the feed keeps, between [missing], which it does not,

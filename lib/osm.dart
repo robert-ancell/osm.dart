@@ -14,6 +14,7 @@ export 'src/imagery.dart';
 export 'src/imagery_cache.dart';
 export 'src/imagery_index_cache.dart';
 export 'src/imagery_tiles.dart';
+export 'src/json_exception.dart';
 export 'src/mercator.dart';
 export 'src/tile.dart';
 export 'src/topology.dart';

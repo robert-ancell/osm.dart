@@ -1,6 +1,5 @@
-import 'dart:convert';
-
 import 'bounds.dart';
+import 'json_exception.dart';
 
 /// What a layer of imagery is for.
 enum OsmImageryCategory {
@@ -206,8 +205,11 @@ class OsmImageryIndex {
   const OsmImageryIndex(this.layers);
 
   /// Reads an index from the JSON the editor layer index publishes.
-  factory OsmImageryIndex.parse(String json) =>
-      OsmImageryIndex.of(jsonDecode(json));
+  ///
+  /// Throws an [OsmJsonException] if [json] is not JSON.
+  factory OsmImageryIndex.parse(String json) => OsmImageryIndex.of(
+        OsmJsonException.decode(json, 'The imagery index'),
+      );
 
   /// Reads an index from already decoded JSON.
   factory OsmImageryIndex.of(Object? json) {

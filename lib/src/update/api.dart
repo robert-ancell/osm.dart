@@ -1,12 +1,14 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import '../bounds.dart';
 import '../element.dart';
 import '../xml/change.dart';
+import '../xml/exception.dart';
 import '../xml/osm_xml.dart';
 import '../xml/reader.dart';
+import '../exception.dart';
+import '../utf8.dart';
 import 'http.dart';
 
 /// A changeset, as the API lists one.
@@ -87,8 +89,9 @@ class OsmCapabilities {
 /// too much ground or holds too much data.
 ///
 /// Which of the two it is does not change what can be done about it, which is
-/// to ask for less at a time.
-class OsmTooMuchDataException implements IOException {
+/// to ask for less at a time. An [IOException] as well, since the data could
+/// not be read.
+class OsmTooMuchDataException implements OsmException, IOException {
   /// The box that was refused.
   final OsmBounds bounds;
 
@@ -99,7 +102,10 @@ class OsmTooMuchDataException implements IOException {
   const OsmTooMuchDataException(this.bounds, this.reason);
 
   @override
-  String toString() => 'OsmTooMuchDataException: $reason';
+  String get message => 'Too much data in $bounds: $reason';
+
+  @override
+  String toString() => 'OsmTooMuchDataException: $message';
 }
 
 /// How many changesets the API lists at once, at most.
@@ -183,7 +189,8 @@ class OsmApi {
         abandon: abandon,
         onLate: onLate == null
             ? null
-            : (late) => onLate(OsmXmlFile.parse(utf8.decode(late))),
+            : (late) =>
+                onLate(OsmXmlFile.parse(decodeUtf8(late, OsmXmlException.new))),
       );
     } on OsmHttpException catch (e) {
       if (e.status == HttpStatus.badRequest) {
@@ -194,7 +201,7 @@ class OsmApi {
     // An empty box is answered with an empty document, not a not found, so
     // nothing here means the ocean rather than a mistake.
     if (body == null) return const [];
-    return OsmXmlFile.parse(utf8.decode(body));
+    return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new));
   }
 
   /// What this API will answer.
@@ -203,7 +210,7 @@ class OsmApi {
     requests++;
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return _capabilities(utf8.decode(body));
+    return _capabilities(decodeUtf8(body, OsmXmlException.new));
   }
 
   static OsmCapabilities _capabilities(String xml) {
@@ -259,7 +266,9 @@ class OsmApi {
     requests++;
     final body = await _fetch(base.resolve('nodes?nodes=${ids.join(',')}'));
     if (body != null) {
-      return OsmXmlFile.parse(utf8.decode(body)).whereType<OsmNode>().toList();
+      return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new))
+          .whereType<OsmNode>()
+          .toList();
     }
     if (ids.length == 1) return const [];
     final half = ids.length ~/ 2;
@@ -295,7 +304,7 @@ class OsmApi {
       requests++;
       final body = await _fetch(uri);
       if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-      final page = _changesets(utf8.decode(body));
+      final page = _changesets(decodeUtf8(body, OsmXmlException.new));
       final held = found.length;
       found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
       if (page.length < _changesetPage) break;
@@ -385,7 +394,7 @@ class OsmApi {
       requests++;
       final body = await _fetch(uri);
       if (body == null) return found;
-      final page = _changesets(utf8.decode(body));
+      final page = _changesets(decodeUtf8(body, OsmXmlException.new));
       final held = found.length;
       found.addAll(page.where((c) => found.every((f) => f.id != c.id)));
       if (page.length < _changesetPage) return found;
@@ -406,7 +415,7 @@ class OsmApi {
     final uri = base.resolve('changeset/$id/download');
     final body = await _fetch(uri);
     if (body == null) throw OsmHttpException(uri, HttpStatus.notFound);
-    return OsmChangeFile.parse(utf8.decode(body));
+    return OsmChangeFile.parse(decodeUtf8(body, OsmXmlException.new));
   }
 
   /// The ways that use node [id].
@@ -414,6 +423,8 @@ class OsmApi {
     requests++;
     final body = await _fetch(base.resolve('node/$id/ways'));
     if (body == null) return const [];
-    return OsmXmlFile.parse(utf8.decode(body)).whereType<OsmWay>().toList();
+    return OsmXmlFile.parse(decodeUtf8(body, OsmXmlException.new))
+        .whereType<OsmWay>()
+        .toList();
   }
 }

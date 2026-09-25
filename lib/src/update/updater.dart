@@ -83,7 +83,7 @@ Future<OsmUpdateResult> updateOsmSnapshot({
   final file = await OsmPbfFile.open(input);
   final since = file.header.replicationTimestamp;
   if (since == null) {
-    throw StateError(
+    throw OsmReplicationException(
       '$input does not say when its data is from, so there is no knowing '
       'which changes it is missing',
     );

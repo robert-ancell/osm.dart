@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:osm/osm.dart';
 import 'package:osm/src/pbf/protobuf.dart';
 import 'package:test/test.dart';
 
@@ -63,10 +64,10 @@ void main() {
   });
 
   test('rejects a truncated varint', () {
-    expect(_reader([0x80]).readVarint, throwsA(isA<FormatException>()));
+    expect(_reader([0x80]).readVarint, throwsA(isA<OsmPbfException>()));
   });
 
   test('rejects a field that runs past the end', () {
-    expect(_reader([0x10, 0x01]).readString, throwsA(isA<FormatException>()));
+    expect(_reader([0x10, 0x01]).readString, throwsA(isA<OsmPbfException>()));
   });
 }

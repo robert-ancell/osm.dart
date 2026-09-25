@@ -14,10 +14,10 @@
 /// The borders are © country-coder contributors, under the ISC licence.
 library;
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'country_coder_cache.dart';
+import 'json_exception.dart';
 
 /// One country, territory or larger region.
 class OsmCountry {
@@ -158,9 +158,12 @@ class OsmCountryCoder {
   /// <https://github.com/rapideditor/country-coder#readme>.
   ///
   /// Features with no code at all are left out, and anything not in that
-  /// shape is passed over rather than thrown at.
+  /// shape is passed over rather than thrown at. Only text that is not JSON
+  /// at all throws, an [OsmJsonException].
   factory OsmCountryCoder.parse(String json) {
-    final features = _list(_map(jsonDecode(json))['features']);
+    final features = _list(
+      _map(OsmJsonException.decode(json, 'The borders'))['features'],
+    );
     return OsmCountryCoder._([
       for (final feature in features)
         if (_country(_map(feature)) case final country?) country,

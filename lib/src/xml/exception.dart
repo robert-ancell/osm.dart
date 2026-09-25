@@ -1,6 +1,7 @@
 import '../exception.dart';
 
-/// Thrown when a file is not the XML this package can read.
+/// Thrown when an OSM XML or osmChange document cannot be read: it is not
+/// well formed XML, or it is XML but not in the form OpenStreetMap writes.
 class OsmXmlException implements OsmException {
   /// A description of what could not be read.
   @override

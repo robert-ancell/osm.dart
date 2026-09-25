@@ -37,6 +37,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../exception.dart';
 import 'sha256.dart';
 
 /// Where OpenStreetMap's own web site is, which is where sign-in happens.
@@ -86,9 +87,12 @@ class OsmToken {
   String toString() => 'OsmToken(${scopes.join(' ')})';
 }
 
-/// What went wrong signing in, in a sentence somebody can act on.
-class OsmSignInException implements Exception {
-  /// What to say about it.
+/// Thrown when signing in to OpenStreetMap fails: the browser could not be
+/// opened or never came back, OpenStreetMap refused, or it did not hand over
+/// a token.
+class OsmSignInException implements OsmException {
+  /// What went wrong, in a sentence somebody can act on.
+  @override
   final String message;
 
   /// Creates the exception.
@@ -102,12 +106,15 @@ class OsmSignInException implements Exception {
 ///
 /// Not a failure, and nothing to tell anybody about: they know, they pressed
 /// the button.
-class OsmSignInCancelledException implements Exception {
+class OsmSignInCancelledException implements OsmException {
   /// Creates the exception.
   const OsmSignInCancelledException();
 
   @override
-  String toString() => 'Signing in was cancelled.';
+  String get message => 'Signing in was cancelled.';
+
+  @override
+  String toString() => message;
 }
 
 /// Takes somebody through the browser and comes back with a token.
@@ -297,11 +304,21 @@ class OsmSignIn {
             .join('&'),
       );
       final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      final body = await response
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .join();
       if (response.statusCode != HttpStatus.ok) {
         throw OsmSignInException(whyNoToken(body, response.statusCode));
       }
-      final answer = jsonDecode(body) as Map;
+      Object? answer;
+      try {
+        answer = jsonDecode(body);
+      } on FormatException {
+        answer = null;
+      }
+      if (answer is! Map) {
+        throw const OsmSignInException('No token in what came back.');
+      }
       final token = answer['access_token'];
       if (token is! String) {
         throw const OsmSignInException('No token in what came back.');

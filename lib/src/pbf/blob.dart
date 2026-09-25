@@ -148,7 +148,15 @@ Uint8List decodeBlob(Uint8List body, {int offset = 0}) {
   if (raw != null) {
     block = raw;
   } else if (zlibData != null) {
-    final decoded = zlib.decode(zlibData);
+    final List<int> decoded;
+    try {
+      decoded = zlib.decode(zlibData);
+    } on FormatException catch (e) {
+      throw OsmPbfException(
+        'Blob is not valid zlib data: ${e.message}',
+        offset: offset,
+      );
+    }
     block = decoded is Uint8List ? decoded : Uint8List.fromList(decoded);
   } else if (unsupported != null) {
     throw OsmPbfException(

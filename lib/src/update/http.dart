@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../exception.dart';
 import '../version.g.dart';
 
 /// Fetches a URL's body, or null if the server says there is nothing there.
@@ -22,9 +23,12 @@ typedef OsmFetch = Future<Uint8List?> Function(
   void Function(Uint8List body)? onLate,
 });
 
-/// Thrown when a server answers with something other than the body or a
-/// plain not found.
-class OsmHttpException implements IOException {
+/// Thrown when a server answers a request with an HTTP error status rather
+/// than what was asked for.
+///
+/// An [IOException] as well, since it is a failure to read something over
+/// the network, and is caught with them.
+class OsmHttpException implements OsmException, IOException {
   /// What was asked for.
   final Uri uri;
 
@@ -38,19 +42,28 @@ class OsmHttpException implements IOException {
   const OsmHttpException(this.uri, this.status, {this.retryAfter});
 
   @override
-  String toString() => 'OsmHttpException: $status from $uri';
+  String get message => 'HTTP $status from $uri';
+
+  @override
+  String toString() => 'OsmHttpException: $message';
 }
 
-/// Thrown when a fetch is given up on before it finished.
+/// Thrown when a fetch is given up on, by whoever asked for it, before it
+/// finished.
 ///
 /// Not a failure: whoever asked stopped wanting the answer. Nothing is
-/// retried and nothing is held against the server.
-class OsmAbandonedException implements IOException {
+/// retried and nothing is held against the server. An [IOException] as well,
+/// so a caller that does not care why a fetch came to nothing need not know
+/// about it.
+class OsmAbandonedException implements OsmException, IOException {
   /// Creates the exception.
   const OsmAbandonedException();
 
   @override
-  String toString() => 'OsmAbandonedException';
+  String get message => 'The request was given up on.';
+
+  @override
+  String toString() => 'OsmAbandonedException: $message';
 }
 
 /// A fetch over HTTP that says who is asking and waits its turn.

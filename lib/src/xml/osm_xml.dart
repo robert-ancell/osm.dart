@@ -1,14 +1,16 @@
-import 'dart:convert';
 import 'dart:io';
 
 import '../element.dart';
+import '../utf8.dart';
 import 'elements.dart';
+import 'exception.dart';
 
 /// OSM's own XML: an `.osm` file, or what the editing API answers with.
 abstract final class OsmXmlFile {
   /// Reads the elements of the file at [path].
-  static Future<List<OsmElement>> read(String path) async =>
-      parse(utf8.decode(await File(path).readAsBytes()));
+  static Future<List<OsmElement>> read(String path) async => parse(
+        decodeUtf8(await File(path).readAsBytes(), OsmXmlException.new),
+      );
 
   /// Reads the elements of [xml].
   ///

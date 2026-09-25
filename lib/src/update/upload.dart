@@ -15,14 +15,18 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../edit.dart';
+import '../exception.dart';
 import '../element.dart';
 
 /// Where the API that takes edits lives.
 final osmApiBase = Uri.parse('https://api.openstreetmap.org/api/0.6/');
 
-/// What OpenStreetMap said when it would not take something.
-class OsmUploadException implements Exception {
-  /// What to say about it.
+/// Thrown when edits cannot be uploaded to OpenStreetMap: there is nothing
+/// to send or no comment to send it with, or OpenStreetMap would not take
+/// them, in which case [message] is what it said.
+class OsmUploadException implements OsmException {
+  /// What went wrong, in a sentence somebody can act on.
+  @override
   final String message;
 
   /// The HTTP status, where there was one.
@@ -385,11 +389,27 @@ class OsmUploader {
     request.headers.set(HttpHeaders.userAgentHeader, generator);
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
     final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final body = await response
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .join();
     if (response.statusCode != HttpStatus.ok) {
       throw OsmUploadException(_said(body), status: response.statusCode);
     }
-    return '${((jsonDecode(body) as Map)['user'] as Map)['display_name']}';
+    Object? answer;
+    try {
+      answer = jsonDecode(body);
+    } on FormatException {
+      answer = null;
+    }
+    final name = answer is Map && answer['user'] is Map
+        ? (answer['user'] as Map)['display_name']
+        : null;
+    if (name is! String) {
+      throw const OsmUploadException(
+        'OpenStreetMap did not say who is signed in.',
+      );
+    }
+    return name;
   }
 
   Future<int> _open({
@@ -428,7 +448,9 @@ class OsmUploader {
     request.headers.contentType = ContentType('text', 'xml', charset: 'utf-8');
     request.add(utf8.encode(body));
     final response = await request.close();
-    final said = await response.transform(utf8.decoder).join();
+    final said = await response
+        .transform(const Utf8Decoder(allowMalformed: true))
+        .join();
     if (response.statusCode != HttpStatus.ok) {
       throw OsmUploadException(_said(said), status: response.statusCode);
     }

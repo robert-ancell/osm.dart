@@ -590,7 +590,7 @@ void main() {
               OsmReplication(fetch: (_, {abandon, onLate}) async => null),
           cache: _work,
         ),
-        throwsStateError,
+        throwsA(isA<OsmReplicationException>()),
       );
     });
   });

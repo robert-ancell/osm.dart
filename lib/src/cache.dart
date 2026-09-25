@@ -1,9 +1,12 @@
 import 'dart:io';
 
+import 'country_coder.dart';
 import 'country_coder_cache.dart';
+import 'imagery.dart';
 import 'imagery_cache.dart';
 import 'imagery_index_cache.dart';
 import 'pbf/tile_cache.dart';
+import 'presets.dart';
 import 'presets_cache.dart';
 import 'update/http.dart';
 import 'update/replication.dart';
@@ -42,10 +45,14 @@ Directory osmCacheDirectory([String? name]) {
   return Directory(name == null ? root : '$root${Platform.pathSeparator}$name');
 }
 
-/// Every cache here, together in one directory.
+/// OpenStreetMap's resources, each fetched once and kept in one directory.
 ///
-/// For a program that wants OpenStreetMap's resources and does not mind
-/// where they are kept: open one of these and read everything through it.
+/// For a program that wants them and does not mind where they are kept:
+/// open one of these and ask it for [countryCoder], [presets] or
+/// [imageryIndex], each read from disk when a recent copy is there and from
+/// the network otherwise. The caches behind them are there too, by the name
+/// of what they hold and `Cache`, for anything that needs more than reading.
+///
 /// A program with other needs — a different place for each cache, a limit
 /// on the disk one may take, somewhere else to fetch from — makes whichever
 /// caches it wants itself, each of which works on its own.
@@ -54,38 +61,42 @@ class OsmCache {
   final Directory directory;
 
   /// Boxes of OpenStreetMap data, as read from the API.
-  final OsmTileCache tiles;
+  final OsmTileCache tileCache;
 
   /// Imagery tiles, as they arrived.
-  final OsmImageryCache imagery;
+  final OsmImageryCache imageryCache;
 
-  /// The editor layer index, which says what imagery there is.
-  final OsmImageryIndexCache imageryIndex;
+  /// Where [imageryIndex] is kept.
+  final OsmImageryIndexCache imageryIndexCache;
 
-  /// iD's tagging schema, which says what kinds of thing there are.
-  final OsmPresetsCache presets;
+  /// Where [presets] are kept.
+  final OsmPresetsCache presetsCache;
 
-  /// country-coder's borders, which say which country a place is in.
-  final OsmCountryCoderCache countryCoder;
+  /// Where [countryCoder] is kept.
+  final OsmCountryCoderCache countryCoderCache;
 
   /// Where replication diffs go, for [OsmReplication.download] and
   /// [updateOsmSnapshot]. Each feed's are kept apart inside it.
-  final Directory replication;
+  final Directory replicationDirectory;
+
+  Future<OsmCountryCoder?>? _countryCoder;
+  Future<OsmImageryIndex>? _imageryIndex;
+  final _presets = <String, Future<OsmPresets?>>{};
 
   OsmCache._({
     required this.directory,
-    required this.tiles,
-    required this.imagery,
-    required this.imageryIndex,
-    required this.presets,
-    required this.countryCoder,
-    required this.replication,
+    required this.tileCache,
+    required this.imageryCache,
+    required this.imageryIndexCache,
+    required this.presetsCache,
+    required this.countryCoderCache,
+    required this.replicationDirectory,
   });
 
   /// Opens every cache in [directory], by default [osmCacheDirectory],
   /// fetching what has to be fetched with [fetch].
   ///
-  /// Nothing is fetched until it is read.
+  /// Nothing is fetched until it is asked for.
   static Future<OsmCache> open({
     Directory? directory,
     required OsmFetch fetch,
@@ -95,22 +106,62 @@ class OsmCache {
         Directory('${root.path}${Platform.pathSeparator}$name');
     return OsmCache._(
       directory: root,
-      tiles: await OsmTileCache.open(directory: under(OsmTileCache.name)),
-      imagery:
+      tileCache: await OsmTileCache.open(directory: under(OsmTileCache.name)),
+      imageryCache:
           await OsmImageryCache.open(directory: under(OsmImageryCache.name)),
-      imageryIndex: OsmImageryIndexCache(
+      imageryIndexCache: OsmImageryIndexCache(
         directory: under(OsmImageryIndexCache.name),
         fetch: fetch,
       ),
-      presets: OsmPresetsCache(
+      presetsCache: OsmPresetsCache(
         directory: under(OsmPresetsCache.name),
         fetch: fetch,
       ),
-      countryCoder: OsmCountryCoderCache(
+      countryCoderCache: OsmCountryCoderCache(
         directory: under(OsmCountryCoderCache.name),
         fetch: fetch,
       ),
-      replication: under(OsmReplication.cacheName),
+      replicationDirectory: under(OsmReplication.cacheName),
     );
   }
+
+  /// country-coder's borders, which say which country a place is in.
+  ///
+  /// Read once and shared by everything that asks. Null only when there is
+  /// no copy on disk and none could be fetched, in which case the next ask
+  /// tries again.
+  Future<OsmCountryCoder?> get countryCoder =>
+      _countryCoder ??= _retrying(countryCoderCache.read(), () {
+        _countryCoder = null;
+      });
+
+  /// iD's tagging schema in [language], which says what kinds of thing there
+  /// are.
+  ///
+  /// Read once for each language and shared by everything that asks. Null
+  /// only when there is no copy on disk and none could be fetched, in which
+  /// case the next ask tries again.
+  Future<OsmPresets?> presets({String language = 'en'}) =>
+      _presets[language] ??= _retrying(
+        presetsCache.read(language: language),
+        () => _presets.remove(language),
+      );
+
+  /// The editor layer index, which says what imagery there is.
+  ///
+  /// Read once and shared by everything that asks. Empty only when there is
+  /// no copy on disk and none could be fetched, in which case the next ask
+  /// tries again.
+  Future<OsmImageryIndex> get imageryIndex =>
+      _imageryIndex ??= imageryIndexCache.read().then((index) {
+        if (index.layers.isEmpty) _imageryIndex = null;
+        return index;
+      });
+
+  /// [reading], forgetting it with [forget] if it comes to nothing.
+  static Future<T?> _retrying<T>(Future<T?> reading, void Function() forget) =>
+      reading.then((read) {
+        if (read == null) forget();
+        return read;
+      });
 }

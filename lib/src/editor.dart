@@ -35,7 +35,7 @@ abstract interface class OsmEditorData {
 /// It is the data as it now stands — what was read, from [data], with every
 /// change since laid over it and whatever was taken off the map left out —
 /// and everything that can be done to it, each done as one change that one
-/// [undo] takes back.
+/// [undo] takes back and one [redo] makes again.
 ///
 /// The changes themselves are kept in [history], which is what an upload is
 /// made from.
@@ -142,7 +142,13 @@ class OsmEditor {
   /// Undoes the last change, and says whether there was one to undo.
   bool undo() => history.undo();
 
-  /// Undoes everything.
+  /// Whether there is an undone change to make again.
+  bool get canRedo => history.canRedo;
+
+  /// Makes the last undone change again, and says whether there was one.
+  bool redo() => history.redo();
+
+  /// Undoes everything, leaving nothing to redo.
   void undoAll() => history.undoAll();
 
   /// Does [change], and makes whatever it changes one change to undo.

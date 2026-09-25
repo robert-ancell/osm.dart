@@ -324,6 +324,9 @@ class OsmTagsChanged extends OsmEdit {
 /// interleaved, and however they are grouped.
 class OsmEditHistory {
   final _done = <OsmEdit>[];
+
+  /// What has been undone, the last undone last, for redoing.
+  final _undone = <OsmEdit>[];
   final _nodes = <int, OsmNode>{};
   final _ways = <int, OsmWay>{};
   final _gone = <(OsmElementType, int)>{};
@@ -420,7 +423,7 @@ class OsmEditHistory {
     );
     _nodes[node.id] = node;
     _done.add(OsmNodeCreated(node));
-    onChanged?.call();
+    _changed();
     return node;
   }
 
@@ -432,7 +435,7 @@ class OsmEditHistory {
     final way = OsmWay(id: _nextId--, nodeIds: [...nodeIds], tags: tags);
     _ways[way.id] = way;
     _done.add(OsmWayCreated(way));
-    onChanged?.call();
+    _changed();
     return way;
   }
 
@@ -448,7 +451,7 @@ class OsmEditHistory {
     );
     _relations[relation.id] = relation;
     _done.add(OsmRelationCreated(relation));
-    onChanged?.call();
+    _changed();
     return relation;
   }
 
@@ -491,7 +494,7 @@ class OsmEditHistory {
         wasRead: wasRead,
       ),
     );
-    onChanged?.call();
+    _changed();
   }
 
   /// Takes [way] off the map, and out of every relation in [relations].
@@ -509,7 +512,7 @@ class OsmEditHistory {
     _done.add(
       OsmWayDeleted(current, relations: members, wasRead: wasRead),
     );
-    onChanged?.call();
+    _changed();
   }
 
   /// Takes [relation] off the map, and out of every relation in
@@ -531,7 +534,7 @@ class OsmEditHistory {
     _done.add(
       OsmRelationDeleted(current, relations: members, wasRead: wasRead),
     );
-    onChanged?.call();
+    _changed();
   }
 
   /// The nodes of [way] without the node [id], as they are once it is taken
@@ -558,7 +561,7 @@ class OsmEditHistory {
   /// Gives [relation] [members] in place of the ones it has.
   void setRelationMembers(OsmRelation relation, List<OsmMember> members) {
     _done.add(_changeRelation(relation, members));
-    onChanged?.call();
+    _changed();
   }
 
   /// Takes every membership of the element out of each of [relations], and
@@ -599,7 +602,7 @@ class OsmEditHistory {
     _done.add(
       _change(way, nodeIds, wasRead: !_ways.containsKey(way.id)),
     );
-    onChanged?.call();
+    _changed();
   }
 
   /// Puts a way through other nodes and says what that changed.
@@ -655,7 +658,7 @@ class OsmEditHistory {
       );
     }
     _nodes[node.id] = moved;
-    onChanged?.call();
+    _changed();
   }
 
   /// Gives [element] [tags] in place of the ones it has, and says whether
@@ -701,7 +704,7 @@ class OsmEditHistory {
         throw StateError('unreachable');
     }
     _done.add(OsmTagsChanged(from: was, to: now, wasRead: wasRead));
-    onChanged?.call();
+    _changed();
     return true;
   }
 
@@ -726,12 +729,92 @@ class OsmEditHistory {
     onChanged?.call();
   }
 
+  /// A new change has been made, which leaves nothing to redo: what was
+  /// undone was undone from before it.
+  void _changed() {
+    _undone.clear();
+    onChanged?.call();
+  }
+
+  /// Whether there is a change undone that can be made again.
+  bool get canRedo => _undone.isNotEmpty;
+
   /// Undoes the last change, and says whether there was one to undo.
+  ///
+  /// It can be made again with [redo] until another change is made.
   bool undo() {
     if (_done.isEmpty) return false;
-    _undoOne(_done.removeLast());
+    final last = _done.removeLast();
+    _undoOne(last);
+    _undone.add(last);
     onChanged?.call();
     return true;
+  }
+
+  /// Makes the last change undone again, and says whether there was one.
+  bool redo() {
+    if (_undone.isEmpty) return false;
+    final next = _undone.removeLast();
+    _redoOne(next);
+    _done.add(next);
+    onChanged?.call();
+    return true;
+  }
+
+  /// Puts back what [change] made, which it holds as well as what it
+  /// replaced.
+  void _redoOne(OsmEdit change) {
+    switch (change) {
+      case OsmEditGroup():
+        for (final part in change.changes) {
+          _redoOne(part);
+        }
+      case OsmNodeMoved():
+        _nodes[change.id] = change.to;
+      case OsmNodeCreated():
+        _nodes[change.id] = change.node;
+      case OsmNodeDeleted():
+        for (final way in change.ways) {
+          _ways[way.id] = way.to;
+        }
+        for (final relation in change.relations) {
+          _relations[relation.id] = relation.to;
+        }
+        _nodes.remove(change.id);
+        _gone.add((OsmElementType.node, change.id));
+        if (change.id > 0) _deleted[change.id] = change.node;
+      case OsmWayCreated():
+        _ways[change.id] = change.way;
+      case OsmWayNodesChanged():
+        _ways[change.id] = change.to;
+      case OsmWayDeleted():
+        for (final relation in change.relations) {
+          _relations[relation.id] = relation.to;
+        }
+        _ways.remove(change.id);
+        _gone.add((OsmElementType.way, change.id));
+        if (change.id > 0) _deletedWays[change.id] = change.way;
+      case OsmRelationCreated():
+        _relations[change.id] = change.relation;
+      case OsmRelationChanged():
+        _relations[change.id] = change.to;
+      case OsmRelationDeleted():
+        for (final relation in change.relations) {
+          _relations[relation.id] = relation.to;
+        }
+        _relations.remove(change.id);
+        _gone.add((OsmElementType.relation, change.id));
+        if (change.id > 0) _deletedRelations[change.id] = change.relation;
+      case OsmTagsChanged():
+        switch (change.to) {
+          case final OsmNode node:
+            _nodes[node.id] = node;
+          case final OsmWay way:
+            _ways[way.id] = way;
+          case OsmRelation():
+            break;
+        }
+    }
   }
 
   void _undoOne(OsmEdit last) {
@@ -825,6 +908,8 @@ class OsmEditHistory {
   /// Undoes everything done since [mark], a [length] taken before it
   /// started: for giving up on something made a change at a time, such as a
   /// line being drawn.
+  ///
+  /// Given up on rather than undone, so none of it can be redone.
   void undoSince(int mark) {
     if (_done.length <= mark) return;
     while (_done.length > mark) {
@@ -834,9 +919,13 @@ class OsmEditHistory {
   }
 
   /// Undoes everything.
+  ///
+  /// Nothing can be redone afterwards: this is for starting again, such as
+  /// once everything has been uploaded.
   void undoAll() {
-    if (_done.isEmpty) return;
+    if (_done.isEmpty && _undone.isEmpty) return;
     _done.clear();
+    _undone.clear();
     _nodes.clear();
     _ways.clear();
     _gone.clear();

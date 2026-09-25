@@ -73,8 +73,8 @@ const _bounds = OsmBounds(
 void main() {
   test('reads what the API says it will do', () async {
     final server = _Api(answers: {'capabilities': _capabilities});
-    final api = OsmApiClient(fetch: server.fetch);
-    final capabilities = await api.capabilities();
+    final client = OsmApiClient(fetch: server.fetch);
+    final capabilities = await client.capabilities();
     expect(capabilities.maximumArea, 0.25);
     expect(capabilities.maximumWayNodes, 2000);
     expect(capabilities.timeout, const Duration(seconds: 300));
@@ -141,11 +141,11 @@ void main() {
 
   test('counts what it asked for', () async {
     final server = _Api(answers: {'map': _map, 'capabilities': _capabilities});
-    final api = OsmApiClient(fetch: server.fetch);
-    await api.capabilities();
-    await api.map(_bounds);
-    await api.map(_bounds);
-    expect(api.requests, 3);
+    final client = OsmApiClient(fetch: server.fetch);
+    await client.capabilities();
+    await client.map(_bounds);
+    await client.map(_bounds);
+    expect(client.requests, 3);
   });
   test('reads the ground a changeset touched', () async {
     final server = _Api(answers: {'changesets': _changesets});

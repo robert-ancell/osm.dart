@@ -209,12 +209,12 @@ mapper's changesets since a moment and gives back what each one changed, a few
 kilobytes apiece, to apply the same way:
 
 ```dart
-final api = OsmApiClient(fetch: fetch);
+final client = OsmApiClient(fetch: fetch);
 final since = file.header.replicationTimestamp!;
 final changes = [
-  for (final changeset in (await api.changesetsBy('Your Name', since: since))
+  for (final changeset in (await client.changesetsBy('Your Name', since: since))
       .reversed)
-    ...await api.changesetChanges(changeset.id),
+    ...await client.changesetChanges(changeset.id),
 ];
 ```
 

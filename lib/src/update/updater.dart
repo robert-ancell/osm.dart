@@ -62,7 +62,7 @@ class OsmUpdateResult {
 ///
 /// What the changes cannot settle — the nodes of a way reaching past the edge
 /// of the snapshot, the ways of a node that moved in — is looked up through
-/// [api], or, with none, left for [OsmUpdateResult.incomplete] to report. A
+/// [client], or, with none, left for [OsmUpdateResult.incomplete] to report. A
 /// snapshot that keeps coming back incomplete is due a fresh download.
 ///
 /// The file written carries the planet's replication state, so the next
@@ -75,7 +75,7 @@ Future<OsmUpdateResult> updateOsmSnapshot({
   required String output,
   required OsmReplication replication,
   Directory? cache,
-  OsmApiClient? api,
+  OsmApiClient? client,
   void Function(String message)? onProgress,
 }) async {
   void say(String message) => onProgress?.call(message);
@@ -122,12 +122,12 @@ Future<OsmUpdateResult> updateOsmSnapshot({
   final edges = filter.edges;
   final lookedUp = <OsmChange>[];
   var lookedUpNodes = 0, lookedUpWays = 0;
-  if (api != null && !edges.isEmpty) {
+  if (client != null && !edges.isEmpty) {
     // The ways of a node that moved in were never in the changes, if they
     // were not themselves changed.
     final wanted = {...edges.missingNodes};
     for (final node in edges.movedInNodes) {
-      for (final way in await api.waysOf(node)) {
+      for (final way in await client.waysOf(node)) {
         if (index.ways.contains(way.id)) continue;
         lookedUp.add(_create(way));
         lookedUpWays++;
@@ -136,7 +136,7 @@ Future<OsmUpdateResult> updateOsmSnapshot({
     }
     if (wanted.isNotEmpty) {
       say('Looking up ${wanted.length} node(s) past the edge...');
-      for (final node in await api.nodes(wanted)) {
+      for (final node in await client.nodes(wanted)) {
         lookedUp.add(_create(node));
         lookedUpNodes++;
       }
@@ -166,8 +166,8 @@ Future<OsmUpdateResult> updateOsmSnapshot({
     edges: edges,
     lookedUpNodes: lookedUpNodes,
     lookedUpWays: lookedUpWays,
-    requests: api?.requests ?? 0,
-    lookedUp: api != null,
+    requests: client?.requests ?? 0,
+    lookedUp: client != null,
     state: reached,
   );
 }

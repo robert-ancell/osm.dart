@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:test/test.dart';
 
 /// Enough elements to fill more blocks than one worker is given at a time.

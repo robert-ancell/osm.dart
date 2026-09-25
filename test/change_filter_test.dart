@@ -1,4 +1,5 @@
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:osm/src/sorted_id_set.dart';
 import 'package:osm/src/update/change_filter.dart';
 import 'package:osm/src/update/snapshot_index.dart';

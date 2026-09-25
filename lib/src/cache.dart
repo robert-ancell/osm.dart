@@ -5,7 +5,7 @@ import 'country_coder_cache.dart';
 import 'imagery.dart';
 import 'imagery_cache.dart';
 import 'imagery_index_cache.dart';
-import 'pbf/tile_cache.dart';
+import 'tile_cache.dart';
 import 'presets.dart';
 import 'presets_cache.dart';
 import 'update/http.dart';

@@ -2,10 +2,17 @@
 
 Read and process OpenStreetMap data in Dart, with no native dependencies.
 
+There are two libraries:
+
+* `package:osm/osm.dart` — elements, the OpenStreetMap API, editing and
+  uploading, change files and replication feeds;
+* `package:osm/pbf.dart` — reading, writing and updating `.osm.pbf` files.
+
 ## Reading a PBF file
 
 ```dart
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 
 final file = await OsmPbfFile.open('extract.osm.pbf');
 

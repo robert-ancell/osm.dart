@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 
 /// Lists the parks in a PBF file.
 ///

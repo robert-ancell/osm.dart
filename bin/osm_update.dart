@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 
 const _usage = '''
 Brings an OpenStreetMap snapshot up to date.

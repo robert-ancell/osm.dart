@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../cache.dart';
-import '../element.dart';
-import '../pbf/file.dart';
-import '../pbf/writer.dart';
-import '../tile.dart';
+import 'cache.dart';
+import 'element.dart';
+import 'pbf/file.dart';
+import 'pbf/writer.dart';
+import 'tile.dart';
 
 /// How much of the disk the cache is allowed.
 ///

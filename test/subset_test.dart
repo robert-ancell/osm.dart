@@ -1,4 +1,5 @@
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:test/test.dart';
 
 /// The osm-testdata grid, and the same file filtered to `building=yes` by

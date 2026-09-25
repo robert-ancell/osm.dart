@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:osm/src/pbf/protobuf.dart';
 import 'package:test/test.dart';
 

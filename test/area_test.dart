@@ -1,4 +1,5 @@
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:test/test.dart';
 
 /// Nodes on a grid, so the shapes below read as the shapes they are.

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:test/test.dart';
 
 late Directory _work;

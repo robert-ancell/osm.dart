@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:osm/osm.dart';
+import 'package:osm/pbf.dart';
 import 'package:test/test.dart';
 
 /// The whole osm-testdata grid, of which `grid/data/7` is the multipolygon

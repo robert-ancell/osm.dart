@@ -7,76 +7,76 @@ List<Map<String, String>> _edited(
   List<Map<String, String>> tagSets,
   String Function(String shown) edit,
 ) {
-  final shown = osmTagText(tagSets);
-  return osmApplyTagText(tagSets, before: shown, after: edit(shown));
+  final shown = OsmTagText(tagSets);
+  return shown.apply(edit(shown.text));
 }
 
 void main() {
   group('showing', () {
     test('writes one tag to a line, in order of key', () {
       expect(
-        osmTagText([
+        OsmTagText([
           {'name': 'Queen Street', 'highway': 'primary'},
-        ]),
+        ]).text,
         'highway=primary\nname=Queen Street',
       );
     });
 
     test('shows a tag every element has the same as it is', () {
       expect(
-        osmTagText([
+        OsmTagText([
           {'highway': 'residential'},
           {'highway': 'residential'},
-        ]),
+        ]).text,
         'highway=residential',
       );
     });
 
     test('shows a tag the elements disagree on as a star', () {
       expect(
-        osmTagText([
+        OsmTagText([
           {'name': 'Queen Street'},
           {'name': 'King Street'},
-        ]),
+        ]).text,
         'name=*',
       );
     });
 
     test('shows a tag only some of them have as a star', () {
       expect(
-        osmTagText([
+        OsmTagText([
           {'highway': 'residential', 'name': 'Queen Street'},
           {'highway': 'residential'},
-        ]),
+        ]).text,
         'highway=residential\nname=*',
       );
     });
 
     test('shows nothing for nothing', () {
-      expect(osmTagText([]), '');
-      expect(osmTagText([{}]), '');
+      expect(OsmTagText([]).text, '');
+      expect(OsmTagText([{}]).text, '');
     });
   });
 
   group('reading', () {
     test('reads a key and a value from each line', () {
-      expect(osmParseTagText('a=1\nb = 2 \n\n'), [('a', '1'), ('b', '2')]);
+      expect(OsmTagText.parse('a=1\nb = 2 \n\n'), [('a', '1'), ('b', '2')]);
     });
 
     test('keeps everything after the first equals sign in the value', () {
-      expect(osmParseTagText('note=a=b'), [('note', 'a=b')]);
+      expect(OsmTagText.parse('note=a=b'), [('note', 'a=b')]);
     });
 
     test('reads a line with no equals sign as a key with no value', () {
-      expect(osmParseTagText('name'), [('name', '')]);
+      expect(OsmTagText.parse('name'), [('name', '')]);
     });
 
     test('leaves out a line with no key', () {
-      expect(osmParseTagText('=value'), isEmpty);
+      expect(OsmTagText.parse('=value'), isEmpty);
     });
 
     test('takes the later of a key written twice', () {
-      expect(osmParseTagText('a=1\nb=2\na=3'), [('b', '2'), ('a', '3')]);
+      expect(OsmTagText.parse('a=1\nb=2\na=3'), [('b', '2'), ('a', '3')]);
     });
   });
 
@@ -216,9 +216,9 @@ void main() {
   group('a real star', () {
     test('is shown as it is', () {
       expect(
-          osmTagText([
+          OsmTagText([
             {'note': '*'},
-          ]),
+          ]).text,
           'note=*');
     });
 
@@ -251,21 +251,21 @@ void main() {
   group('quoting', () {
     /// [tags] shown and read back unchanged.
     Map<String, String> roundTrip(Map<String, String> tags) => {
-          for (final (key, value) in osmParseTagText(osmTagText([tags])))
+          for (final (key, value) in OsmTagText.parse(OsmTagText([tags]).text))
             key: value,
         };
 
     test('leaves ordinary tags bare', () {
       expect(
-          osmTagText([
+          OsmTagText([
             {'name': 'Queen Street', 'name:mi': 'Kuini'},
-          ]),
+          ]).text,
           'name=Queen Street\nname:mi=Kuini');
     });
 
     test('quotes a value holding an equals sign and reads it back', () {
       const tags = {'note': 'a=b'};
-      expect(osmTagText([tags]), 'note="a=b"');
+      expect(OsmTagText([tags]).text, 'note="a=b"');
       expect(roundTrip(tags), tags);
     });
 
@@ -273,13 +273,13 @@ void main() {
       // Read to its closing quote: split at the first equals sign it would
       // come apart.
       const tags = {'a=b': 'c'};
-      expect(osmTagText([tags]), '"a=b"=c');
+      expect(OsmTagText([tags]).text, '"a=b"=c');
       expect(roundTrip(tags), tags);
     });
 
     test('keeps a line break inside a value', () {
       const tags = {'description': 'first line\nsecond line'};
-      expect(osmTagText([tags]).split('\n'), hasLength(1));
+      expect(OsmTagText([tags]).text.split('\n'), hasLength(1));
       expect(roundTrip(tags), tags);
     });
 
@@ -290,7 +290,7 @@ void main() {
     });
 
     test('keeps what was typed when its quotes do not read', () {
-      expect(osmParseTagText(r'note="\q"'), [('note', r'"\q"')]);
+      expect(OsmTagText.parse(r'note="\q"'), [('note', r'"\q"')]);
     });
 
     test('takes an edit made to a quoted value', () {

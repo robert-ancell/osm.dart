@@ -22,21 +22,76 @@ library;
 
 import 'dart:convert';
 
-/// What a tag the elements disagree on is shown as.
-const osmMixedTagValue = '*';
-
-/// The text for the tags of the elements in [tagSets].
+/// The tags of one element or several, as text that can be edited.
 ///
-/// One line to a tag, in order of key, so the same tags always come out as
-/// the same text.
-String osmTagText(List<Map<String, String>> tagSets) {
+/// Made from each element's tags, it holds the [text] to show; given the
+/// text as it was edited, [apply] says what each element's tags become.
+class OsmTagText {
+  /// What a tag the elements disagree on, or only some of them have, is
+  /// shown as.
+  static const mixed = '*';
+
+  /// Each element's tags, in the order the elements were given.
+  final List<Map<String, String>> tagSets;
+
+  /// The text shown for [tagSets].
+  ///
+  /// One line to a tag, in order of key, so the same tags always come out
+  /// as the same text; see the library documentation for how a tag they
+  /// disagree on is shown and how awkward keys and values are written.
+  final String text;
+
+  /// The text for the tags in [tagSets].
+  ///
+  /// [text] can be given instead of worked out, for a text that was shown
+  /// for these tags earlier and has been applied since: what an edit is
+  /// compared with is what was on screen when it was made.
+  OsmTagText(List<Map<String, String>> tagSets, {String? text})
+      : tagSets = List.unmodifiable(tagSets),
+        text = text ?? _format(tagSets);
+
+  /// The tags in [text], in the order they are written.
+  ///
+  /// A key or value in double quotes is read with JSON's escapes; anything
+  /// else is taken as it is, trimmed. A line with nothing for a key says
+  /// nothing and is left out. A line with no `=` at all is a key with no
+  /// value, which is what taking the value off a line leaves, and is read
+  /// as asking for that tag to go. Where a key is written twice, the later
+  /// line wins.
+  static List<(String, String)> parse(String text) => _parse(text);
+
+  /// What each element's tags become once [text] is edited to [edited], in
+  /// the order of [tagSets].
+  ///
+  /// Only what was changed is changed:
+  ///
+  /// * a line left as it was leaves every element's own value alone, which
+  ///   for a line shown mixed as `key=*` is whatever each of them has;
+  /// * a value written in sets that value on every element, and that
+  ///   includes `*` anywhere but on a line shown mixed;
+  /// * a line taken out, or left with no value, takes the tag off every
+  ///   element;
+  /// * a new line adds the tag to every element;
+  /// * a key renamed on a line shown mixed, and left as `*`, moves each
+  ///   element's own value to the new key. A renamed key shows as one line
+  ///   gone and a new one, and a mixed line gone is paired with a new `*`
+  ///   line in the order they are written. A key renamed with a value
+  ///   written in needs no pairing: the old one goes and the new one is set.
+  ///
+  /// An element whose tags come out the same is given back the same tags.
+  List<Map<String, String>> apply(String edited) =>
+      _apply(tagSets, before: text, after: edited);
+}
+
+/// The text for [tagSets]; see [OsmTagText.text].
+String _format(List<Map<String, String>> tagSets) {
   if (tagSets.isEmpty) return '';
   final keys = <String>{for (final tags in tagSets) ...tags.keys}.toList()
     ..sort();
   return [
     for (final key in keys)
       '${_quoted(key)}=${switch (_sharedValue(tagSets, key)) {
-        null => osmMixedTagValue,
+        null => OsmTagText.mixed,
         final value => _quoted(value),
       }}',
   ].join('\n');
@@ -71,15 +126,8 @@ String _quoted(String text) {
   return needsQuotes ? escaped : text;
 }
 
-/// The tags in [text], in the order they are written.
-///
-/// A key or value in double quotes is read with JSON's escapes; anything
-/// else is taken as it is, trimmed. A line with nothing for a key says
-/// nothing and is left out. A line with no `=` at all is a key with no
-/// value, which is what taking the value off a line leaves, and is read as
-/// asking for that tag to go. Where a key is written twice, the later line
-/// wins.
-List<(String, String)> osmParseTagText(String text) {
+/// The tags in [text]; see [OsmTagText.parse].
+List<(String, String)> _parse(String text) {
   final found = <String, String>{};
   for (final raw in text.split('\n')) {
     final line = raw.trim();
@@ -145,42 +193,23 @@ String _unquoted(String text) {
   }
 }
 
-/// The tags each of [tagSets] ends up with once the text [before] — what was
-/// shown for them, by [osmTagText] — has been edited into [after].
-///
-/// Only what was changed is changed:
-///
-/// * a line left as it was leaves every element's own value alone, which
-///   for a line shown mixed as `key=*` is whatever each of them has;
-/// * a value written in sets that value on every element, and that includes
-///   `*` anywhere but on a line shown mixed;
-/// * a line taken out, or left with no value, takes the tag off every
-///   element;
-/// * a new line adds the tag to every element;
-/// * a key renamed on a line shown mixed, and left as `*`, moves each
-///   element's own value to the new key. A renamed key shows as one line
-///   gone and a new one, and a mixed line gone is paired with a new `*` line
-///   in the order they are written. A key renamed with a value written in
-///   needs no pairing: the old one goes and the new one is set.
-///
-/// The result is in the same order as [tagSets]. An element whose tags come
-/// out the same is given back the same tags.
-List<Map<String, String>> osmApplyTagText(
+/// [tagSets] with the edit from [before] to [after]; see [OsmTagText.apply].
+List<Map<String, String>> _apply(
   List<Map<String, String>> tagSets, {
   required String before,
   required String after,
 }) {
   final shown = {
-    for (final (key, value) in osmParseTagText(before)) key: value,
+    for (final (key, value) in _parse(before)) key: value,
   };
   // Mixed by what the elements hold, not by what the text says: a `*` every
   // one of them really has is a value, not a mix.
   bool mixed(String key) =>
-      shown[key] == osmMixedTagValue &&
+      shown[key] == OsmTagText.mixed &&
       tagSets.isNotEmpty &&
       _sharedValue(tagSets, key) == null;
 
-  final edited = osmParseTagText(after);
+  final edited = _parse(after);
   final editedKeys = {for (final (key, _) in edited) key};
 
   final gone = [
@@ -193,7 +222,7 @@ List<Map<String, String>> osmApplyTagText(
   ];
   final newStars = [
     for (final (key, value) in edited)
-      if (!shown.containsKey(key) && value == osmMixedTagValue) key,
+      if (!shown.containsKey(key) && value == OsmTagText.mixed) key,
   ];
   final renamed = <String, String>{
     for (var i = 0; i < goneMixed.length && i < newStars.length; i++)
@@ -228,7 +257,7 @@ Map<String, String> _applied(
   for (final (key, value) in edited) {
     if (renamed.containsKey(key)) continue;
     // A mixed line left mixed: each keeps its own.
-    if (value == osmMixedTagValue && mixed(key)) continue;
+    if (value == OsmTagText.mixed && mixed(key)) continue;
     // A line left as it was: nothing to do.
     if (shown[key] == value) continue;
     if (value.isEmpty) {

@@ -32,6 +32,7 @@ export 'src/operations.dart'
         osmHasInterestingTags,
         osmMove,
         osmPaste,
+        osmReversedTags,
         osmReverseWay;
 export 'src/presets.dart';
 export 'src/presets_cache.dart';

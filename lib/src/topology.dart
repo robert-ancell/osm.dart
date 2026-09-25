@@ -260,9 +260,16 @@ List<_Sequence> _joinWays(List<OsmWay> ways) {
 
 /// Whether two paths cross anywhere but at a node they share.
 bool _pathsCross(OsmEditView view, List<int> a, List<int> b) {
+  // All brought round to the same side of the antimeridian: segments either
+  // side of it are next to each other, not a world apart, and a segment
+  // across it is short, not round the world.
+  double? origin;
   (double, double)? at(int id) {
     final node = view.node(id);
-    return node == null ? null : (node.longitude, node.latitude);
+    if (node == null) return null;
+    origin ??= node.longitude;
+    final turns = ((node.longitude - origin!) / 360).roundToDouble();
+    return (node.longitude - turns * 360, node.latitude);
   }
 
   for (var i = 0; i + 1 < a.length; i++) {

@@ -26,7 +26,33 @@ abstract final class Mercator {
   }
 
   /// The longitude at world [x].
+  ///
+  /// Not brought back onto the world: the eastern edge of the easternmost
+  /// tile is 180, not -180. For a place something is to be put, use
+  /// [wrappedLongitude].
   static double longitude(double x) => x * 360 - 180;
+
+  /// The longitude at world [x], however many times round the world [x] has
+  /// gone: always from -180 up to but not including 180, which is the only
+  /// place anything can be put.
+  static double wrappedLongitude(double x) => longitude(wrap(x));
+
+  /// World [x] brought back onto the world, from 0 up to but not including
+  /// 1.
+  ///
+  /// The world is round east to west. Going east past the antimeridian comes
+  /// back in at the western edge, and a map panned that way is still over the
+  /// world rather than off the end of it.
+  static double wrap(double x) => x - x.floorToDouble();
+
+  /// World [x] moved whole times round the world to be as near as it can be
+  /// to [to].
+  ///
+  /// Two places either side of the antimeridian are next to each other, but a
+  /// world apart as numbers. Bringing one round to the other is what lets a
+  /// line between them be drawn as the short line it is, and a distance
+  /// between them be measured as the short distance it is.
+  static double nearest(double x, double to) => x - (x - to).roundToDouble();
 
   /// The latitude at world [y].
   static double latitude(double y) =>

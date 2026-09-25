@@ -427,4 +427,40 @@ void main() {
       expect(view.edits.changedNodes, isEmpty);
     });
   });
+
+  group('across the antimeridian', () {
+    TestView across() => TestView(
+          nodes: [
+            testNode(1, 0, 179.999),
+            testNode(2, 0, -179.999),
+            testNode(3, 0.002, -179.999),
+            testNode(4, 0.002, 179.999),
+          ],
+          ways: [
+            testWay(10, [1, 2, 3, 4, 1], {'building': 'yes', 'shop': 'bakery'}),
+          ],
+        );
+
+    test('puts what is extracted on the antimeridian, not half a world off',
+        () {
+      final view = across();
+      final point = OsmExtract(view, [view.way(10)!]).apply().single as OsmNode;
+      expect(point.longitude.abs(), closeTo(180, 1e-6));
+      expect(point.latitude, closeTo(0.001, 1e-6));
+    });
+
+    test('moves and pastes across it onto real longitudes', () {
+      final view = across();
+      osmMove(view, [view.node(1)!], dx: 0.002 / 360, dy: 0);
+      expect(view.node(1)!.longitude, closeTo(-179.999, 1e-6));
+
+      final copied = osmCopy(view, [view.way(10)!])!;
+      expect(copied.middle.$1, anyOf(closeTo(1, 1e-5), closeTo(0, 1e-5)));
+      final pasted = osmPaste(view.edits, copied, dx: 0.01, dy: 0);
+      for (final id in (pasted.single as OsmWay).nodeIds) {
+        final longitude = view.node(id)!.longitude;
+        expect(longitude, inInclusiveRange(-180, 180));
+      }
+    });
+  });
 }

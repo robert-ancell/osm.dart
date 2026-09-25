@@ -20,11 +20,15 @@ class OsmTile {
   const OsmTile(this.zoom, this.x, this.y);
 
   /// The tile at [zoom] holding the world position ([worldX], [worldY]).
+  ///
+  /// East to west the world goes round, so a position past either edge is in
+  /// the tile it comes round to. North to south it stops, so a position past
+  /// the top or bottom is in the tile at that edge.
   factory OsmTile.of(int zoom, double worldX, double worldY) {
     final across = 1 << zoom;
     return OsmTile(
       zoom,
-      (worldX * across).floor().clamp(0, across - 1),
+      (worldX * across).floor() % across,
       (worldY * across).floor().clamp(0, across - 1),
     );
   }
@@ -51,7 +55,13 @@ class OsmTile {
       );
 
   /// The tile one zoom level out that holds this one.
-  OsmTile get parent => OsmTile(zoom - 1, x ~/ 2, y ~/ 2);
+  ///
+  /// There is nothing further out than the whole world, which is the one tile
+  /// at zoom 0 and has no parent.
+  OsmTile get parent {
+    if (zoom == 0) throw StateError('The whole world has no parent tile.');
+    return OsmTile(zoom - 1, x ~/ 2, y ~/ 2);
+  }
 
   /// The four tiles one zoom level in that together cover this one.
   List<OsmTile> get children => [

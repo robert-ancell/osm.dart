@@ -468,4 +468,20 @@ void main() {
       expect(OsmDisconnect(view, [view.node(2)!]).disabled, 'relation');
     });
   });
+
+  test('joins lines meeting at the antimeridian that do not cross', () {
+    final view = TestView(
+      nodes: [
+        testNode(1, 0, 179.9),
+        testNode(2, 0, -179.9),
+        testNode(3, 0.1, -179.8),
+        testNode(4, -0.1, -179.7),
+      ],
+      ways: [
+        testWay(10, [1, 2], {'highway': 'residential'}),
+        testWay(11, [2, 3, 4], {'highway': 'residential'}),
+      ],
+    );
+    expect(OsmMerge(view, [view.way(10)!, view.way(11)!]).disabled, isNull);
+  });
 }

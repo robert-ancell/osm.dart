@@ -574,7 +574,10 @@ class OsmExtract {
     for (final id in way.nodeIds) {
       final node = _view.node(id);
       if (node == null) continue;
-      xs.add(Mercator.x(node.longitude));
+      // Each brought round beside the one before, so that a way across the
+      // antimeridian is measured across it rather than round the world.
+      final x = Mercator.x(node.longitude);
+      xs.add(xs.isEmpty ? x : Mercator.nearest(x, xs.last));
       ys.add(Mercator.y(node.latitude));
     }
     if (xs.isEmpty) return (0, 0);
@@ -616,7 +619,7 @@ class OsmExtract {
     }
     x ??= xs.reduce((a, b) => a + b) / xs.length;
     y ??= ys.reduce((a, b) => a + b) / ys.length;
-    return (Mercator.latitude(y), Mercator.longitude(x));
+    return (Mercator.latitude(y), Mercator.wrappedLongitude(x));
   }
 }
 
@@ -675,8 +678,13 @@ class OsmCopied {
   (double, double) get middle {
     var left = double.infinity, top = double.infinity;
     var right = double.negativeInfinity, bottom = double.negativeInfinity;
+    double? first;
     for (final node in nodes.values) {
-      final x = Mercator.x(node.longitude), y = Mercator.y(node.latitude);
+      // All on the same side of the antimeridian as the first.
+      final raw = Mercator.x(node.longitude);
+      final x = first == null ? raw : Mercator.nearest(raw, first);
+      first ??= x;
+      final y = Mercator.y(node.latitude);
       left = math.min(left, x);
       right = math.max(right, x);
       top = math.min(top, y);
@@ -746,7 +754,8 @@ List<OsmElement> osmPaste(
             latitude: Mercator.latitude(
               (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
             ),
-            longitude: Mercator.longitude(Mercator.x(node.longitude) + dx),
+            longitude:
+                Mercator.wrappedLongitude(Mercator.x(node.longitude) + dx),
             tags: node.tags,
           );
         }();
@@ -796,7 +805,7 @@ void osmMove(
         latitude: Mercator.latitude(
           (Mercator.y(node.latitude) + dy).clamp(0.0, 1.0),
         ),
-        longitude: Mercator.longitude(Mercator.x(node.longitude) + dx),
+        longitude: Mercator.wrappedLongitude(Mercator.x(node.longitude) + dx),
       );
     }
   });

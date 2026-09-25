@@ -47,7 +47,8 @@ void main() {
   });
 
   test('keeps a tile inside the world at the edges', () {
-    expect(OsmTile.at(2, -89, 180).x, 3);
+    // 180 is -180, the western edge of the world.
+    expect(OsmTile.at(2, -89, 180).x, 0);
     expect(OsmTile.at(2, -89, 180).y, 3);
   });
 
@@ -76,5 +77,33 @@ void main() {
   test('halves a tile for each zoom level', () {
     expect(const OsmTile(0, 0, 0).size, 1);
     expect(const OsmTile(10, 0, 0).size, closeTo(1 / 1024, 1e-12));
+  });
+
+  test('comes round the world east to west, and stops north to south', () {
+    expect(OsmTile.of(3, 1.01, 0.5), const OsmTile(3, 0, 4));
+    expect(OsmTile.of(3, -0.01, 0.5), const OsmTile(3, 7, 4));
+    expect(OsmTile.of(3, 0.5, -0.2), const OsmTile(3, 4, 0));
+    expect(OsmTile.of(3, 0.5, 1.2), const OsmTile(3, 4, 7));
+  });
+
+  test('has no parent for the whole world', () {
+    expect(const OsmTile(1, 1, 1).parent, const OsmTile(0, 0, 0));
+    expect(() => const OsmTile(0, 0, 0).parent, throwsStateError);
+  });
+
+  group('Mercator', () {
+    test('wraps round the world', () {
+      expect(Mercator.wrap(1.25), closeTo(0.25, 1e-12));
+      expect(Mercator.wrap(-0.25), closeTo(0.75, 1e-12));
+      expect(Mercator.wrap(1), 0);
+      expect(Mercator.wrappedLongitude(Mercator.x(179) + 2 / 360),
+          closeTo(-179, 1e-9));
+    });
+
+    test('brings a place round beside another', () {
+      expect(Mercator.nearest(0.01, 0.99), closeTo(1.01, 1e-12));
+      expect(Mercator.nearest(0.99, 0.01), closeTo(-0.01, 1e-12));
+      expect(Mercator.nearest(0.4, 0.6), closeTo(0.4, 1e-12));
+    });
   });
 }
